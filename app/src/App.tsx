@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { optimizeGarden } from "../../optimizer/src/index";
 import type {
   GardenGrid,
@@ -15,30 +15,106 @@ import {
   scanPhotoToGarden,
 } from "./placeholders";
 
-type Step = "scan" | "review" | "prefs" | "select" | "results" | "dashboard";
+/** Only the first-time setup flow. Once onboarded, "prefs"/"select"/"results"
+ *  are reused as the Planner tab's sub-view instead of a linear step. */
+type Step = "scan" | "review" | "prefs" | "select" | "results";
+type Tab = "dashboard" | "planner";
+
 const STEPS: [Step, string][] = [
   ["scan", "1. Scan"],
   ["review", "2. Review"],
   ["prefs", "3. Preferences"],
   ["select", "4. Space"],
   ["results", "5. Layout"],
-  ["dashboard", "6. Garden"],
 ];
 
 const CATALOG = getCatalog();
 const byId = new Map(CATALOG.map((s) => [s.id, s]));
 const nameOf = (id: string) => byId.get(id)?.name ?? id;
 
+/** Everything needed to resume mid-flow after a refresh. `photo` is
+ *  deliberately excluded — it's a blob: URL that's invalidated once the
+ *  page unloads, so persisting it would just point at a dead image. */
+interface PersistedState {
+  step: Step;
+  onboarded: boolean;
+  activeTab: Tab;
+  editingLayout: boolean;
+  garden: GardenGrid | null;
+  selected: string[];
+  prefs: Preferences;
+  targets: Target[];
+  carbonWeight: number;
+  banned: string[];
+  result: OptimizerResponse | null;
+}
+
+// Bumped from v1: Step dropped "dashboard" and onboarded/activeTab were added
+// when the app moved from a single linear flow to a post-onboarding tab shell.
+const STORAGE_KEY = "plottwist:v2";
+
+function loadPersisted(): PersistedState | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? (JSON.parse(raw) as PersistedState) : null;
+  } catch {
+    return null; // corrupted or unavailable storage — start fresh
+  }
+}
+
 export function App() {
-  const [step, setStep] = useState<Step>("scan");
+  const saved = useRef(loadPersisted()).current;
+
+  const [step, setStep] = useState<Step>(saved?.step ?? "scan");
+  const [onboarded, setOnboarded] = useState(saved?.onboarded ?? false);
+  const [activeTab, setActiveTab] = useState<Tab>(saved?.activeTab ?? "dashboard");
+  // Only meaningful once onboarded: false = just viewing the confirmed layout
+  // in the Planner tab (only "Edit" makes sense); true = mid-edit, having
+  // clicked Edit and walked back through prefs/space (Tweak/Confirm apply).
+  const [editingLayout, setEditingLayout] = useState(saved?.editingLayout ?? false);
   const [photo, setPhoto] = useState<string | null>(null);
-  const [garden, setGarden] = useState<GardenGrid | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [prefs, setPrefs] = useState<Preferences>({ tier: "beginner", categories: [] });
-  const [targets, setTargets] = useState<Target[]>([]);
-  const [carbonWeight, setCarbonWeight] = useState(0.5);
-  const [banned, setBanned] = useState<string[]>([]);
-  const [result, setResult] = useState<OptimizerResponse | null>(null);
+  const [garden, setGarden] = useState<GardenGrid | null>(saved?.garden ?? null);
+  const [selected, setSelected] = useState<Set<string>>(new Set(saved?.selected ?? []));
+  const [prefs, setPrefs] = useState<Preferences>(
+    saved?.prefs ?? { tier: "beginner", categories: [] },
+  );
+  const [targets, setTargets] = useState<Target[]>(saved?.targets ?? []);
+  const [carbonWeight, setCarbonWeight] = useState(saved?.carbonWeight ?? 0.5);
+  const [banned, setBanned] = useState<string[]>(saved?.banned ?? []);
+  const [result, setResult] = useState<OptimizerResponse | null>(saved?.result ?? null);
+
+  useEffect(() => {
+    const toSave: PersistedState = {
+      step,
+      onboarded,
+      activeTab,
+      editingLayout,
+      garden,
+      selected: [...selected],
+      prefs,
+      targets,
+      carbonWeight,
+      banned,
+      result,
+    };
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+    } catch {
+      // best-effort — quota errors or disabled storage shouldn't break the app
+    }
+  }, [
+    step,
+    onboarded,
+    activeTab,
+    editingLayout,
+    garden,
+    selected,
+    prefs,
+    targets,
+    carbonWeight,
+    banned,
+    result,
+  ]);
 
   const paintableKeys = useMemo(() => {
     if (!garden) return [];
@@ -106,78 +182,127 @@ export function App() {
     run(nextBanned, nextTargets);
   }
 
-  function resetAll() {
-    setStep("scan");
-    setPhoto(null);
-    setGarden(null);
-    setSelected(new Set());
-    setTargets([]);
-    setBanned([]);
-    setResult(null);
-  }
+  const showPlanner = !onboarded || activeTab === "planner";
 
   return (
-    <div>
+    <div style={{ paddingBottom: onboarded ? 56 : 0 }}>
       <h1>PlotTwist 🌱</h1>
       <p className="muted">Your garden, optimized — with a twist.</p>
-      <div className="steps">
-        {STEPS.map(([id, label]) => (
-          <span key={id} className={id === step ? "on" : ""}>
-            {label}
-          </span>
-        ))}
-      </div>
 
-      {step === "scan" && (
-        <ScanScreen photo={photo} setPhoto={setPhoto} onScan={doScan} />
+      {(!onboarded || editingLayout) && (
+        <div className="steps">
+          {STEPS.map(([id, label]) => (
+            <span key={id} className={id === step ? "on" : ""}>
+              {label}
+            </span>
+          ))}
+        </div>
       )}
-      {step === "review" && garden && (
-        <ReviewScreen
-          garden={garden}
-          setGarden={setGarden}
-          selected={selected}
-          setSelected={setSelected}
-          onNext={() => setStep("prefs")}
+
+      {showPlanner && (
+        <>
+          {step === "scan" && (
+            <ScanScreen
+              photo={photo}
+              setPhoto={setPhoto}
+              onScan={doScan}
+              onSkip={editingLayout && garden ? () => setStep("review") : undefined}
+            />
+          )}
+          {step === "review" && garden && (
+            <ReviewScreen
+              garden={garden}
+              setGarden={setGarden}
+              selected={selected}
+              setSelected={setSelected}
+              onNext={() => setStep("prefs")}
+              skippable={editingLayout}
+            />
+          )}
+          {step === "prefs" && (
+            <PrefsScreen
+              prefs={prefs}
+              setPrefs={setPrefs}
+              targets={targets}
+              setTargets={setTargets}
+              carbonWeight={carbonWeight}
+              setCarbonWeight={setCarbonWeight}
+              onNext={() => setStep("select")}
+              skippable={editingLayout}
+            />
+          )}
+          {step === "select" && garden && (
+            <SelectScreen
+              garden={garden}
+              selected={selected}
+              setSelected={setSelected}
+              paintableKeys={paintableKeys}
+              onNext={() => {
+                setBanned([]);
+                run([]);
+                setStep("results");
+              }}
+              onBack={() => setStep("prefs")}
+              skippable={editingLayout}
+            />
+          )}
+          {step === "results" && garden && result && (
+            <ResultsScreen
+              garden={requestGarden()}
+              result={result}
+              onSwap={applySwap}
+              onEdit={
+                onboarded && !editingLayout
+                  ? () => {
+                      setEditingLayout(true);
+                      setStep("scan");
+                    }
+                  : undefined
+              }
+              onTweak={!onboarded || editingLayout ? () => setStep("select") : undefined}
+              onConfirm={
+                !onboarded || editingLayout
+                  ? () => {
+                      setOnboarded(true);
+                      setEditingLayout(false);
+                      setActiveTab("dashboard");
+                    }
+                  : undefined
+              }
+            />
+          )}
+        </>
+      )}
+
+      {onboarded && activeTab === "dashboard" && result && <DashboardScreen result={result} />}
+
+      {onboarded && (
+        <TabBar
+          active={activeTab}
+          onSelect={setActiveTab}
         />
-      )}
-      {step === "prefs" && (
-        <PrefsScreen
-          prefs={prefs}
-          setPrefs={setPrefs}
-          targets={targets}
-          setTargets={setTargets}
-          carbonWeight={carbonWeight}
-          setCarbonWeight={setCarbonWeight}
-          onNext={() => setStep("select")}
-        />
-      )}
-      {step === "select" && garden && (
-        <SelectScreen
-          garden={garden}
-          selected={selected}
-          setSelected={setSelected}
-          paintableKeys={paintableKeys}
-          onNext={() => {
-            setBanned([]);
-            run([]);
-            setStep("results");
-          }}
-          onBack={() => setStep("prefs")}
-        />
-      )}
-      {step === "results" && garden && result && (
-        <ResultsScreen
-          garden={requestGarden()}
-          result={result}
-          onSwap={applySwap}
-          onTweak={() => setStep("select")}
-          onConfirm={() => setStep("dashboard")}
-        />
-      )}
-      {step === "dashboard" && result && (
-        <DashboardScreen result={result} onReset={resetAll} />
       )}
     </div>
+  );
+}
+
+function TabBar(props: { active: Tab; onSelect: (t: Tab) => void }) {
+  const tabs: [Tab, string][] = [
+    ["dashboard", "🏡 Dashboard"],
+    ["planner", "🛠 Garden Planner"],
+  ];
+  return (
+    <nav className="tabbar">
+      {tabs.map(([id, label]) => (
+        <button
+          key={id}
+          className={id === props.active ? "on" : ""}
+          onClick={() => props.onSelect(id)}
+        >
+          {label}
+        </button>
+      ))}
+    </nav>
   );
 }
 
@@ -187,6 +312,7 @@ function ScanScreen(props: {
   photo: string | null;
   setPhoto: (p: string | null) => void;
   onScan: () => void;
+  onSkip?: () => void;
 }) {
   return (
     <div className="card">
@@ -210,6 +336,11 @@ function ScanScreen(props: {
         <button onClick={props.onScan}>
           {props.photo ? "Scan this photo →" : "No photo? Use the demo yard →"}
         </button>
+        {props.onSkip && (
+          <button className="secondary" onClick={props.onSkip}>
+            Skip → keep current yard
+          </button>
+        )}
       </div>
       <p className="tiny">
         ⚠ PLACEHOLDER: photo → grid CV pipeline is Jessica's; every photo currently
@@ -227,6 +358,7 @@ function ReviewScreen(props: {
   selected: Set<string>;
   setSelected: (s: Set<string>) => void;
   onNext: () => void;
+  skippable?: boolean;
 }) {
   const { garden } = props;
   const existing = garden.existing ?? [];
@@ -285,6 +417,11 @@ function ReviewScreen(props: {
         ))}
         <div className="row">
           <button onClick={props.onNext}>Looks right →</button>
+          {props.skippable && (
+            <button className="secondary" onClick={props.onNext}>
+              Skip → keep as detected
+            </button>
+          )}
         </div>
       </div>
     </>
@@ -301,6 +438,7 @@ function PrefsScreen(props: {
   carbonWeight: number;
   setCarbonWeight: (n: number) => void;
   onNext: () => void;
+  skippable?: boolean;
 }) {
   const categories = [...new Set(CATALOG.map((s) => s.category))];
   const tiers: [SkillTier, string][] = [
@@ -424,7 +562,14 @@ function PrefsScreen(props: {
         </>
       )}
 
-      <button onClick={props.onNext}>Choose planting space →</button>
+      <div className="row">
+        <button onClick={props.onNext}>Choose planting space →</button>
+        {props.skippable && (
+          <button className="secondary" onClick={props.onNext}>
+            Skip → keep preferences
+          </button>
+        )}
+      </div>
     </>
   );
 }
@@ -479,6 +624,7 @@ function SelectScreen(props: {
   paintableKeys: string[];
   onNext: () => void;
   onBack: () => void;
+  skippable?: boolean;
 }) {
   const m2 = (props.selected.size * 0.09).toFixed(1);
   return (
@@ -522,6 +668,11 @@ function SelectScreen(props: {
         <button disabled={props.selected.size === 0} onClick={props.onNext}>
           Optimize my garden ✨
         </button>
+        {props.skippable && (
+          <button className="secondary" onClick={props.onNext}>
+            Skip → keep painted area
+          </button>
+        )}
       </div>
     </>
   );
@@ -533,15 +684,23 @@ function ResultsScreen(props: {
   garden: GardenGrid;
   result: OptimizerResponse;
   onSwap: (out: string, inId: string) => void;
-  onTweak: () => void;
-  onConfirm: () => void;
+  onEdit?: () => void;
+  onTweak?: () => void;
+  onConfirm?: () => void;
 }) {
   const { result } = props;
   const total = result.placements.length;
   const [reveal, setReveal] = useState(0);
 
+  // 80ms/bed reads nicely for small gardens, but scales past ~40 beds
+  // (90 beds ≈ 7s) — scale the interval down so the whole reveal caps at ~3s.
+  const REVEAL_CAP_MS = 3000;
+  const MIN_INTERVAL_MS = 10;
+
   useEffect(() => {
     setReveal(0);
+    const interval =
+      total > 0 ? Math.max(MIN_INTERVAL_MS, Math.min(80, REVEAL_CAP_MS / total)) : 80;
     const iv = setInterval(() => {
       setReveal((r) => {
         if (r >= total) {
@@ -550,7 +709,7 @@ function ResultsScreen(props: {
         }
         return r + 1;
       });
-    }, 80);
+    }, interval);
     return () => clearInterval(iv);
   }, [result, total]);
 
@@ -646,10 +805,17 @@ function ResultsScreen(props: {
       )}
 
       <div className="row">
-        <button className="secondary" onClick={props.onTweak}>
-          ← Tweak space
-        </button>
-        <button onClick={props.onConfirm}>Confirm my garden ✓</button>
+        {props.onEdit && (
+          <button className="secondary" onClick={props.onEdit}>
+            ✏️ Edit my garden
+          </button>
+        )}
+        {props.onTweak && (
+          <button className="secondary" onClick={props.onTweak}>
+            ← Tweak space
+          </button>
+        )}
+        {props.onConfirm && <button onClick={props.onConfirm}>Confirm my garden ✓</button>}
       </div>
     </>
   );
@@ -657,7 +823,7 @@ function ResultsScreen(props: {
 
 /* ─────────────── 6. Dashboard ─────────────── */
 
-function DashboardScreen(props: { result: OptimizerResponse; onReset: () => void }) {
+function DashboardScreen(props: { result: OptimizerResponse }) {
   const { result } = props;
   const planted = Object.entries(result.counts).filter(([, n]) => n > 0);
 
@@ -716,10 +882,6 @@ function DashboardScreen(props: { result: OptimizerResponse; onReset: () => void
           );
         })}
       </div>
-
-      <button className="secondary" onClick={props.onReset}>
-        ↺ Start over
-      </button>
     </>
   );
 }
