@@ -103,3 +103,14 @@ input[type="text"] {
   font: inherit; background: #101713; color: #e8f0ea;
   border: 1px solid #2c3a30; border-radius: 8px; padding: 7px 9px;
 }
+
+.tabbar {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  max-width: 520px; margin: 0 auto;
+  display: flex; background: #171f1a; border-top: 1px solid #263229;
+}
+.tabbar button {
+  flex: 1; background: transparent; border-radius: 0; padding: 12px 0;
+  color: #7d927f; font-size: 13px;
+}
+.tabbar button.on { color: #eafbef; background: #1b241e; }
