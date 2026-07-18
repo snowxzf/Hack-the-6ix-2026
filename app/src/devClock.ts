@@ -4,7 +4,7 @@ import { useSyncExternalStore } from "react";
  * Dev-only simulated clock. Everything time-based in the app (CarbonChart's
  * ramp, the Watering trips "due today" state, harvest progress bars) reads
  * "now" through here instead of calling Date.now() directly, so the DevTools
- * panel can fast-forward days and watch it respond live — without waiting
+ * panel can fast-forward days and watch it respond live: without waiting
  * for real seasons to pass. Offset persists across reloads so a simulated
  * date sticks around; "Restart app" clears it back to 0 along with everything else.
  */
@@ -29,7 +29,7 @@ function saveOffset() {
   try {
     localStorage.setItem(OFFSET_KEY, String(offsetMs));
   } catch {
-    // best-effort — quota errors or disabled storage shouldn't break the app
+    // best-effort: quota errors or disabled storage shouldn't break the app
   }
 }
 
@@ -37,7 +37,7 @@ function notify() {
   for (const l of listeners) l();
 }
 
-/** Simulated "now" — real time plus whatever the dev clock has advanced. */
+/** Simulated "now": real time plus whatever the dev clock has advanced. */
 export function devNow(): number {
   return Date.now() + offsetMs;
 }

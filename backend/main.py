@@ -1,5 +1,5 @@
 """
-PlotTwist API — thin backend between the app and MongoDB / PlantNet / Open-Meteo.
+PlotTwist API: thin backend between the app and MongoDB / PlantNet / Open-Meteo.
 
 Keeps secrets (Mongo URI, PlantNet key) off the mobile client.
 """
@@ -22,20 +22,28 @@ from pymongo import MongoClient
 from pymongo.collection import Collection
 from pymongo.database import Database
 
+ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(ROOT / ".env")
+load_dotenv()
+
 try:
     from .food_waste_stats import (
         TORONTO_FOOD_WASTE_BASELINE,
         compare_garden_to_toronto_baseline,
+    )
+    from .search_web import (
+        google_cse_configured,
+        search_google_web,
     )
 except ImportError:  # `uvicorn main:app` from backend/
     from food_waste_stats import (
         TORONTO_FOOD_WASTE_BASELINE,
         compare_garden_to_toronto_baseline,
     )
-
-ROOT = Path(__file__).resolve().parent.parent
-load_dotenv(ROOT / ".env")
-load_dotenv()
+    from search_web import (
+        google_cse_configured,
+        search_google_web,
+    )
 
 MONGODB_URI = os.getenv("MONGODB_URI", "")
 MONGODB_DB = os.getenv("MONGODB_DB", "plantapp")
@@ -61,7 +69,7 @@ SPECIES_FIELDS = (
     "daysToHarvestMax",
 )
 
-# WMO weather interpretation codes (Open-Meteo). Sky only — not plant advice.
+# WMO weather interpretation codes (Open-Meteo). Sky only: not plant advice.
 WMO_WEATHER_CODES: dict[int, str] = {
     0: "Clear sky",
     1: "Mainly clear",
@@ -132,7 +140,7 @@ def gardens_coll() -> Collection:
 
 # ── Demo-safe fallbacks ──────────────────────────────────────────────
 # The same curated records seed.py loads into Mongo, read straight from
-# disk — so the whole stack boots for any teammate (and on stage) even
+# disk: so the whole stack boots for any teammate (and on stage) even
 # with no MONGODB_URI / dead wifi. Mongo remains the source of truth
 # whenever it answers.
 
@@ -155,7 +163,7 @@ def all_plants() -> list[dict[str, Any]]:
             docs = list(plants_coll().find({}, {"_id": 0}))
             if docs:
                 return docs
-        except Exception:  # noqa: BLE001 — fall back, never 500 the demo
+        except Exception:  # noqa: BLE001: fall back, never 500 the demo
             pass
     return _bundled_catalog()
 
@@ -164,7 +172,7 @@ def find_plant(plant_id: str) -> dict[str, Any] | None:
     return next((p for p in all_plants() if p.get("id") == plant_id), None)
 
 
-# In-memory garden store when Mongo is unavailable — plenty for a demo.
+# In-memory garden store when Mongo is unavailable: plenty for a demo.
 _mem_gardens: dict[str, dict[str, Any]] = {}
 
 
@@ -229,6 +237,82 @@ def match_catalog(plantnet_result: dict[str, Any], catalog: list[dict[str, Any]]
     return None
 
 
+def _plantnet_species_payload(hit: dict[str, Any]) -> dict[str, Any]:
+    species = hit.get("species") or {}
+    genus = species.get("genus") or {}
+    family = species.get("family") or {}
+    images: list[str] = []
+    for img in hit.get("images") or []:
+        url_field = img.get("url")
+        if isinstance(url_field, dict):
+            for key in ("o", "m", "s"):
+                if url_field.get(key):
+                    images.append(url_field[key])
+                    break
+        elif isinstance(url_field, str) and url_field:
+            images.append(url_field)
+    return {
+        "scientificName": species.get("scientificName"),
+        "scientificNameWithoutAuthor": species.get("scientificNameWithoutAuthor"),
+        "commonNames": species.get("commonNames") or [],
+        "genus": genus.get("scientificNameWithoutAuthor") or genus.get("scientificName"),
+        "family": family.get("scientificNameWithoutAuthor") or family.get("scientificName"),
+        "gbifId": (hit.get("gbif") or {}).get("id"),
+        "powoId": (hit.get("powo") or {}).get("id"),
+        "images": images[:4],
+    }
+
+
+async def fetch_wikipedia_plant(
+    scientific: str | None,
+    common_names: list[str] | None = None,
+) -> dict[str, Any] | None:
+    """Best-effort Wikipedia REST summary for a plant (image + extract)."""
+    titles: list[str] = []
+    if scientific:
+        titles.append(scientific.replace(" ", "_"))
+    for name in common_names or []:
+        n = (name or "").strip()
+        if n:
+            titles.append(n.replace(" ", "_"))
+
+    headers = {
+        "User-Agent": "PlotTwist/1.0 (Hack the 6ix garden app; https://github.com/snowxzf/Hack-the-6ix-2026)",
+        "Accept": "application/json",
+    }
+    async with httpx.AsyncClient(timeout=12.0, headers=headers) as client:
+        for title in titles[:4]:
+            url = f"https://en.wikipedia.org/api/rest_v1/page/summary/{title}"
+            try:
+                resp = await client.get(url)
+            except httpx.HTTPError:
+                continue
+            if resp.status_code != 200:
+                continue
+            data = resp.json()
+            if data.get("type") == "disambiguation":
+                continue
+            extract = (data.get("extract") or "").strip()
+            if not extract:
+                continue
+            thumb = (data.get("thumbnail") or {}).get("source")
+            original = (data.get("originalimage") or {}).get("source")
+            page = ((data.get("content_urls") or {}).get("desktop") or {}).get("page")
+            return {
+                "title": data.get("title") or title.replace("_", " "),
+                "description": data.get("description"),
+                "extract": extract,
+                "image": original or thumb,
+                "thumbnail": thumb,
+                "url": page or f"https://en.wikipedia.org/wiki/{title}",
+            }
+    return None
+
+
+# Minimum PlantNet confidence (0-1) to treat as a successful detection.
+IDENTIFY_MIN_SCORE = 0.05
+
+
 def describe_weather_code(code: int | None) -> str | None:
     if code is None:
         return None
@@ -248,7 +332,7 @@ def format_place_label(hit: dict[str, Any]) -> str:
 
 
 async def geocode_search(name: str, count: int = 5) -> list[dict[str, Any]]:
-    """Open-Meteo geocoding — free, keyless. Returns place candidates with lat/lon."""
+    """Open-Meteo geocoding: free, keyless. Returns place candidates with lat/lon."""
     url = "https://geocoding-api.open-meteo.com/v1/search"
     params = {
         "name": name,
@@ -375,7 +459,7 @@ async def forecast_for(
         notifications.append(
             {
                 "type": "frost_warning",
-                "message": f"Tonight's low is ~{tonight_low}°C — frost risk for the garden.",
+                "message": f"Tonight's low is ~{tonight_low}°C: frost risk for the garden.",
                 "tonightMinC": tonight_low,
             }
         )
@@ -383,7 +467,7 @@ async def forecast_for(
         notifications.append(
             {
                 "type": "skip_watering",
-                "message": f"~{today['precipMm']} mm rain expected today — skip watering.",
+                "message": f"~{today['precipMm']} mm rain expected today: skip watering.",
                 "precipMm": today["precipMm"],
             }
         )
@@ -422,7 +506,7 @@ async def forecast_for(
                         "type": "too_cold_tonight",
                         "message": (
                             f"Is it too cold outside for {plant.get('name')} tonight? "
-                            f"Yes — forecast low {tonight_low}°C is below its "
+                            f"Yes: forecast low {tonight_low}°C is below its "
                             f"tolerance floor of {tmin}°C."
                         ),
                         "forecastMinC": tonight_low,
@@ -474,7 +558,7 @@ async def forecast_for(
                         "message": (
                             f"{plant.get('name')} is within tolerance tonight/today "
                             f"(sky low {tonight_low}°C / high {today_high}°C vs "
-                            f"plant {tmin}–{tmax}°C)."
+                            f"plant {tmin}-{tmax}°C)."
                         ),
                         "harvestEstimate": estimate_harvest_days(
                             plant,
@@ -527,7 +611,7 @@ def health() -> dict[str, Any]:
         db.command("ping")
         mongo_ok = True
         plant_count = plants_coll().count_documents({})
-    except Exception as exc:  # noqa: BLE001 — surface for hackathon debugging
+    except Exception as exc:  # noqa: BLE001: surface for hackathon debugging
         return {
             "ok": True,
             "mongo": False,
@@ -535,12 +619,14 @@ def health() -> dict[str, Any]:
             "plantCount": len(_bundled_catalog()),
             "mongoError": str(exc),
             "plantnetConfigured": bool(PLANTNET_API_KEY),
+            "googleCseConfigured": google_cse_configured(),
         }
     return {
         "ok": True,
         "mongo": mongo_ok,
         "plantCount": plant_count,
         "plantnetConfigured": bool(PLANTNET_API_KEY),
+        "googleCseConfigured": google_cse_configured(),
     }
 
 
@@ -678,10 +764,10 @@ def estimate_harvest_days(
         discourage = set(season_ctx.get("discourage") or [])
         if season_class in prefer:
             adjusted *= 0.95
-            reasons.append(f"in-season ({season_ctx.get('name')}) — slightly faster")
+            reasons.append(f"in-season ({season_ctx.get('name')}): slightly faster")
         elif season_class in discourage:
             adjusted *= 1.15
-            reasons.append(f"off-season ({season_ctx.get('name')}) — expect delay")
+            reasons.append(f"off-season ({season_ctx.get('name')}): expect delay")
 
     # Planting-month window (northern hemisphere months in catalog)
     months = harvest.get("plantMonthsNorth") or []
@@ -707,22 +793,22 @@ def estimate_harvest_days(
     if slows is not None and tonight is not None and tonight < slows:
         adjusted *= 1.12
         reasons.append(
-            f"nights {tonight}°C below slowsBelowC {slows}°C — growth slows"
+            f"nights {tonight}°C below slowsBelowC {slows}°C: growth slows"
         )
     if stress is not None and today_high is not None and today_high > stress:
         adjusted *= 1.08
         reasons.append(
-            f"days {today_high}°C above stressAboveC {stress}°C — plant stress"
+            f"days {today_high}°C above stressAboveC {stress}°C: plant stress"
         )
     if bolts is not None and today_high is not None and today_high >= bolts:
         # Heat crops that bolt: harvest window moves earlier (pick sooner)
         adjusted *= 0.9
         reasons.append(
-            f"heat >= {bolts}C — bolt risk; harvest sooner if leaves/heads ready"
+            f"heat >= {bolts}C: bolt risk; harvest sooner if leaves/heads ready"
         )
 
     if harvest.get("frostSensitive") and tonight is not None and tonight <= 2:
-        reasons.append("frost-sensitive and near-freezing nights — protect or delay planting")
+        reasons.append("frost-sensitive and near-freezing nights: protect or delay planting")
 
     adjusted_i = int(round(max(lo * 0.85, min(hi * 1.2, adjusted))))
     return {
@@ -747,32 +833,32 @@ def local_season_context(lat: float, month: int) -> dict[str, Any]:
             "name": "winter",
             "prefer": ["cool"],
             "discourage": ["warm"],
-            "note": "Cold / dormant stretch — favor hardy cool crops or wait.",
+            "note": "Cold / dormant stretch: favor hardy cool crops or wait.",
         }
     if m in (3, 4, 5):
         return {
             "name": "spring",
             "prefer": ["cool", "flexible"],
             "discourage": [],
-            "note": "Shoulder season — cool crops excel; warm crops after frost risk drops.",
+            "note": "Shoulder season: cool crops excel; warm crops after frost risk drops.",
         }
     if m in (6, 7, 8):
         return {
             "name": "summer",
             "prefer": ["warm", "flexible"],
             "discourage": ["cool"],
-            "note": "Peak heat — warm-season crops thrive; cool greens may bolt.",
+            "note": "Peak heat: warm-season crops thrive; cool greens may bolt.",
         }
     return {
         "name": "fall",
         "prefer": ["cool", "flexible"],
         "discourage": ["warm"],
-        "note": "Cooling down — great for fall greens; heat lovers fade.",
+        "note": "Cooling down: great for fall greens; heat lovers fade.",
     }
 
 
 def carbon_kg_per_unit(plant: dict[str, Any]) -> float:
-    """Food plants only — ornamentals stay 0 (honesty rule)."""
+    """Food plants only: ornamentals stay 0 (honesty rule)."""
     if plant.get("impactCase") == "pollinator_biodiversity":
         return 0.0
     return float(plant.get("yieldKgPerSeason") or 0) * float(plant.get("co2eSavedPerKg") or 0)
@@ -881,7 +967,7 @@ def score_plant_multi(
     # --- Carbon (food plants); ornamentals get small biodiversity credit ---
     carbon = carbon_kg_per_unit(plant)
     if plant.get("impactCase") == "pollinator_biodiversity":
-        factors["carbon"] = 1.0 * carbon_weight  # not fake CO2e — pollinator bonus
+        factors["carbon"] = 1.0 * carbon_weight  # not fake CO2e: pollinator bonus
         if carbon_weight > 0:
             reasons.append("pollinator / biodiversity support (no CO₂e claimed)")
     elif max_carbon > 0:
@@ -953,7 +1039,7 @@ async def suggest_plants(
             return {
                 "needsConfirmation": True,
                 "query": location,
-                "confirmPrompt": f"{places[0]['label']} — is this right?",
+                "confirmPrompt": f"{places[0]['label']}: is this right?",
                 "results": places,
                 "hint": "Re-call /plants/suggest with confirm=true&resultIndex=N",
             }
@@ -1043,7 +1129,7 @@ async def suggest_plants(
         "suggestions": top,
         "note": (
             "Multi-factor rank: season + live weather + carbon + native region + skill. "
-            "Ornamentals never get invented CO₂e — biodiversity credit only."
+            "Ornamentals never get invented CO₂e: biodiversity credit only."
         ),
     }
 
@@ -1069,6 +1155,12 @@ def search_plants(q: str, limit: int = 10) -> dict[str, Any]:
         if len(hits) >= limit:
             break
     return {"query": q, "count": len(hits), "plants": hits}
+
+
+@app.get("/search/web")
+async def search_web(q: str, limit: int = 5) -> dict[str, Any]:
+    """Google Custom Search: web guides/articles. Empty if CSE not configured."""
+    return await search_google_web(q, limit=limit)
 
 
 @app.get("/plants/{plant_id}")
@@ -1101,8 +1193,8 @@ async def identify(
     organ: str = Form("auto"),
 ) -> dict[str, Any]:
     """
-    Live PlantNet call → match top results against Mongo plants collection.
-    Returns merged curated record when we have one; otherwise raw PlantNet hits.
+    Live PlantNet call → match top results against Mongo plants collection,
+    enrich the best hit with Wikipedia summary for the player-card UI.
     """
     if not PLANTNET_API_KEY:
         raise HTTPException(
@@ -1117,7 +1209,12 @@ async def identify(
     filename = image.filename or "upload.jpg"
     mime = image.content_type or "image/jpeg"
 
-    params = {"api-key": PLANTNET_API_KEY, "include-related-images": "false"}
+    params = {
+        "api-key": PLANTNET_API_KEY,
+        "include-related-images": "true",
+        "lang": "en",
+        "nb-results": "5",
+    }
     files = {"images": (filename, content, mime)}
     data = {"organs": organ}
 
@@ -1140,25 +1237,40 @@ async def identify(
         matches.append(
             {
                 "score": hit.get("score"),
-                "plantnet": {
-                    "scientificName": (hit.get("species") or {}).get("scientificName"),
-                    "scientificNameWithoutAuthor": (hit.get("species") or {}).get(
-                        "scientificNameWithoutAuthor"
-                    ),
-                    "commonNames": (hit.get("species") or {}).get("commonNames") or [],
-                },
+                "plantnet": _plantnet_species_payload(hit),
                 "catalogMatch": plant,
                 "species": to_species(plant) if plant else None,
             }
         )
 
-    best = next((m for m in matches if m["catalogMatch"]), None)
+    # Highest PlantNet score wins for the player card; catalog match is bonus care data.
+    scored = sorted(
+        [m for m in matches if (m.get("score") or 0) >= IDENTIFY_MIN_SCORE],
+        key=lambda m: m.get("score") or 0,
+        reverse=True,
+    )
+    best = scored[0] if scored else None
 
+    wikipedia = None
+    if best and best.get("plantnet"):
+        pn = best["plantnet"]
+        wikipedia = await fetch_wikipedia_plant(
+            pn.get("scientificNameWithoutAuthor") or pn.get("scientificName"),
+            pn.get("commonNames") or [],
+        )
+
+    detected = best is not None
     return {
+        "detected": detected,
         "bestMatch": best,
         "candidates": matches,
+        "wikipedia": wikipedia,
         "plantnetBestMatch": payload.get("bestMatch"),
         "remainingIdentificationRequests": payload.get("remainingIdentificationRequests"),
+        "attribution": (
+            "The image-based plant species identification engine used is based on "
+            "the Pl@ntNet recognition API (https://my.plantnet.org/)."
+        ),
     }
 
 
@@ -1168,7 +1280,7 @@ async def geocode(q: str, count: int = 5) -> dict[str, Any]:
     Type a city/address → Open-Meteo geocoding candidates (keyless).
 
     Return several hits with country/admin1 so the UI can confirm
-    ("Toronto, Ontario, Canada — is this right?") before forecasting.
+    ("Toronto, Ontario, Canada: is this right?") before forecasting.
     City names collide (Toronto, OH vs Toronto, ON).
     """
     q = (q or "").strip()
@@ -1184,7 +1296,7 @@ async def geocode(q: str, count: int = 5) -> dict[str, Any]:
         "count": len(places),
         "needsConfirmation": len(places) > 1,
         "confirmPrompt": (
-            f"{places[0]['label']} — is this right?"
+            f"{places[0]['label']}: is this right?"
             if places
             else None
         ),
@@ -1225,41 +1337,68 @@ def _walk_video_renderers(node: Any, out: list[dict[str, Any]], limit: int) -> N
 async def search_videos(q: str, limit: int = 6) -> dict[str, Any]:
     """
     Keyless YouTube search: fetch the public results page and parse the
-    embedded ytInitialData JSON. Good enough for demo purposes — no API
+    embedded ytInitialData JSON. Good enough for demo purposes: no API
     key, no quota. Gardening context is appended to keep results on-topic.
+    Falls back to curated demos if YouTube HTML parsing fails.
     """
     q = (q or "").strip()
     if not q:
         raise HTTPException(status_code=400, detail="q is required")
 
+    demo = [
+        {
+            "video_id": "ECibnV1_3jM",
+            "title": "How to Grow Tomatoes: Complete Guide for Beginners",
+            "channel": "Epic Gardening",
+            "duration": "12:04",
+        },
+        {
+            "video_id": "qNtEgeCDVZU",
+            "title": "Vegetable Garden for Beginners",
+            "channel": "GrowVeg",
+            "duration": "10:18",
+        },
+        {
+            "video_id": "FxYw0XPYoqg",
+            "title": "Composting for Beginners",
+            "channel": "California Academy of Sciences",
+            "duration": "5:32",
+        },
+    ]
+
     query = f"{q} gardening"
     url = "https://www.youtube.com/results"
-    params = {"search_query": query, "hl": "en"}
+    params = {"search_query": query, "hl": "en", "gl": "US"}
     headers = {
         "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
         ),
         "Accept-Language": "en-US,en;q=0.9",
+        "Accept": "text/html,application/xhtml+xml",
     }
     try:
-        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
             resp = await client.get(url, params=params, headers=headers)
             resp.raise_for_status()
     except httpx.HTTPError as exc:
-        raise HTTPException(status_code=502, detail=f"YouTube unreachable: {exc}") from exc
+        return {"query": q, "source": "demo", "videos": demo[: max(1, min(limit, 12))], "error": str(exc)}
 
     m = re.search(r"var ytInitialData = (\{.*?\});</script>", resp.text, re.DOTALL)
     if not m:
-        return {"query": q, "videos": []}
+        m = re.search(r"ytInitialData\s*=\s*(\{.*?\});</script>", resp.text, re.DOTALL)
+    if not m:
+        return {"query": q, "source": "demo", "videos": demo[: max(1, min(limit, 12))]}
     try:
         data = json.loads(m.group(1))
     except json.JSONDecodeError:
-        return {"query": q, "videos": []}
+        return {"query": q, "source": "demo", "videos": demo[: max(1, min(limit, 12))]}
 
     videos: list[dict[str, Any]] = []
     _walk_video_renderers(data, videos, max(1, min(limit, 12)))
-    return {"query": q, "videos": videos}
+    if not videos:
+        return {"query": q, "source": "demo", "videos": demo[: max(1, min(limit, 12))]}
+    return {"query": q, "source": "youtube", "videos": videos}
 
 
 @app.get("/weather")
@@ -1280,7 +1419,7 @@ async def weather(
 
     For typed locations with multiple hits, default is to return candidates
     for confirmation. Pass confirm=true (and optional resultIndex) to proceed
-    with a chosen place — avoids wrong-hemisphere bugs on stage.
+    with a chosen place: avoids wrong-hemisphere bugs on stage.
     """
     resolved: dict[str, Any] | None = None
 
@@ -1297,7 +1436,7 @@ async def weather(
             return {
                 "needsConfirmation": True,
                 "query": location,
-                "confirmPrompt": f"{places[0]['label']} — is this right?",
+                "confirmPrompt": f"{places[0]['label']}: is this right?",
                 "results": places,
                 "hint": (
                     "Re-call /weather with confirm=true&resultIndex=N "
@@ -1315,7 +1454,7 @@ async def weather(
             detail="Provide lat & lon, or location= (city/address text)",
         )
     else:
-        # Device GPS path — attach a human-readable place name when possible
+        # Device GPS path: attach a human-readable place name when possible
         resolved = await reverse_geocode(float(lat), float(lon))
 
     return await forecast_for(lat, lon, plant_ids=plantIds, resolved_location=resolved)
@@ -1323,7 +1462,7 @@ async def weather(
 
 @app.get("/stats/toronto-food-waste")
 def toronto_food_waste_baseline() -> dict[str, Any]:
-    """Published Toronto single-family food-waste audit stats (2017–2018)."""
+    """Published Toronto single-family food-waste audit stats (2017-2018)."""
     return TORONTO_FOOD_WASTE_BASELINE
 
 

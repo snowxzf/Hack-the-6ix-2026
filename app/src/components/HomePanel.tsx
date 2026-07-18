@@ -1,5 +1,6 @@
 import {
   AlertTriangle,
+  Camera,
   ChevronRight,
   CloudRain,
   Droplets,
@@ -10,30 +11,31 @@ import { LocationPicker } from "./LocationPicker";
 import { WeatherChip } from "./WeatherChip";
 import { WeatherScene } from "./WeatherScene";
 import { useWeather } from "./WeatherProvider";
+import { profileFirstName, useUserProfile } from "../lib/userProfile";
 
 const WEATHER_ALERTS = {
   rainy: {
-    text: "Rain expected today — skip watering, nature has it covered.",
+    text: "Rain expected today. Skip watering; nature has it covered.",
     icon: CloudRain,
   },
   snowy: {
-    text: "Frost risk tonight — cover tender plants and bring potted ones inside.",
+    text: "Frost risk tonight. Cover tender plants and bring potted ones inside.",
     icon: AlertTriangle,
   },
   sunny: {
-    text: "Sunny and warm — give your garden a deep watering this evening.",
+    text: "Sunny and warm. Give your garden a deep watering this evening.",
     icon: Droplets,
   },
   cloudy: {
-    text: "Overcast today — a perfect day to transplant seedlings.",
+    text: "Overcast today. A perfect day to transplant seedlings.",
     icon: CloudRain,
   },
   partly_cloudy: {
-    text: "Mixed skies — a great time to check soil moisture levels.",
+    text: "Mixed skies. A great time to check soil moisture levels.",
     icon: CloudRain,
   },
   clear_night: {
-    text: "Clear and cool tonight — protect sensitive seedlings from chill.",
+    text: "Clear and cool tonight. Protect sensitive seedlings from chill.",
     icon: AlertTriangle,
   },
 } as const;
@@ -47,8 +49,12 @@ export function HomePanel(props: {
   onSearch: () => void;
   onOpenGarden: () => void;
   onOpenPlan: () => void;
+  onIdentify: () => void;
+  careAboutCarbon?: boolean;
 }) {
   const { condition, data, location } = useWeather();
+  const { profile } = useUserProfile();
+  const displayName = profileFirstName(profile);
   const hour = new Date().getHours();
   const greeting =
     hour < 12 ? "Good morning" : hour < 18 ? "Good afternoon" : "Good evening";
@@ -71,12 +77,27 @@ export function HomePanel(props: {
   return (
     <div className="space-y-5 py-2">
       <header className="flex animate-fade-in-up items-start justify-between gap-3">
-        <div>
+        <div className="min-w-0 flex-1">
           <p className="text-sm text-muted-foreground">{greeting}</p>
-          <h1 className="font-heading text-5xl font-semibold">Gardener</h1>
+          <h1 className="font-heading text-5xl font-semibold">{displayName}</h1>
           <p className="mt-0.5 text-xs text-muted-foreground">{props.gardenName}</p>
+          {profile.bio ? (
+            <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-muted-foreground/90">
+              {profile.bio}
+            </p>
+          ) : null}
         </div>
-        <WeatherChip />
+        <div className="flex shrink-0 items-center gap-2">
+          <button
+            type="button"
+            onClick={props.onIdentify}
+            aria-label="Identify a plant with camera"
+            className="flex h-11 w-11 items-center justify-center border border-border bg-card/90 text-primary shadow-sm backdrop-blur hover:border-primary"
+          >
+            <Camera className="h-5 w-5" />
+          </button>
+          <WeatherChip />
+        </div>
       </header>
 
       <div className="animate-fade-in-up" style={{ animationDelay: "0.01s" }}>
@@ -186,6 +207,7 @@ export function HomePanel(props: {
           foodKg={props.foodKg}
           kgCo2e={props.kgCo2e}
           plantCount={props.plantCount}
+          showCarbon={props.careAboutCarbon !== false}
           compact
         />
         <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">

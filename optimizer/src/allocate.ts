@@ -8,13 +8,13 @@ import type {
 } from "./types";
 
 /**
- * Stage A — allocation: decide HOW MANY of each species to plant.
+ * Stage A: allocation: decide HOW MANY of each species to plant.
  *
  * Modeled as a bounded knapsack over total usable area, solved greedily with
  * diminishing returns (each extra unit of a species is worth DECAY× the last).
  * Diminishing returns make the objective submodular, where greedy is provably
- * near-optimal (Nemhauser–Wolsey–Fisher 1978; knapsack variant Sviridenko 2004)
- * — and it naturally produces a diverse garden instead of a monoculture.
+ * near-optimal (Nemhauser-Wolsey-Fisher 1978; knapsack variant Sviridenko 2004)
+ *: and it naturally produces a diverse garden instead of a monoculture.
  *
  * Hard targets are seeded first. If they can't all fit, we flag infeasibility
  * and compromise by scaling targets down proportionally (keeping the user's
@@ -77,7 +77,7 @@ export function allocate(req: OptimizerRequest, catalog: Species[]): AllocationO
     if (!s) {
       conflicts.push({
         speciesId: t.speciesId,
-        message: `Unknown species "${t.speciesId}" — not in the catalog.`,
+        message: `Unknown species "${t.speciesId}": not in the catalog.`,
       });
       continue;
     }
@@ -121,7 +121,7 @@ export function allocate(req: OptimizerRequest, catalog: Species[]): AllocationO
       }
     }
     conflicts.push({
-      message: `Your must-haves need ${requiredArea} cells but only ${usableCells} are selected — scaled them down proportionally to fit.`,
+      message: `Your must-haves need ${requiredArea} cells but only ${usableCells} are selected: scaled them down proportionally to fit.`,
     });
     for (const t of validTargets) {
       if ((appliedTargets.get(t.s.id) ?? 0) === 0) {

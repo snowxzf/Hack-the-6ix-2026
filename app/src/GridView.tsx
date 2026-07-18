@@ -19,7 +19,7 @@ interface Props {
   /** Planted layout to overlay; `reveal` limits to the first N (animation). */
   placements?: PlacementInstance[];
   reveal?: number;
-  /** Planting units (by origin cellKey) currently harvested — rendered as an
+  /** Planting units (by origin cellKey) currently harvested: rendered as an
    *  empty, reseedable spot instead of the species' color. */
   harvestedUnits?: Set<string>;
   /** When set, clicking an eligible planted cell fires onUnitClick with that
@@ -28,7 +28,7 @@ interface Props {
    *  the whole unit, not just the cell under the cursor. */
   clickMode?: "harvest" | "reseed" | null;
   onUnitClick?: (unitKey: string) => void;
-  /** Row/column number strip along the top and left edges — lets "R2C3" in
+  /** Row/column number strip along the top and left edges: lets "R2C3" in
    *  the Dashboard's unit bars be found on the actual grid at a glance. */
   showAxisLabels?: boolean;
 }
@@ -60,7 +60,7 @@ export function GridView({
 
   /** Touch fix: during a touch drag the browser keeps sending pointermove
    *  events to the cell where the finger went *down*, not the cell it's
-   *  currently over — pointerenter never fires on the cells in between.
+   *  currently over: pointerenter never fires on the cells in between.
    *  We look up the actual cell under the finger via elementFromPoint
    *  instead, using clientX/Y which stay accurate regardless of capture. */
   function handlePointerMove(e: React.PointerEvent) {

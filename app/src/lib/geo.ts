@@ -1,4 +1,4 @@
-/** Device GPS helpers — weather uses these; Toronto is the offline fallback. */
+/** Device GPS helpers: weather uses these; Toronto is the offline fallback. */
 
 import { DEFAULT_LAT, DEFAULT_LON } from "../api";
 
@@ -55,7 +55,7 @@ export function requestDeviceLocation(): Promise<GeoCoords> {
         resolve(coords);
       },
       () => {
-        // Denied / timed out — prefer last known over hard-coded Toronto
+        // Denied / timed out: prefer last known over hard-coded Toronto
         resolve(
           cached ?? { lat: DEFAULT_LAT, lon: DEFAULT_LON, source: "default" },
         );

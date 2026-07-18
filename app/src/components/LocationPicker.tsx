@@ -5,7 +5,7 @@ import { useWeather } from "./WeatherProvider";
 
 /**
  * Typed-city location picker with confirmation for ambiguous names
- * ("Toronto, Ontario, Canada — is this right?"). Falls back to GPS when
+ * ("Toronto, Ontario, Canada: is this right?"). Falls back to GPS when
  * the user clears a manual place.
  */
 export function LocationPicker({ compact = false }: { compact?: boolean }) {
@@ -32,7 +32,7 @@ export function LocationPicker({ compact = false }: { compact?: boolean }) {
     const results = await geocodeCity(q);
     setBusy(false);
     if (!results) {
-      setError('No match — try "Toronto, Canada" or a fuller address.');
+      setError('No match: try "Toronto, Canada" or a fuller address.');
       return;
     }
     if (results.length === 1) {
@@ -135,7 +135,7 @@ export function LocationPicker({ compact = false }: { compact?: boolean }) {
       {candidates && (
         <div className="space-y-2">
           <p className="text-xs text-muted-foreground">
-            {candidates[0]!.label} — is this right? (or pick another)
+            {candidates[0]!.label}: is this right? (or pick another)
           </p>
           {candidates.map((r, i) => (
             <button

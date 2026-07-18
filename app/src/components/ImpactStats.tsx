@@ -6,9 +6,17 @@ export interface ImpactStatsProps {
   kgCo2e: number;
   plantCount: number;
   compact?: boolean;
+  /** When false, hide the CO₂ reduced tile (user opted out of carbon). */
+  showCarbon?: boolean;
 }
 
-export function ImpactStats({ foodKg, kgCo2e, plantCount, compact }: ImpactStatsProps) {
+export function ImpactStats({
+  foodKg,
+  kgCo2e,
+  plantCount,
+  compact,
+  showCarbon = true,
+}: ImpactStatsProps) {
   const waste = localFoodWasteImpact(foodKg);
 
   const stats = [
@@ -19,13 +27,17 @@ export function ImpactStats({ foodKg, kgCo2e, plantCount, compact }: ImpactStats
       sub: `${waste.percentOfFruitVegWaste ?? 0}% of avg fruit & veg waste`,
       tint: "bg-accent/15 text-accent",
     },
-    {
-      icon: Leaf,
-      label: "CO₂ reduced",
-      value: `${kgCo2e.toFixed(1)} kg`,
-      sub: "vs. store-bought / season",
-      tint: "bg-primary/10 text-primary",
-    },
+    ...(showCarbon
+      ? [
+          {
+            icon: Leaf,
+            label: "CO₂ reduced",
+            value: `${kgCo2e.toFixed(1)} kg`,
+            sub: "vs. store-bought / season",
+            tint: "bg-primary/10 text-primary",
+          },
+        ]
+      : []),
     {
       icon: Sprout,
       label: compact ? "Plants" : "Plants growing",
@@ -37,7 +49,7 @@ export function ImpactStats({ foodKg, kgCo2e, plantCount, compact }: ImpactStats
 
   if (compact) {
     return (
-      <div className="grid grid-cols-3 gap-3">
+      <div className={`grid gap-3 ${showCarbon ? "grid-cols-3" : "grid-cols-2"}`}>
         {stats.map((s) => (
           <div
             key={s.label}
@@ -74,7 +86,7 @@ export function ImpactStats({ foodKg, kgCo2e, plantCount, compact }: ImpactStats
         </div>
  ))}
       <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
-        Toronto households waste ~45 kg of fruit & veg yearly — home-grown food helps change
+        Toronto households waste ~45 kg of fruit & veg yearly. Home-grown food helps change
         that.
       </p>
     </div>

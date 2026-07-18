@@ -10,7 +10,7 @@ export { SUBURBAN, BALCONY, L_SHAPE, NARROW_STRIP } from "./gardens.mock";
 export { renderAscii } from "./ascii";
 
 /**
- * PlotTwist optimizer — pure, synchronous, deterministic black box.
+ * PlotTwist optimizer: pure, synchronous, deterministic black box.
  * No I/O, no network, no randomness: same request in, same layout out.
  * Runs identically in React Native, the browser, or Node.
  */
@@ -20,10 +20,10 @@ export function optimizeGarden(req: OptimizerRequest): OptimizerResponse {
   const byId = new Map(catalog.map((s) => [s.id, s]));
   const targetIds = new Set((req.targets ?? []).map((t) => t.speciesId));
 
-  // Stage A — how many of each species.
+  // Stage A: how many of each species.
   const alloc = allocate(req, catalog);
 
-  // Stage B — where they go. Hard targets get placement priority.
+  // Stage B: where they go. Hard targets get placement priority.
   const placed = place(req.garden, alloc.plan, catalog, targetIds);
 
   // Post-placement truth: counts reflect what actually fit the geometry.
@@ -42,14 +42,15 @@ export function optimizeGarden(req: OptimizerRequest): OptimizerResponse {
       const name = byId.get(id)?.name ?? id;
       conflicts.push({
         speciesId: id,
-        message: `Only ${got} of ${applied} ${name} fit this garden's shape — the space is too fragmented. Try selecting a wider area.`,
+        message: `Only ${got} of ${applied} ${name} fit this garden's shape: the space is too fragmented. Try selecting a wider area.`,
       });
     }
   }
 
-  // Stage C — carbon math + advisory swaps.
+  // Stage C: carbon math + advisory swaps (skipped when user opted out).
+  const cw = Math.min(1, Math.max(0, req.carbonWeight ?? 0.5));
   const carbon = carbonReport(counts, catalog);
-  const swaps = suggestSwaps(counts, alloc.candidates, targetIds);
+  const swaps = cw <= 0 ? [] : suggestSwaps(counts, alloc.candidates, targetIds);
 
   return {
     feasible,

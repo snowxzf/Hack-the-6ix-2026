@@ -1,6 +1,6 @@
 /**
  * ─────────────────────────────────────────────────────────────
- *  JESSICA INTEGRATION POINTS — every fake / live bridge lives here.
+ *  JESSICA INTEGRATION POINTS: every fake / live bridge lives here.
  * ─────────────────────────────────────────────────────────────
  */
 import { MOCK_CATALOG, SUBURBAN } from "../../optimizer/src/index";
@@ -261,3 +261,29 @@ export const DAYS_TO_HARVEST: Record<string, number> = {
   flowers: 60,
   pollinator: 75,
 };
+
+/** Prefer per-species catalog harvest days; category map is last-resort only. */
+export function harvestDaysFor(s: {
+  daysToHarvest?: number;
+  daysToHarvestMin?: number;
+  daysToHarvestMax?: number;
+  category: string;
+  yieldKgPerSeason: number;
+}): number | null {
+  if (s.yieldKgPerSeason <= 0) return null;
+  if (s.daysToHarvest != null && s.daysToHarvest > 0) return s.daysToHarvest;
+  if (s.daysToHarvestMin != null && s.daysToHarvestMax != null) {
+    return Math.round((s.daysToHarvestMin + s.daysToHarvestMax) / 2);
+  }
+  return DAYS_TO_HARVEST[s.category] ?? 60;
+}
+
+export function harvestRangeLabel(s: {
+  daysToHarvestMin?: number;
+  daysToHarvestMax?: number;
+}): string {
+  if (s.daysToHarvestMin != null && s.daysToHarvestMax != null) {
+    return ` (${s.daysToHarvestMin}-${s.daysToHarvestMax}d; weather can shift this)`;
+  }
+  return "";
+}

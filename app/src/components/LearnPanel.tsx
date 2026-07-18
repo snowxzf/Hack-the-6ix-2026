@@ -1,100 +1,159 @@
-import { BookOpen, ChevronRight, FlaskConical, Sprout, TrendingUp } from "lucide-react";
+import { ArrowLeft, BookOpen, ChevronRight, ExternalLink, FlaskConical, Sprout, TrendingUp } from "lucide-react";
 import { useState } from "react";
+import { postById, postsForTier, type BlogPost, type BlogTier } from "../data/blogPosts";
 
 const TIERS = [
   {
-    id: "beginner",
+    id: "beginner" as const,
     label: "Beginner",
     icon: Sprout,
     tint: "bg-[hsl(var(--palette-sage)/0.4)] text-[hsl(var(--palette-forest))]",
   },
   {
-    id: "intermediate",
+    id: "intermediate" as const,
     label: "Intermediate",
     icon: TrendingUp,
     tint: "bg-[hsl(var(--palette-apricot)/0.3)] text-[hsl(var(--palette-brown))]",
   },
   {
-    id: "advanced",
+    id: "advanced" as const,
     label: "Advanced",
     icon: FlaskConical,
     tint: "bg-[hsl(var(--palette-leaf)/0.3)] text-[hsl(var(--palette-olive))]",
   },
-] as const;
+];
 
-const GUIDES: Record<(typeof TIERS)[number]["id"], { title: string; blurb: string; mins: number }[]> =
-  {
-    beginner: [
-      {
-        title: "Starting your first tomato",
-        blurb: "From seed to first fruit in a sunny spot.",
-        mins: 4,
-      },
-      {
-        title: "How often should I water?",
-        blurb: "Read the soil, not the calendar.",
-        mins: 3,
-      },
-      {
-        title: "5 herbs for a windowsill",
-        blurb: "Basil, mint, chives and more — no garden needed.",
-        mins: 5,
-      },
-      {
-        title: "Understanding sunlight",
-        blurb: "Full sun, partial shade, and what it means.",
-        mins: 4,
-      },
-    ],
-    intermediate: [
-      {
-        title: "Companion planting basics",
-        blurb: "Pair crops that help each other thrive.",
-        mins: 6,
-      },
-      {
-        title: "Composting to cut food waste",
-        blurb: "Turn kitchen scraps into garden gold.",
-        mins: 7,
-      },
-      {
-        title: "Building healthy soil",
-        blurb: "Crop rotation and organic matter.",
-        mins: 8,
-      },
-      {
-        title: "Pest control without chemicals",
-        blurb: "Natural defenses for a healthier garden.",
-        mins: 6,
-      },
-    ],
-    advanced: [
-      {
-        title: "Year-round growing with season extension",
-        blurb: "Cold frames, row covers, and microclimates.",
-        mins: 10,
-      },
-      {
-        title: "Saving your own seeds",
-        blurb: "Build a resilient, self-sustaining garden.",
-        mins: 12,
-      },
-      {
-        title: "Designing a permaculture guild",
-        blurb: "Multi-layer planting for maximum yield.",
-        mins: 14,
-      },
-      {
-        title: "Water-wise drip irrigation",
-        blurb: "Precision watering that saves resources.",
-        mins: 9,
-      },
-    ],
-  };
+function PostCard({
+  post,
+  delay,
+  onOpen,
+}: {
+  post: BlogPost;
+  delay: number;
+  onOpen: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex w-full animate-fade-in-up overflow-hidden rounded-2xl border border-border bg-card/85 text-left backdrop-blur transition-colors hover:border-primary/40"
+      style={{ animationDelay: `${delay}s` }}
+    >
+      <img
+        src={post.image.replace("w=900", "w=240")}
+        alt=""
+        className="h-24 w-24 shrink-0 object-cover"
+        loading="lazy"
+      />
+      <div className="flex min-w-0 flex-1 items-center gap-2 p-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-medium leading-tight">{post.title}</p>
+          <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{post.blurb}</p>
+          <p className="mt-1 text-[11px] text-muted-foreground/80">{post.mins} min read</p>
+        </div>
+        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+      </div>
+    </button>
+  );
+}
+
+function PostDetail({ post, onBack }: { post: BlogPost; onBack: () => void }) {
+  return (
+    <article className="space-y-4 py-2">
+      <button
+        type="button"
+        onClick={onBack}
+        className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground"
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Back to Learn
+      </button>
+
+      <div className="animate-fade-in-up overflow-hidden rounded-2xl border border-border">
+        <img
+          src={post.image}
+          alt={post.imageAlt}
+          className="aspect-[16/10] w-full object-cover"
+        />
+      </div>
+
+      <header className="animate-fade-in-up space-y-1" style={{ animationDelay: "0.04s" }}>
+        <p className="text-[11px] font-medium uppercase tracking-wide text-primary">
+          {post.mins} min read · Photo {post.credit}
+        </p>
+        <h2 className="font-heading text-4xl font-semibold leading-tight">{post.title}</h2>
+        <p className="text-sm leading-relaxed text-muted-foreground">{post.lead}</p>
+      </header>
+
+      {post.sections.map((section, i) => (
+        <section
+          key={section.heading}
+          className="animate-fade-in-up space-y-1.5"
+          style={{ animationDelay: `${0.06 + i * 0.03}s` }}
+        >
+          <h3 className="font-heading text-2xl font-semibold">{section.heading}</h3>
+          <p className="text-sm leading-relaxed text-foreground/85">{section.body}</p>
+        </section>
+      ))}
+
+      <aside
+        className="animate-fade-in-up space-y-2 border border-border bg-secondary/40 p-4"
+        style={{ animationDelay: "0.18s" }}
+      >
+        <div className="flex items-center gap-2">
+          <BookOpen className="h-4 w-4 text-primary" />
+          <h3 className="font-heading text-xl font-semibold">Quick tips</h3>
+        </div>
+        <ul className="space-y-2">
+          {post.tips.map((tip) => (
+            <li key={tip} className="flex gap-2 text-sm leading-relaxed text-foreground/85">
+              <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+              {tip}
+            </li>
+          ))}
+        </ul>
+      </aside>
+
+      <footer
+        className="animate-fade-in-up space-y-2 border-t border-border pt-4"
+        style={{ animationDelay: "0.22s" }}
+      >
+        <h3 className="font-heading text-xl font-semibold">Sources & further reading</h3>
+        <p className="text-xs leading-relaxed text-muted-foreground">
+          Original PlotTwist demo summary: drawn from these public references (not verbatim quotes).
+        </p>
+        <ul className="space-y-1.5">
+          {post.sources.map((s) => (
+            <li key={s.url}>
+              <a
+                href={s.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-start gap-1.5 text-sm text-primary underline-offset-2 hover:underline"
+              >
+                <ExternalLink className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>{s.label}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+        <p className="pt-1 text-[11px] text-muted-foreground/70">
+          Photo: {post.credit}
+        </p>
+      </footer>
+    </article>
+  );
+}
 
 export function LearnPanel() {
-  const [tier, setTier] = useState<(typeof TIERS)[number]["id"]>("beginner");
-  const guides = GUIDES[tier];
+  const [tier, setTier] = useState<BlogTier>("beginner");
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const guides = postsForTier(tier);
+  const active = activeId ? postById(activeId) ?? null : null;
+
+  if (active) {
+    return <PostDetail post={active} onBack={() => setActiveId(null)} />;
+  }
 
   return (
     <div className="space-y-5 py-2">
@@ -127,28 +186,19 @@ export function LearnPanel() {
               {label}
             </span>
           </button>
- ))}
+        ))}
       </div>
 
       <div className="space-y-3">
         {guides.map((g, i) => (
-          <div
-            key={g.title}
-            className="flex animate-fade-in-up items-center gap-3 rounded-2xl border border-border bg-card/85 p-4 backdrop-blur"
-            style={{ animationDelay: `${i * 0.05}s` }}
-          >
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-secondary">
-              <BookOpen className="h-5 w-5 text-primary" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium leading-tight">{g.title}</p>
-              <p className="mt-0.5 truncate text-xs text-muted-foreground">{g.blurb}</p>
-              <p className="mt-1 text-[11px] text-muted-foreground/80">{g.mins} min read</p>
-            </div>
-            <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-          </div>
- ))}
+          <PostCard
+            key={g.id}
+            post={g}
+            delay={i * 0.05}
+            onOpen={() => setActiveId(g.id)}
+          />
+        ))}
       </div>
     </div>
- );
+  );
 }

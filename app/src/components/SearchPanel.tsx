@@ -1,11 +1,13 @@
-import { ArrowLeft, Loader2, Play, Search as SearchIcon } from "lucide-react";
+import { ArrowLeft, ExternalLink, Loader2, Play, Search as SearchIcon } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 import type { Species } from "../../../optimizer/src/index";
 import {
   fetchSearchSuggestions,
   searchPlantsByName,
   searchVideos,
+  searchWebGuides,
   type SearchVideo,
+  type SearchWebResult,
 } from "../api";
 import { VideoModal } from "./VideoModal";
 
@@ -16,6 +18,7 @@ export function SearchPanel(props: { onClose: () => void }) {
   const [suggestionsLoading, setSuggestionsLoading] = useState(true);
   const [videos, setVideos] = useState<SearchVideo[]>([]);
   const [plants, setPlants] = useState<Species[]>([]);
+  const [web, setWeb] = useState<SearchWebResult[]>([]);
   const [active, setActive] = useState<SearchVideo | null>(null);
   const [searched, setSearched] = useState(false);
 
@@ -55,17 +58,23 @@ export function SearchPanel(props: { onClose: () => void }) {
     setLoading(true);
     setVideos([]);
     setPlants([]);
+    setWeb([]);
     setSearched(true);
 
-    const [videoRes, plantRes] = await Promise.all([
+    const [videoRes, plantRes, webRes] = await Promise.all([
       searchVideos(term),
       searchPlantsByName(term),
+      searchWebGuides(term),
     ]);
 
     setVideos(videoRes?.videos ?? []);
     setPlants(plantRes?.plants ?? []);
+    setWeb(webRes?.results ?? []);
     setLoading(false);
   }
+
+  const empty =
+    !loading && searched && videos.length === 0 && plants.length === 0 && web.length === 0;
 
   return (
     <div className="absolute inset-0 z-40 flex flex-col bg-white/95">
@@ -122,10 +131,10 @@ export function SearchPanel(props: { onClose: () => void }) {
                   >
                     {s}
                   </button>
- ))}
+                ))}
               </div>
             </div>
- )}
+          )}
 
           {loading && (
             <div className="grid grid-cols-1 gap-3">
@@ -137,18 +146,15 @@ export function SearchPanel(props: { onClose: () => void }) {
                     <div className="h-3 w-1/3 bg-muted" />
                   </div>
                 </div>
- ))}
+              ))}
             </div>
- )}
+          )}
 
           {!loading && plants.length > 0 && (
             <section className="space-y-2">
               <h3 className="font-heading text-lg font-semibold">Plants in catalog</h3>
               {plants.map((p) => (
-                <div
-                  key={p.id}
-                  className="border border-border bg-card/85 p-3 backdrop-blur"
-                >
+                <div key={p.id} className="border border-border bg-card/85 p-3 backdrop-blur">
                   <p className="text-sm font-medium">{p.name}</p>
                   <p className="text-xs text-muted-foreground">
                     {p.category}
@@ -156,13 +162,13 @@ export function SearchPanel(props: { onClose: () => void }) {
                     {p.sun ? ` · ${p.sun}` : ""}
                   </p>
                 </div>
- ))}
+              ))}
             </section>
- )}
+          )}
 
           {!loading && videos.length > 0 && (
             <section className="space-y-3">
-              <h3 className="font-heading text-lg font-semibold">Videos</h3>
+              <h3 className="font-heading text-lg font-semibold">YouTube</h3>
               {videos.map((v, i) => (
                 <button
                   key={v.video_id || i}
@@ -173,13 +179,16 @@ export function SearchPanel(props: { onClose: () => void }) {
                 >
                   <div className="relative aspect-video bg-muted">
                     <img
-                      src={`https://img.youtube.com/vi/${v.video_id}/hqdefault.jpg`}
+                      src={
+                        v.thumbnail ||
+                        `https://img.youtube.com/vi/${v.video_id}/hqdefault.jpg`
+                      }
                       alt={v.title}
                       className="h-full w-full object-cover"
                       loading="lazy"
                     />
                     <div className="absolute inset-0 flex items-center justify-center bg-black/20">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-white/90">
+                      <div className="flex h-12 w-12 items-center justify-center bg-white/90">
                         <Play className="ml-0.5 h-5 w-5 text-primary" fill="currentColor" />
                       </div>
                     </div>
@@ -187,22 +196,58 @@ export function SearchPanel(props: { onClose: () => void }) {
                       <span className="absolute bottom-1.5 right-1.5 bg-black/75 px-1.5 py-0.5 text-[10px] text-white">
                         {v.duration}
                       </span>
- )}
+                    )}
                   </div>
                   <div className="p-3">
                     <p className="line-clamp-2 text-sm font-medium">{v.title}</p>
                     <p className="mt-0.5 text-xs text-muted-foreground">{v.channel}</p>
                   </div>
                 </button>
- ))}
+              ))}
             </section>
- )}
+          )}
 
-          {!loading && searched && videos.length === 0 && plants.length === 0 && (
+          {!loading && web.length > 0 && (
+            <section className="space-y-2">
+              <h3 className="font-heading text-lg font-semibold">Guides from the web</h3>
+              {web.map((r, i) => (
+                <a
+                  key={`${r.url}-${i}`}
+                  href={r.url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex animate-fade-in-up gap-3 border border-border bg-card/85 p-3 backdrop-blur transition-colors hover:border-primary"
+                  style={{ animationDelay: `${i * 0.04}s` }}
+                >
+                  {r.image ? (
+                    <img
+                      src={r.image}
+                      alt=""
+                      className="h-14 w-14 shrink-0 object-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="flex h-14 w-14 shrink-0 items-center justify-center bg-secondary text-primary">
+                      <ExternalLink className="h-5 w-5" />
+                    </div>
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="line-clamp-2 text-sm font-medium leading-snug">{r.title}</p>
+                    <p className="mt-0.5 line-clamp-2 text-xs text-muted-foreground">{r.snippet}</p>
+                    <p className="mt-1 truncate text-[10px] text-primary">
+                      {r.displayUrl || r.url}
+                    </p>
+                  </div>
+                </a>
+              ))}
+            </section>
+          )}
+
+          {empty && (
             <div className="py-10 text-center text-sm text-muted-foreground">
               No results found. Try a different search or check that the backend is running.
             </div>
- )}
+          )}
         </div>
       </div>
 
@@ -212,7 +257,7 @@ export function SearchPanel(props: { onClose: () => void }) {
           title={active.title}
           onClose={() => setActive(null)}
         />
- )}
+      )}
     </div>
- );
+  );
 }

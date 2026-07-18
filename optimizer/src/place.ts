@@ -8,11 +8,11 @@ import type {
 } from "./types";
 
 /**
- * Stage B — placement: decide WHERE each planting unit goes.
+ * Stage B: placement: decide WHERE each planting unit goes.
  *
  * Grid variant of First-Fit Decreasing (Johnson et al. 1974): sort species into
  * a priority order, then scanline each unit into the best-scoring free slot
- * (north-west preference — a flipped Bottom-Left heuristic, Baker–Coffman–
+ * (north-west preference: a flipped Bottom-Left heuristic, Baker-Coffman-
  * Rivest 1980). Rotation is tried when the footprint isn't square.
  *
  * The sort order IS the horticulture:
@@ -23,7 +23,7 @@ import type {
  *      together, which is what lets the app batch watering into one trip.
  *
  * Position scoring adds a strong bonus for touching your own species (beds
- * stay contiguous — "a square of lilies beside a square of petunias") and a
+ * stay contiguous: "a square of lilies beside a square of petunias") and a
  * mild bonus for touching companion species (basil next to tomatoes).
  */
 
@@ -206,7 +206,7 @@ export function place(
           if (isObstacle[r][c]) {
             taskCells.set(`${r},${c}`, {
               cell: [r, c],
-              message: `Move the obstacle at row ${r + 1}, column ${c + 1} — a ${s.name} bed goes there.`,
+              message: `Move the obstacle at row ${r + 1}, column ${c + 1}: a ${s.name} bed goes there.`,
             });
           }
         }

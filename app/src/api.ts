@@ -2,7 +2,7 @@
  * Thin client for the PlotTwist FastAPI backend.
  *
  * Design rule: every call returns `null` on ANY failure (backend down, venue
- * wifi dead, timeout) — callers always have a local fallback, so the demo can
+ * wifi dead, timeout): callers always have a local fallback, so the demo can
  * never be taken down by the network. Timeouts are short on purpose.
  */
 import type { Species } from "../../optimizer/src/index";
@@ -10,7 +10,7 @@ import type { Species } from "../../optimizer/src/index";
 export const API_URL: string =
   (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:8000";
 
-/** Toronto City Hall — fallback when GPS is denied / unavailable. */
+/** Toronto City Hall: fallback when GPS is denied / unavailable. */
 export const DEFAULT_LAT = 43.6532;
 export const DEFAULT_LON = -79.3832;
 
@@ -39,7 +39,7 @@ async function request<T>(
     if (!res.ok) return null;
     return (await res.json()) as T;
   } catch {
-    return null; // offline / timeout / CORS — caller falls back
+    return null; // offline / timeout / CORS: caller falls back
   } finally {
     clearTimeout(timer);
   }
@@ -125,7 +125,7 @@ export interface GeocodeResult {
   admin1?: string;
 }
 
-/** GET /geocode — returns candidates so the UI can confirm ambiguous names. */
+/** GET /geocode: returns candidates so the UI can confirm ambiguous names. */
 export async function geocodeCity(q: string): Promise<GeocodeResult[] | null> {
   const j = await request<{ results: GeocodeResult[] }>(
     `/geocode?q=${encodeURIComponent(q)}&count=5`,
@@ -143,18 +143,44 @@ export interface Suggestion {
   species: Species;
 }
 
+export interface SuggestPayload {
+  suggestions: Suggestion[];
+  /** Human-readable season label from the backend (e.g. "late summer"). */
+  seasonName?: string;
+  tonightMinC?: number | null;
+  todayMaxC?: number | null;
+  carbonWeight?: number;
+  note?: string;
+}
+
 export async function fetchSuggestions(
   tier: string,
   carbonWeight: number,
   lat: number = DEFAULT_LAT,
   lon: number = DEFAULT_LON,
-): Promise<Suggestion[] | null> {
-  const j = await request<{ suggestions: Suggestion[] }>(
+): Promise<SuggestPayload | null> {
+  const j = await request<{
+    suggestions: Suggestion[];
+    context?: {
+      season?: { name?: string };
+      sky?: { tonightMinC?: number; todayMaxC?: number };
+      carbonWeight?: number;
+    };
+    note?: string;
+  }>(
     `/plants/suggest?lat=${lat}&lon=${lon}&tier=${tier}&carbonWeight=${carbonWeight}&limit=6`,
     undefined,
     8000,
   );
-  return j?.suggestions?.length ? j.suggestions : null;
+  if (!j?.suggestions?.length) return null;
+  return {
+    suggestions: j.suggestions,
+    seasonName: j.context?.season?.name,
+    tonightMinC: j.context?.sky?.tonightMinC ?? null,
+    todayMaxC: j.context?.sky?.todayMaxC ?? null,
+    carbonWeight: j.context?.carbonWeight ?? carbonWeight,
+    note: j.note,
+  };
 }
 
 /* ── Search (plants + videos + suggestion chips) ─────────── */
@@ -164,9 +190,18 @@ export interface SearchVideo {
   title: string;
   channel?: string;
   duration?: string;
+  thumbnail?: string;
 }
 
-/** GET /plants/search/by-name — substring match over the curated catalog. */
+export interface SearchWebResult {
+  title: string;
+  url: string;
+  snippet: string;
+  displayUrl?: string;
+  image?: string;
+}
+
+/** GET /plants/search/by-name: substring match over the curated catalog. */
 export async function searchPlantsByName(
   q: string,
 ): Promise<{ plants: Species[] } | null> {
@@ -195,7 +230,7 @@ export async function searchPlantsByName(
 /** Curated demos when the live YouTube scrape is unreachable. */
 const DEMO_VIDEOS: SearchVideo[] = [
   {
-    title: "How to Grow Tomatoes — Complete Guide for Beginners",
+    title: "How to Grow Tomatoes: Complete Guide for Beginners",
     video_id: "ECibnV1_3jM",
     channel: "Epic Gardening",
     duration: "12:04",
@@ -214,7 +249,7 @@ const DEMO_VIDEOS: SearchVideo[] = [
   },
 ];
 
-/** GET /search/videos — keyless YouTube scrape; falls back to curated demos. */
+/** GET /search/videos: keyless YouTube scrape; falls back to curated demos. */
 export async function searchVideos(
   q: string,
 ): Promise<{ videos: SearchVideo[] } | null> {
@@ -236,6 +271,17 @@ export async function searchVideos(
   return { videos: filtered.length ? filtered : DEMO_VIDEOS };
 }
 
+/** GET /search/web: Google Custom Search guides (needs GOOGLE_API_KEY + GOOGLE_CSE_ID). */
+export async function searchWebGuides(
+  q: string,
+): Promise<{ results: SearchWebResult[] } | null> {
+  return request<{ results: SearchWebResult[] }>(
+    `/search/web?q=${encodeURIComponent(q)}&limit=5`,
+    undefined,
+    12000,
+  );
+}
+
 const FALLBACK_SEARCH_SUGGESTIONS = [
   "Tomato growing tips",
   "Beginner vegetable garden",
@@ -244,14 +290,14 @@ const FALLBACK_SEARCH_SUGGESTIONS = [
   "Organic pest control",
 ];
 
-/** Seasonal "try searching for" chips — live picks when the backend is up. */
+/** Seasonal "try searching for" chips: live picks when the backend is up. */
 export async function fetchSearchSuggestions(
   lat: number = DEFAULT_LAT,
   lon: number = DEFAULT_LON,
 ): Promise<string[]> {
-  const sugs = await fetchSuggestions("beginner", 0.5, lat, lon);
-  if (!sugs) return FALLBACK_SEARCH_SUGGESTIONS;
-  const picks = sugs
+  const payload = await fetchSuggestions("beginner", 0.5, lat, lon);
+  if (!payload?.suggestions?.length) return FALLBACK_SEARCH_SUGGESTIONS;
+  const picks = payload.suggestions
     .slice(0, 4)
     .map((s) => `How to grow ${s.species.name.toLowerCase()}`);
   return [...picks, "Composting at home"];
@@ -264,6 +310,11 @@ export interface IdentifyPlantnetHit {
   scientificName?: string;
   scientificNameWithoutAuthor?: string;
   commonNames?: string[];
+  genus?: string;
+  family?: string;
+  gbifId?: string;
+  powoId?: string;
+  images?: string[];
 }
 
 /** Curated Mongo plant doc when PlantNet matched our catalog. */
@@ -303,10 +354,23 @@ export interface IdentifyCandidate {
   species?: Species | null;
 }
 
+export interface IdentifyWikipedia {
+  title?: string;
+  description?: string;
+  extract?: string;
+  image?: string;
+  thumbnail?: string;
+  url?: string;
+}
+
 export interface IdentifyResult {
+  detected?: boolean;
   bestMatch?: IdentifyCandidate | null;
   candidates?: IdentifyCandidate[];
+  wikipedia?: IdentifyWikipedia | null;
   plantnetBestMatch?: string;
+  remainingIdentificationRequests?: number;
+  attribution?: string;
 }
 
 /** Discriminated result so the Identify card can show specific errors. */
@@ -316,19 +380,19 @@ export type IdentifyOutcome =
 
 function identifyErrorMessage(status: number, body: string): string {
   if (status === 503) {
-    return "PlantNet isn’t configured on the backend — set PLANTNET_API_KEY in the repo .env.";
+    return "PlantNet isn’t configured on the backend: set PLANTNET_API_KEY in the repo .env.";
   }
   if (status === 400) {
-    return "That file looks empty or unreadable — try another photo.";
+    return "That file looks empty or unreadable: try another photo.";
   }
   if (status === 413) {
-    return "Photo is too large — try a smaller image.";
+    return "Photo is too large: try a smaller image.";
   }
   if (status === 502) {
-    return "PlantNet rejected the photo or is briefly unavailable — try a clearer close-up (leaf or flower).";
+    return "PlantNet rejected the photo or is briefly unavailable: try a clearer close-up (leaf or flower).";
   }
   if (status >= 500) {
-    return "Identify server error — check the backend terminal for details.";
+    return "Identify server error: check the backend terminal for details.";
   }
   try {
     const j = JSON.parse(body) as { detail?: unknown };
@@ -349,7 +413,7 @@ export async function identifyPlant(file: File): Promise<IdentifyOutcome> {
   form.append("organ", "auto");
 
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 30000);
+  const timer = setTimeout(() => ctrl.abort(), 45000);
   try {
     const res = await fetch(`${API_URL}/identify`, {
       method: "POST",
@@ -366,12 +430,12 @@ export async function identifyPlant(file: File): Promise<IdentifyOutcome> {
     if (err instanceof DOMException && err.name === "AbortError") {
       return {
         ok: false,
-        error: "Identification timed out — check wifi, then try again.",
+        error: "Identification timed out: check wifi, then try again.",
       };
     }
     return {
       ok: false,
-      error: `Cannot reach the API at ${API_URL} — start the backend on port 8000.`,
+      error: `Cannot reach the API at ${API_URL}: start the backend on port 8000.`,
     };
   } finally {
     clearTimeout(timer);
@@ -409,8 +473,8 @@ export function fetchFoodWasteImpact(
 }
 
 /**
- * Same math as backend/food_waste_stats.py, run locally when offline —
- * City of Toronto 2017–2018 audit baselines (see repo README).
+ * Same math as backend/food_waste_stats.py, run locally when offline : 
+ * City of Toronto 2017-2018 audit baselines (see repo README).
  */
 export function localFoodWasteImpact(foodKg: number): FoodWasteImpact {
   return {

@@ -4,7 +4,7 @@
  * Default ("day") is the main garden scheme. Later we'll add dawn / midday /
  * dusk / night / late-night and sync to phone time-of-day when the user opts
  * in via Settings ("sync colors with time of day"). That feature is not wired
- * yet — only the day tokens are applied via CSS `:root`.
+ * yet: only the day tokens are applied via CSS `:root`.
  */
 
 export type ThemeId = "day";

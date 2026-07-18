@@ -1,7 +1,7 @@
 """
 Toronto single-family household food-waste baselines and garden impact math.
 
-Source: City of Toronto — Food Waste (2017–2018 waste audits)
+Source: City of Toronto: Food Waste (2017-2018 waste audits)
 https://www.toronto.ca/services-payments/recycling-organics-garbage/waste-management/waste-reduction/food-waste/
 """
 
@@ -119,7 +119,7 @@ def _interpret(
         return (
             f"At {food:.1f} kg/season, your garden offsets at least the typical "
             f"Toronto household's annual fruit & vegetable waste ({fruit_veg} kg) "
-            f"— about {_pct(food, avoidable)}% of avoidable food waste "
+            f":  about {_pct(food, avoidable)}% of avoidable food waste "
             f"({avoidable} kg/yr)."
         )
     return (

@@ -2,13 +2,13 @@ import { areaOf, carbonPerUnit } from "./allocate";
 import type { CarbonReport, Species, SwapSuggestion } from "./types";
 
 /**
- * Stage C — carbon accounting + swap suggestions.
+ * Stage C: carbon accounting + swap suggestions.
  *
  * savings = Σ count × yieldKgPerSeason × co2eSavedPerKg
- * (kg CO2e displaced by growing instead of buying — factors from Jessica's
+ * (kg CO2e displaced by growing instead of buying: factors from Jessica's
  * catalog, methodology per Poore & Nemecek 2018 / Our World in Data.)
  *
- * PLACEHOLDER — research team must verify before the pitch:
+ * PLACEHOLDER: research team must verify before the pitch:
  * average passenger-car emissions used for the driving equivalence.
  */
 const KG_CO2E_PER_KM_DRIVEN = 0.2;
@@ -36,7 +36,7 @@ export function carbonReport(
 /**
  * Swaps: for each planted species the user did NOT hard-target, find a
  * same-category alternative with better carbon savings per cell. Advisory
- * only — estimates assume the swapped bed keeps the same area.
+ * only: estimates assume the swapped bed keeps the same area.
  */
 export function suggestSwaps(
   counts: Map<string, number>,

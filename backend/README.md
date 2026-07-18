@@ -47,6 +47,9 @@ pytest test_simulation.py -q      # unit tests for the ramp + cadence math
 | GET | `/plants?optimizer=true` | `Species[]` shape for Sara's optimizer |
 | GET | `/plants/{id}` | One plant by id |
 | GET | `/plants/search/by-name?q=` | Alias / name / scientific search |
+| GET | `/search/videos?q=` | YouTube Data API (gardening-biased); demo fallback if no key |
+| GET | `/search/web?q=` | Google Custom Search guides (needs `GOOGLE_CSE_ID`) |
+| GET | `/search?q=` | Combined plants + YouTube + web |
 | POST | `/identify` | multipart `image` (+ optional `organ`) → PlantNet → catalog match |
 | GET | `/plants/suggest?location=Toronto&confirm=true&carbonWeight=0.5` | Multi-factor rank: season + live weather + carbon + native region + skill |
 | GET | `/geocode?q=` | Open-Meteo geocoding — city/address → lat/lon candidates (confirm country/admin1) |
