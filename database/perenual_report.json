@@ -1,0 +1,29 @@
+[
+  {
+    "id": "tomato_cherry",
+    "matched": false,
+    "error": "rate_limited",
+    "changes": {},
+    "notes": [
+      "Skipped due to Perenual free-tier rate limit"
+    ]
+  },
+  {
+    "id": "tomato_beefsteak",
+    "matched": false,
+    "error": "rate_limited",
+    "changes": {},
+    "notes": [
+      "Skipped due to Perenual free-tier rate limit"
+    ]
+  },
+  {
+    "id": "lettuce",
+    "matched": false,
+    "error": "rate_limited",
+    "changes": {},
+    "notes": [
+      "Skipped due to Perenual free-tier rate limit"
+    ]
+  }
+]

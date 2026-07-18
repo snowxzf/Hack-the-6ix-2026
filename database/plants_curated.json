@@ -1,6 +1,6 @@
 {
   "meta": {
-    "version": "0.2.0-draft",
+    "version": "0.3.0-perenual-pass",
     "cellSizeCm": 30,
     "note": "DRAFT horticultural estimates. Verify spacing/temp/pH against Perenual and carbon factors against Poore & Nemecek 2018 / Our World in Data before pitching numbers.",
     "carbonRule": "Food plants only: seasonal_savings = yieldKgPerSeason × co2eSavedPerKg. Ornamentals/pollinators use yield=0 and co2e=0; impact case is biodiversity, not invented CO2e.",
@@ -174,8 +174,8 @@
       ],
       "spacingCm": 8,
       "sun": "full",
-      "waterEveryDays": 3,
-      "heightCm": 30,
+      "waterEveryDays": 4,
+      "heightCm": 91,
       "tempMinC": 4,
       "tempMaxC": 28,
       "phMin": 6.0,
@@ -189,7 +189,7 @@
       ],
       "impactCase": "food_carbon",
       "verified": {
-        "perenual": false,
+        "perenual": true,
         "carbon": false
       },
       "nativeRegion": {
@@ -207,7 +207,8 @@
           "cool",
           "mediterranean"
         ]
-      }
+      },
+      "perenualId": 2320
     },
     {
       "id": "zucchini",
@@ -226,7 +227,7 @@
       ],
       "spacingCm": 90,
       "sun": "full",
-      "waterEveryDays": 2,
+      "waterEveryDays": 4,
       "heightCm": 90,
       "tempMinC": 15,
       "tempMaxC": 35,
@@ -240,7 +241,7 @@
       ],
       "impactCase": "food_carbon",
       "verified": {
-        "perenual": false,
+        "perenual": true,
         "carbon": false
       },
       "nativeRegion": {
@@ -256,7 +257,8 @@
           "subtropical",
           "mediterranean"
         ]
-      }
+      },
+      "perenualId": 2255
     },
     {
       "id": "cucumber",
@@ -273,8 +275,8 @@
       ],
       "spacingCm": 60,
       "sun": "full",
-      "waterEveryDays": 2,
-      "heightCm": 150,
+      "waterEveryDays": 4,
+      "heightCm": 46,
       "tempMinC": 15,
       "tempMaxC": 32,
       "phMin": 6.0,
@@ -287,7 +289,7 @@
       ],
       "impactCase": "food_carbon",
       "verified": {
-        "perenual": false,
+        "perenual": true,
         "carbon": false
       },
       "nativeRegion": {
@@ -303,7 +305,8 @@
           "subtropical",
           "tropical"
         ]
-      }
+      },
+      "perenualId": 2251
     },
     {
       "id": "bell_pepper",
@@ -322,7 +325,7 @@
       ],
       "spacingCm": 45,
       "sun": "full",
-      "waterEveryDays": 2,
+      "waterEveryDays": 4,
       "heightCm": 70,
       "tempMinC": 15,
       "tempMaxC": 32,
@@ -336,7 +339,7 @@
       ],
       "impactCase": "food_carbon",
       "verified": {
-        "perenual": false,
+        "perenual": true,
         "carbon": false
       },
       "nativeRegion": {
@@ -352,7 +355,8 @@
           "tropical",
           "temperate"
         ]
-      }
+      },
+      "perenualId": 1600
     },
     {
       "id": "kale",
@@ -370,7 +374,7 @@
       ],
       "spacingCm": 35,
       "sun": "full",
-      "waterEveryDays": 3,
+      "waterEveryDays": 4,
       "heightCm": 60,
       "tempMinC": -5,
       "tempMaxC": 24,
@@ -384,7 +388,7 @@
       ],
       "impactCase": "food_carbon",
       "verified": {
-        "perenual": false,
+        "perenual": true,
         "carbon": false
       },
       "nativeRegion": {
@@ -401,7 +405,8 @@
           "cool",
           "mediterranean"
         ]
-      }
+      },
+      "perenualId": 1320
     },
     {
       "id": "spinach",
@@ -564,8 +569,8 @@
       ],
       "spacingCm": 45,
       "sun": "full",
-      "waterEveryDays": 3,
-      "heightCm": 75,
+      "waterEveryDays": 2,
+      "heightCm": 46,
       "tempMinC": 4,
       "tempMaxC": 24,
       "phMin": 6.0,
@@ -578,7 +583,7 @@
       ],
       "impactCase": "food_carbon",
       "verified": {
-        "perenual": false,
+        "perenual": true,
         "carbon": false
       },
       "nativeRegion": {
@@ -594,7 +599,8 @@
           "cool",
           "mediterranean"
         ]
-      }
+      },
+      "perenualId": 1321
     },
     {
       "id": "cabbage",
@@ -611,7 +617,7 @@
       ],
       "spacingCm": 45,
       "sun": "full",
-      "waterEveryDays": 3,
+      "waterEveryDays": 4,
       "heightCm": 50,
       "tempMinC": 0,
       "tempMaxC": 24,
@@ -625,7 +631,7 @@
       ],
       "impactCase": "food_carbon",
       "verified": {
-        "perenual": false,
+        "perenual": true,
         "carbon": false
       },
       "nativeRegion": {
@@ -641,7 +647,8 @@
           "temperate",
           "cool"
         ]
-      }
+      },
+      "perenualId": 1322
     },
     {
       "id": "beet",
@@ -659,7 +666,7 @@
       ],
       "spacingCm": 10,
       "sun": "full",
-      "waterEveryDays": 3,
+      "waterEveryDays": 2,
       "heightCm": 35,
       "tempMinC": 5,
       "tempMaxC": 28,
@@ -673,7 +680,7 @@
       ],
       "impactCase": "food_carbon",
       "verified": {
-        "perenual": false,
+        "perenual": true,
         "carbon": false
       },
       "nativeRegion": {
@@ -691,7 +698,8 @@
           "cool",
           "mediterranean"
         ]
-      }
+      },
+      "perenualId": 1273
     },
     {
       "id": "potato",
@@ -771,7 +779,7 @@
       ],
       "impactCase": "food_carbon",
       "verified": {
-        "perenual": false,
+        "perenual": true,
         "carbon": false
       },
       "nativeRegion": {
@@ -787,7 +795,8 @@
           "mediterranean",
           "arid"
         ]
-      }
+      },
+      "perenualId": 667
     },
     {
       "id": "garlic",
@@ -804,7 +813,7 @@
       ],
       "spacingCm": 15,
       "sun": "full",
-      "waterEveryDays": 5,
+      "waterEveryDays": 4,
       "heightCm": 50,
       "tempMinC": -10,
       "tempMaxC": 28,
@@ -818,7 +827,7 @@
       ],
       "impactCase": "food_carbon",
       "verified": {
-        "perenual": false,
+        "perenual": true,
         "carbon": false
       },
       "nativeRegion": {
@@ -834,7 +843,8 @@
           "mediterranean",
           "cool"
         ]
-      }
+      },
+      "perenualId": 682
     },
     {
       "id": "pea",

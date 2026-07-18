@@ -18,6 +18,10 @@ python seed.py
 Collections written: `plantapp.plants`, `plantapp.catalog_meta`.
 Gardens are created at runtime by `POST /gardens` on the backend.
 
+Vegetable records include `daysToHarvest` (+ min/max) and optional `harvest`
+season/weather fields (`plantSeasons`, `frostSensitive`, `slowsBelowC`, etc.).
+Live estimates: `GET /plants/{id}?lat=&lon=` or `/plants/suggest` → `harvestEstimate`.
+
 ## Verify care fields vs Perenual
 
 1. Add to `.env`: `PERENUAL_API_KEY=...` (from https://perenual.com/docs/api)

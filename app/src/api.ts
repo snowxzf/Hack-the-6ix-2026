@@ -104,21 +104,124 @@ export async function fetchSuggestions(
 
 /* ── PlantNet identify ───────────────────────────────────── */
 
-export interface IdentifyCandidate {
+/** Nested PlantNet hit fields from POST /identify. */
+export interface IdentifyPlantnetHit {
   scientificName?: string;
+  scientificNameWithoutAuthor?: string;
   commonNames?: string[];
-  score?: number;
-  catalogMatch?: Species | null;
-}
-export interface IdentifyResult {
-  bestMatch?: { catalogMatch?: Species | null } | null;
-  candidates?: IdentifyCandidate[];
 }
 
-export function identifyPlant(file: File): Promise<IdentifyResult | null> {
+/** Curated Mongo plant doc when PlantNet matched our catalog. */
+export interface IdentifyCatalogMatch {
+  id?: string;
+  name?: string;
+  scientificName?: string;
+  category?: string;
+  tier?: string;
+  sun?: string;
+  waterEveryDays?: number;
+  heightCm?: number;
+  tempMinC?: number;
+  tempMaxC?: number;
+  spacingCm?: number;
+  yieldKgPerSeason?: number;
+  daysToHarvest?: number;
+  daysToHarvestMin?: number;
+  daysToHarvestMax?: number;
+  harvest?: {
+    plantSeasons?: string[];
+    plantMonthsNorth?: number[];
+    seasonClass?: string;
+    frostSensitive?: boolean;
+    slowsBelowC?: number;
+    stressAboveC?: number;
+    boltsAboveC?: number | null;
+    weatherNotes?: string;
+  };
+}
+
+export interface IdentifyCandidate {
+  score?: number;
+  plantnet?: IdentifyPlantnetHit;
+  catalogMatch?: IdentifyCatalogMatch | null;
+  /** Optimizer-shaped subset when catalogMatch exists. */
+  species?: Species | null;
+}
+
+export interface IdentifyResult {
+  bestMatch?: IdentifyCandidate | null;
+  candidates?: IdentifyCandidate[];
+  plantnetBestMatch?: string;
+}
+
+/** Discriminated result so the Identify card can show specific errors. */
+export type IdentifyOutcome =
+  | { ok: true; data: IdentifyResult }
+  | { ok: false; error: string };
+
+function identifyErrorMessage(status: number, body: string): string {
+  if (status === 503) {
+    return "PlantNet isn’t configured on the backend — set PLANTNET_API_KEY in the repo .env.";
+  }
+  if (status === 400) {
+    return "That file looks empty or unreadable — try another photo.";
+  }
+  if (status === 413) {
+    return "Photo is too large — try a smaller image.";
+  }
+  if (status === 502) {
+    return "PlantNet rejected the photo or is briefly unavailable — try a clearer close-up (leaf or flower).";
+  }
+  if (status >= 500) {
+    return "Identify server error — check the backend terminal for details.";
+  }
+  // Prefer FastAPI `detail` when it’s a plain string.
+  try {
+    const j = JSON.parse(body) as { detail?: unknown };
+    if (typeof j.detail === "string" && j.detail.trim()) return j.detail;
+  } catch {
+    /* ignore */
+  }
+  return `Identification failed (HTTP ${status}).`;
+}
+
+/**
+ * POST /identify with multipart image. Returns a typed outcome (not null) so
+ * the UI can distinguish offline vs PlantNet-not-configured vs empty match.
+ */
+export async function identifyPlant(file: File): Promise<IdentifyOutcome> {
   const form = new FormData();
   form.append("image", file);
-  return request<IdentifyResult>("/identify", { method: "POST", body: form }, 15000);
+  form.append("organ", "auto");
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 30000);
+  try {
+    const res = await fetch(`${API_URL}/identify`, {
+      method: "POST",
+      body: form,
+      signal: ctrl.signal,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      return { ok: false, error: identifyErrorMessage(res.status, body) };
+    }
+    const data = (await res.json()) as IdentifyResult;
+    return { ok: true, data };
+  } catch (err) {
+    if (err instanceof DOMException && err.name === "AbortError") {
+      return {
+        ok: false,
+        error: "Identification timed out — check wifi, then try again.",
+      };
+    }
+    return {
+      ok: false,
+      error: `Cannot reach the API at ${API_URL} — start the backend on port 8000.`,
+    };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /* ── Gardens (cloud save) ────────────────────────────────── */

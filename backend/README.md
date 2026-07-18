@@ -16,6 +16,10 @@ python seed.py
 
 cd ../backend
 pip install -r requirements.txt
+
+# from repo root (preferred — package import):
+#   python -m uvicorn backend.main:app --reload --port 8000
+# or from backend/:
 uvicorn main:app --reload --port 8000
 ```
 
@@ -38,7 +42,7 @@ pytest test_simulation.py -q      # unit tests for the ramp + cadence math
 
 | Method | Path | Purpose |
 |---|---|---|
-| GET | `/health` | Mongo ping + plant count |
+| GET | `/health` | Mongo ping + plant count + `plantnetConfigured` |
 | GET | `/plants` | Full curated catalog |
 | GET | `/plants?optimizer=true` | `Species[]` shape for Sara's optimizer |
 | GET | `/plants/{id}` | One plant by id |

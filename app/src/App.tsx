@@ -29,6 +29,8 @@ import {
   identifyPlant,
   localFoodWasteImpact,
   saveGardenToCloud,
+  type IdentifyCandidate,
+  type IdentifyResult,
   type Suggestion,
   type WeatherData,
 } from "./api";
@@ -1041,52 +1043,271 @@ function ReviewScreen(props: {
   );
 }
 
+function identifyLabel(c: IdentifyCandidate): string {
+  const pn = c.plantnet;
+  const common = pn?.commonNames?.[0];
+  const sci =
+    pn?.scientificNameWithoutAuthor ?? pn?.scientificName ?? "Unknown plant";
+  return common ? `${common} · ${sci}` : sci;
+}
+
+function confidencePct(score?: number): number | null {
+  if (score == null || Number.isNaN(score)) return null;
+  return Math.round(Math.min(1, Math.max(0, score)) * 100);
+}
+
 /** PlantNet-powered close-up identification (backend /identify). */
 function IdentifyCard() {
   const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [preview, setPreview] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<IdentifyResult | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+  const cameraRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    return () => {
+      if (preview) URL.revokeObjectURL(preview);
+    };
+  }, [preview]);
 
   async function onFile(file: File) {
+    // Some mobile browsers leave type empty for camera captures — allow those through.
+    if (file.type && !file.type.startsWith("image/")) {
+      setError("Please choose an image file (JPG, PNG, or HEIC).");
+      return;
+    }
     setBusy(true);
-    setMessage(null);
-    const res = await identifyPlant(file);
+    setError(null);
+    setResult(null);
+    setPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(file);
+    });
+    const outcome = await identifyPlant(file);
     setBusy(false);
-    if (!res) {
-      setMessage("Identification unavailable — backend offline or PlantNet key missing.");
+    if (!outcome.ok) {
+      setError(outcome.error);
       return;
     }
-    const best =
-      res.bestMatch?.catalogMatch ??
-      res.candidates?.find((c) => c.catalogMatch)?.catalogMatch;
-    if (best) {
-      setMessage(`✓ Looks like ${best.name} — it's in our catalog! Pick it in the dropdown above.`);
+    if (!outcome.data.candidates?.length) {
+      setError("No confident match — try a closer photo of a leaf or flower.");
       return;
     }
-    const top = res.candidates?.[0];
-    if (top) {
-      const common = top.commonNames?.length ? ` (${top.commonNames[0]})` : "";
-      setMessage(`PlantNet says: ${top.scientificName ?? "unknown"}${common} — not in our catalog yet.`);
-      return;
-    }
-    setMessage("No confident match — try a closer photo of a leaf or flower.");
+    setResult(outcome.data);
   }
 
+  function clearIdentify() {
+    setPreview((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    setResult(null);
+    setError(null);
+  }
+
+  const top =
+    result?.bestMatch ??
+    result?.candidates?.find((c) => c.catalogMatch) ??
+    result?.candidates?.[0] ??
+    null;
+  const care = top?.catalogMatch ?? null;
+  const others = (result?.candidates ?? []).filter((c) => c !== top).slice(0, 4);
+
   return (
-    <div className="card">
-      <h2>Not sure what something is? 📷</h2>
-      <p className="muted">Snap a close-up of one plant and PlantNet will identify it.</p>
+    <div className="card" aria-busy={busy}>
+      <h2>Identify a plant 📷</h2>
+      <p className="muted">
+        Take or upload a close-up of one plant. PlantNet names it; we match care tips from our catalog when we can.
+      </p>
       <div className="row">
+        <button
+          type="button"
+          className="secondary small"
+          disabled={busy}
+          onClick={() => cameraRef.current?.click()}
+        >
+          Take photo
+        </button>
+        <button
+          type="button"
+          className="secondary small"
+          disabled={busy}
+          onClick={() => fileRef.current?.click()}
+        >
+          Upload photo
+        </button>
+        {(preview || result || error) && (
+          <button
+            type="button"
+            className="secondary small"
+            disabled={busy}
+            onClick={clearIdentify}
+          >
+            Clear
+          </button>
+        )}
+        {/* capture=environment opens the rear camera on mobile browsers */}
         <input
+          ref={cameraRef}
           type="file"
           accept="image/*"
+          capture="environment"
+          hidden
           onChange={(e) => {
             const f = e.target.files?.[0];
-            if (f) onFile(f);
+            e.target.value = "";
+            if (f) void onFile(f);
+          }}
+        />
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          hidden
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            e.target.value = "";
+            if (f) void onFile(f);
           }}
         />
       </div>
-      {busy && <p className="tiny">Asking PlantNet…</p>}
-      {message && <p className="tiny">{message}</p>}
+
+      {!preview && !busy && !error && (
+        <p className="tiny" style={{ marginTop: 8 }}>
+          Tip: fill the frame with one leaf or flower — blurry wide shots confuse PlantNet.
+        </p>
+      )}
+
+      {preview && (
+        <img
+          className="photo"
+          src={preview}
+          alt="Plant to identify"
+          style={{ opacity: busy ? 0.55 : 1, marginTop: 8 }}
+        />
+      )}
+      {busy && (
+        <p className="tiny" role="status" style={{ marginTop: 6 }}>
+          Asking PlantNet… this can take up to ~30s on slow wifi.
+        </p>
+      )}
+      {error && (
+        <p className="identify-error" role="alert">
+          {error}
+        </p>
+      )}
+
+      {top && !busy && (
+        <div className="identify-result">
+          <div className="row spread" style={{ alignItems: "flex-start" }}>
+            <div>
+              <p style={{ fontSize: 15, fontWeight: 600, margin: "8px 0 2px" }}>
+                {care?.name ?? identifyLabel(top)}
+              </p>
+              <p className="tiny">
+                {top.plantnet?.scientificNameWithoutAuthor ??
+                  top.plantnet?.scientificName ??
+                  care?.scientificName ??
+                  "—"}
+                {top.plantnet?.commonNames?.[0]
+                  ? ` · also called ${top.plantnet.commonNames[0]}`
+                  : ""}
+              </p>
+            </div>
+            {confidencePct(top.score) != null && (
+              <span className="chip on" style={{ cursor: "default" }}>
+                {confidencePct(top.score)}% sure
+              </span>
+            )}
+          </div>
+
+          {care ? (
+            <>
+              <p className="muted" style={{ marginTop: 8 }}>
+                Matched catalog care for <b>{care.name}</b>
+                {care.id ? ` (${care.id})` : ""}. Use the dropdown above if this is one of your detected plants.
+              </p>
+              <ul className="clean">
+                {care.sun && (
+                  <li>
+                    <b>Sun:</b> {care.sun}
+                  </li>
+                )}
+                {care.waterEveryDays != null && (
+                  <li>
+                    <b>Water:</b> every {care.waterEveryDays} day
+                    {care.waterEveryDays === 1 ? "" : "s"}
+                  </li>
+                )}
+                {care.heightCm != null && (
+                  <li>
+                    <b>Height:</b> ~{care.heightCm} cm
+                  </li>
+                )}
+                {care.tempMinC != null && care.tempMaxC != null && (
+                  <li>
+                    <b>Temp:</b> {care.tempMinC}–{care.tempMaxC} °C
+                  </li>
+                )}
+                {care.spacingCm != null && (
+                  <li>
+                    <b>Spacing:</b> ~{care.spacingCm} cm
+                  </li>
+                )}
+                {care.daysToHarvest != null && (
+                  <li>
+                    <b>Harvest:</b> ~{care.daysToHarvest} days
+                    {care.daysToHarvestMin != null && care.daysToHarvestMax != null
+                      ? ` (range ${care.daysToHarvestMin}–${care.daysToHarvestMax})`
+                      : ""}
+                    {care.harvest?.plantSeasons?.length
+                      ? ` · plant in ${care.harvest.plantSeasons.join(", ")}`
+                      : ""}
+                  </li>
+                )}
+                {care.harvest?.weatherNotes && (
+                  <li>
+                    <b>Weather:</b> {care.harvest.weatherNotes}
+                  </li>
+                )}
+                {care.category && (
+                  <li>
+                    <b>Category:</b> {care.category}
+                    {care.tier ? ` · ${care.tier}` : ""}
+                  </li>
+                )}
+              </ul>
+            </>
+          ) : (
+            <p className="muted" style={{ marginTop: 8 }}>
+              Not in our curated catalog yet — PlantNet ID only. You can still rename a detected plant
+              manually above.
+            </p>
+          )}
+
+          {others.length > 0 && (
+            <>
+              <p className="tiny" style={{ marginTop: 10 }}>
+                Other candidates
+              </p>
+              <ul className="clean">
+                {others.map((c, i) => (
+                  <li key={i}>
+                    {identifyLabel(c)}
+                    {confidencePct(c.score) != null ? (
+                      <span className="tiny"> · {confidencePct(c.score)}%</span>
+                    ) : null}
+                    {c.catalogMatch?.name ? (
+                      <span className="tiny"> · catalog: {c.catalogMatch.name}</span>
+                    ) : null}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1845,7 +2066,11 @@ function DashboardScreen(props: {
         {planted.map(([id, n]) => {
           const s = byId.get(id);
           if (!s) return null;
-          const harvest = DAYS_TO_HARVEST[s.category] ?? 60;
+          const harvest = s.daysToHarvest ?? DAYS_TO_HARVEST[s.category] ?? 60;
+          const harvestRange =
+            s.daysToHarvestMin != null && s.daysToHarvestMax != null
+              ? ` (${s.daysToHarvestMin}–${s.daysToHarvestMax}d; weather can shift this)`
+              : "";
           const progress = Math.min(1, daysSincePlanted / harvest);
           return (
             <div key={id} style={{ margin: "10px 0" }}>
@@ -1856,7 +2081,9 @@ function DashboardScreen(props: {
                 </span>
                 <span className="tiny">
                   water every {s.waterEveryDays}d ·{" "}
-                  {s.yieldKgPerSeason > 0 ? `~${harvest}d to harvest` : "ornamental"}
+                  {s.yieldKgPerSeason > 0
+                    ? `~${harvest}d to harvest${harvestRange}`
+                    : "ornamental"}
                 </span>
               </div>
               <div className="bar">

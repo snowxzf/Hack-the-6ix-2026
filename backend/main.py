@@ -22,10 +22,16 @@ from pymongo import MongoClient
 from pymongo.collection import Collection
 from pymongo.database import Database
 
-from food_waste_stats import (
-    TORONTO_FOOD_WASTE_BASELINE,
-    compare_garden_to_toronto_baseline,
-)
+try:
+    from .food_waste_stats import (
+        TORONTO_FOOD_WASTE_BASELINE,
+        compare_garden_to_toronto_baseline,
+    )
+except ImportError:  # `uvicorn main:app` from backend/
+    from food_waste_stats import (
+        TORONTO_FOOD_WASTE_BASELINE,
+        compare_garden_to_toronto_baseline,
+    )
 
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
@@ -50,6 +56,9 @@ SPECIES_FIELDS = (
     "yieldKgPerSeason",
     "co2eSavedPerKg",
     "companions",
+    "daysToHarvest",
+    "daysToHarvestMin",
+    "daysToHarvestMax",
 )
 
 # WMO weather interpretation codes (Open-Meteo). Sky only — not plant advice.
@@ -408,6 +417,15 @@ async def forecast_for(
                         "tempMinC": tmin,
                         "tempMaxC": tmax,
                         "issues": issues,
+                        "harvestEstimate": estimate_harvest_days(
+                            plant,
+                            sky={
+                                "tonightMinC": tonight_low,
+                                "todayMaxC": today_high,
+                            },
+                            month=datetime.now(timezone.utc).month,
+                            lat=lat,
+                        ),
                     }
                 )
             else:
@@ -422,6 +440,15 @@ async def forecast_for(
                             f"{plant.get('name')} is within tolerance tonight/today "
                             f"(sky low {tonight_low}°C / high {today_high}°C vs "
                             f"plant {tmin}–{tmax}°C)."
+                        ),
+                        "harvestEstimate": estimate_harvest_days(
+                            plant,
+                            sky={
+                                "tonightMinC": tonight_low,
+                                "todayMaxC": today_high,
+                            },
+                            month=datetime.now(timezone.utc).month,
+                            lat=lat,
                         ),
                     }
                 )
@@ -571,7 +598,11 @@ def climates_for_place(lat: float, country_code: str | None) -> list[str]:
 
 
 def plant_season_class(plant: dict[str, Any]) -> str:
-    """cool / warm / flexible from temp tolerance (draft heuristic)."""
+    """Prefer catalog harvest.seasonClass; else infer from temp tolerance."""
+    harvest = plant.get("harvest") or {}
+    tagged = harvest.get("seasonClass")
+    if tagged in ("cool", "warm", "flexible"):
+        return tagged
     tmin = plant.get("tempMinC")
     tmax = plant.get("tempMaxC")
     if tmin is None or tmax is None:
@@ -581,6 +612,95 @@ def plant_season_class(plant: dict[str, Any]) -> str:
     if tmin >= 12:
         return "warm"
     return "flexible"
+
+
+def estimate_harvest_days(
+    plant: dict[str, Any],
+    *,
+    season_ctx: dict[str, Any] | None = None,
+    sky: dict[str, Any] | None = None,
+    month: int | None = None,
+    lat: float | None = None,
+) -> dict[str, Any] | None:
+    """
+    Adjust baseline daysToHarvest using optional season + weather fields.
+
+    Returns None for plants without daysToHarvest (ornamentals).
+    """
+    base = plant.get("daysToHarvest")
+    if base is None:
+        return None
+
+    harvest = plant.get("harvest") or {}
+    lo = int(plant.get("daysToHarvestMin") or base)
+    hi = int(plant.get("daysToHarvestMax") or base)
+    adjusted = float(base)
+    reasons: list[str] = []
+
+    season_class = plant_season_class(plant)
+    if season_ctx:
+        prefer = set(season_ctx.get("prefer") or [])
+        discourage = set(season_ctx.get("discourage") or [])
+        if season_class in prefer:
+            adjusted *= 0.95
+            reasons.append(f"in-season ({season_ctx.get('name')}) — slightly faster")
+        elif season_class in discourage:
+            adjusted *= 1.15
+            reasons.append(f"off-season ({season_ctx.get('name')}) — expect delay")
+
+    # Planting-month window (northern hemisphere months in catalog)
+    months = harvest.get("plantMonthsNorth") or []
+    if months and month is not None:
+        m = month
+        if lat is not None and lat < 0:
+            m = ((month + 5) % 12) + 1
+        if m not in months:
+            adjusted *= 1.1
+            reasons.append(
+                f"month {m} outside typical plant window {months}"
+            )
+        else:
+            reasons.append(f"month {m} is in typical plant window")
+
+    sky = sky or {}
+    tonight = sky.get("tonightMinC")
+    today_high = sky.get("todayMaxC")
+    slows = harvest.get("slowsBelowC")
+    stress = harvest.get("stressAboveC")
+    bolts = harvest.get("boltsAboveC")
+
+    if slows is not None and tonight is not None and tonight < slows:
+        adjusted *= 1.12
+        reasons.append(
+            f"nights {tonight}°C below slowsBelowC {slows}°C — growth slows"
+        )
+    if stress is not None and today_high is not None and today_high > stress:
+        adjusted *= 1.08
+        reasons.append(
+            f"days {today_high}°C above stressAboveC {stress}°C — plant stress"
+        )
+    if bolts is not None and today_high is not None and today_high >= bolts:
+        # Heat crops that bolt: harvest window moves earlier (pick sooner)
+        adjusted *= 0.9
+        reasons.append(
+            f"heat >= {bolts}C — bolt risk; harvest sooner if leaves/heads ready"
+        )
+
+    if harvest.get("frostSensitive") and tonight is not None and tonight <= 2:
+        reasons.append("frost-sensitive and near-freezing nights — protect or delay planting")
+
+    adjusted_i = int(round(max(lo * 0.85, min(hi * 1.2, adjusted))))
+    return {
+        "baselineDays": int(base),
+        "estimatedDays": adjusted_i,
+        "rangeDays": {"min": lo, "max": hi},
+        "plantSeasons": harvest.get("plantSeasons"),
+        "plantMonthsNorth": months,
+        "seasonClass": season_class,
+        "frostSensitive": harvest.get("frostSensitive"),
+        "weatherNotes": harvest.get("weatherNotes"),
+        "reasons": reasons,
+    }
 
 
 def local_season_context(lat: float, month: int) -> dict[str, Any]:
@@ -845,9 +965,17 @@ async def suggest_plants(
             carbon_weight=cw,
             max_carbon=max_carbon,
         )
+        harvest_est = estimate_harvest_days(
+            p,
+            season_ctx=season_ctx,
+            sky=sky,
+            month=month,
+            lat=float(lat),
+        )
         ranked.append(
             {
                 **scored,
+                "harvestEstimate": harvest_est,
                 "plant": p,
                 "species": to_species(p),
             }
@@ -909,11 +1037,27 @@ def search_plants(q: str, limit: int = 10) -> dict[str, Any]:
 
 
 @app.get("/plants/{plant_id}")
-def get_plant(plant_id: str) -> dict[str, Any]:
+async def get_plant(
+    plant_id: str,
+    lat: float | None = None,
+    lon: float | None = None,
+) -> dict[str, Any]:
     doc = find_plant(plant_id)
     if not doc:
         raise HTTPException(status_code=404, detail=f"Plant '{plant_id}' not found")
-    return doc
+    out = dict(doc)
+    if lat is not None and lon is not None:
+        month = datetime.now(timezone.utc).month
+        season_ctx = local_season_context(lat, month)
+        sky = await fetch_sky_snapshot(lat, lon)
+        out["harvestEstimate"] = estimate_harvest_days(
+            doc,
+            season_ctx=season_ctx,
+            sky=sky,
+            month=month,
+            lat=lat,
+        )
+    return out
 
 
 @app.post("/identify")

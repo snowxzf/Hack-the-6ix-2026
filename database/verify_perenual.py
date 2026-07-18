@@ -78,20 +78,30 @@ def cache_path(name: str) -> Path:
     return CACHE_DIR / f"{safe}.json"
 
 
-def get_json(client: httpx.Client, url: str, cache_name: str) -> dict[str, Any]:
+class RateLimited(Exception):
+    """Free-tier quota hit — skip and continue rather than blocking forever."""
+
+
+def get_json(
+    client: httpx.Client,
+    url: str,
+    cache_name: str,
+    *,
+    cache_only: bool = False,
+) -> dict[str, Any]:
     path = cache_path(cache_name)
     if path.exists():
         return json.loads(path.read_text(encoding="utf-8"))
-    time.sleep(1.0)  # free-tier friendly
+    if cache_only:
+        raise FileNotFoundError(f"cache miss: {cache_name}")
+    time.sleep(1.5)
     resp = client.get(url, timeout=30.0)
     if resp.status_code == 429:
-        print("Rate limited — waiting 45s…", file=sys.stderr)
-        time.sleep(45)
+        print("Rate limited — waiting 60s…", file=sys.stderr)
+        time.sleep(60)
         resp = client.get(url, timeout=30.0)
     if resp.status_code == 429:
-        print("Still rate limited — waiting 90s…", file=sys.stderr)
-        time.sleep(90)
-        resp = client.get(url, timeout=30.0)
+        raise RateLimited(url)
     resp.raise_for_status()
     data = resp.json()
     path.write_text(json.dumps(data, indent=2), encoding="utf-8")
@@ -233,12 +243,15 @@ def verify_one(
     client: httpx.Client,
     key: str,
     plant: dict[str, Any],
+    *,
+    cache_only: bool = False,
 ) -> dict[str, Any]:
     q = plant.get("scientificName") or plant.get("name") or plant["id"]
     search = get_json(
         client,
         f"{BASE}/species-list?key={quote(key)}&q={quote(q)}",
         f"search_{plant['id']}_{q}",
+        cache_only=cache_only,
     )
     sid = pick_species_id(plant, search)
     entry: dict[str, Any] = {
@@ -258,6 +271,7 @@ def verify_one(
         client,
         f"{BASE}/species/details/{sid}?key={quote(key)}",
         f"details_{sid}",
+        cache_only=cache_only,
     )
     # some responses nest under data
     if "data" in details and isinstance(details["data"], dict):
@@ -302,20 +316,62 @@ def main() -> int:
         help="Write mapped care fields back into plants_curated.json",
     )
     parser.add_argument("--limit", type=int, default=0, help="Only first N plants")
+    parser.add_argument(
+        "--cache-only",
+        action="store_true",
+        help="Do not hit the network; only use perenual_cache/",
+    )
+    parser.add_argument(
+        "--skip-verified",
+        action="store_true",
+        help="Skip plants that already have verified.perenual=true",
+    )
     args = parser.parse_args()
 
     key = api_key()
     payload = json.loads(JSON_PATH.read_text(encoding="utf-8"))
     plants: list[dict[str, Any]] = payload["plants"]
+    if args.skip_verified:
+        plants = [
+            p for p in plants if not (p.get("verified") or {}).get("perenual")
+        ]
+        print(f"Skipping already-verified; {len(plants)} remaining.")
     if args.limit:
         plants = plants[: args.limit]
 
     report: list[dict[str, Any]] = []
+    skipped_rate = 0
+    skipped_cache = 0
     with httpx.Client() as client:
         for i, plant in enumerate(plants, 1):
             print(f"[{i}/{len(plants)}] {plant['id']}…")
             try:
-                report.append(verify_one(client, key, plant))
+                report.append(
+                    verify_one(client, key, plant, cache_only=args.cache_only)
+                )
+            except RateLimited:
+                skipped_rate += 1
+                print(f"  → rate limited, skipping {plant['id']}", file=sys.stderr)
+                report.append(
+                    {
+                        "id": plant["id"],
+                        "matched": False,
+                        "error": "rate_limited",
+                        "changes": {},
+                        "notes": ["Skipped due to Perenual free-tier rate limit"],
+                    }
+                )
+            except FileNotFoundError:
+                skipped_cache += 1
+                report.append(
+                    {
+                        "id": plant["id"],
+                        "matched": False,
+                        "error": "cache_miss",
+                        "changes": {},
+                        "notes": ["Not in cache yet — re-run without --cache-only later"],
+                    }
+                )
             except httpx.HTTPStatusError as exc:
                 report.append(
                     {
@@ -331,11 +387,16 @@ def main() -> int:
     matched = sum(1 for r in report if r.get("matched"))
     with_changes = sum(1 for r in report if r.get("changes"))
     print(f"\nMatched {matched}/{len(report)}. Suggested field updates: {with_changes}.")
-    print(f"Report → {REPORT_PATH}")
-    print(f"Cache  → {CACHE_DIR}")
+    if skipped_rate:
+        print(f"Rate-limited skips: {skipped_rate}")
+    if skipped_cache:
+        print(f"Cache misses: {skipped_cache}")
+    print(f"Report -> {REPORT_PATH}")
+    print(f"Cache  -> {CACHE_DIR}")
 
     if args.apply:
         by_id = {r["id"]: r for r in report}
+        applied = 0
         for plant in payload["plants"]:
             r = by_id.get(plant["id"])
             if not r or not r.get("matched"):
@@ -346,12 +407,16 @@ def main() -> int:
             plant["verified"]["perenual"] = True
             if r.get("perenualId"):
                 plant["perenualId"] = r["perenualId"]
+            applied += 1
         payload["meta"]["version"] = "0.3.0-perenual-pass"
         JSON_PATH.write_text(
             json.dumps(payload, indent=2, ensure_ascii=False) + "\n",
             encoding="utf-8",
         )
-        print("Applied updates to plants_curated.json (re-run seed.py to push Mongo).")
+        print(
+            f"Applied Perenual flags/updates to {applied} plants in plants_curated.json "
+            "(re-run seed.py to push Mongo)."
+        )
         print("Carbon fields were NOT changed — verify those via OWID separately.")
 
     return 0

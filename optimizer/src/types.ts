@@ -50,6 +50,10 @@ export interface Species {
   yieldKgPerSeason: number; // 0 for ornamentals
   co2eSavedPerKg: number; // kg CO2e displaced per kg grown vs store-bought
   companions: string[]; // species ids that benefit from adjacency
+  /** Typical days to first harvest (vegetables). Optional for ornamentals. */
+  daysToHarvest?: number;
+  daysToHarvestMin?: number;
+  daysToHarvestMax?: number;
 }
 
 export interface Target {
