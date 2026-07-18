@@ -4,11 +4,11 @@
 growing, and PlotTwist computes the optimal planting layout — space, sunlight,
 watering logistics, and carbon footprint included. PlotTwist helps plants and people grow.
 
-### 🚀 Key Features
+### Key Features
 
-* **📸 Smart Camera Yard Scanning** — Easily measure awkwardly shaped backyard garden beds just by taking a photo with your phone next to a common object (like a coin).
-* **🧠 Smart Garden Layouts** — An intelligent, built-in planner that instantly figures out the best spot for each plant by balancing sunlight, watering needs, spacing, and which plants grow well together.
-* **🌍 Track Your Environmental Impact** — See exactly how much carbon you are saving by growing your own food, backed by real environmental data.
+* **Smart Camera Yard Scanning** — Easily measure awkwardly shaped backyard garden beds just by taking a photo with your phone next to a common object (like a coin).
+* **Smart Garden Layouts** — An intelligent, built-in planner that instantly figures out the best spot for each plant by balancing sunlight, watering needs, spacing, and which plants grow well together.
+* **Track Your Environmental Impact** — See exactly how much carbon you are saving by growing your own food, backed by real environmental data.
 
 ## Repo layout
 
