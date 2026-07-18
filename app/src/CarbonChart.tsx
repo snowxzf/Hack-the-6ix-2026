@@ -2,10 +2,11 @@ import { useState } from "react";
 import { useDevClock } from "./devClock";
 
 /**
- * Modeled carbon-savings trend: not real historical tracking. The optimizer
- * only produces a single season-end total (no day-by-day snapshots exist),
- * so this assumes a linear ramp from 0 at plantedAt to the season total over
- * SEASON_MS. Swap for real deltas once /gardens snapshots are saved over time.
+ * Your carbon-savings progress so far: not a forecast. The optimizer only
+ * produces a season-end total, so this assumes a linear ramp from 0 at
+ * plantedAt to that total over SEASON_MS. Range chips (1d / 1w / …) only
+ * zoom the look-back window ending at "now" (real time + optional dev clock).
+ * They do not invent future progress: advance the DevTools clock to see more.
  */
 const SEASON_MS = 90 * 24 * 60 * 60 * 1000;
 
@@ -44,12 +45,12 @@ export function CarbonChart(props: { plantedAt: number; totalKgCo2eSeason: numbe
 
   const { now } = useDevClock();
   const rangeMs = RANGES.find((r) => r.id === range)!.ms;
-  // Left = current (now), right = updated (end of selected forward window).
-  const rangeEnd = now + rangeMs;
+  // Look back from now: right edge is always your current progress.
+  const rangeStart = now - rangeMs;
   const yMax = Math.max(props.totalKgCo2eSeason, 0.1);
 
   const points = Array.from({ length: SAMPLES }, (_, i) => {
-    const t = now + ((rangeEnd - now) * i) / (SAMPLES - 1);
+    const t = rangeStart + ((now - rangeStart) * i) / (SAMPLES - 1);
     const v = carbonAt(t, props.plantedAt, props.totalKgCo2eSeason);
     return {
       t,
@@ -67,7 +68,7 @@ export function CarbonChart(props: { plantedAt: number; totalKgCo2eSeason: numbe
   const last = points[points.length - 1];
   const hovered = hover !== null ? points[hover] : null;
 
-  // Label the updated (right) endpoint; keep it clear of axes.
+  // Label the current (right) endpoint; keep it clear of axes.
   const endLabelX = Math.min(Math.max(last.x - 4, PAD_L + 4), W - PAD_R - 4);
   const endLabelY = Math.min(last.y - 12, baselineY - 14);
   const endLabelAnchor = last.x > PAD_L + PLOT_W * 0.55 ? "end" : "start";
@@ -79,14 +80,16 @@ export function CarbonChart(props: { plantedAt: number; totalKgCo2eSeason: numbe
     setHover(i);
   }
 
-  const currentLabel = fmtDate(now);
-  const updatedLabel = fmtDate(rangeEnd);
-  const sameDay = currentLabel === updatedLabel;
+  const startLabel = fmtDate(rangeStart);
+  const nowLabel = fmtDate(now);
+  const sameDay = startLabel === nowLabel;
 
   return (
     <div className="card">
-      <h2>Carbon saved over time</h2>
-      <p className="muted">Modeled from your season total: not a live day-by-day log yet.</p>
+      <h2>Your carbon progress</h2>
+      <p className="muted">
+        Saved so far from planting: zoom the window with 1d–1y. Use DevTools to simulate time.
+      </p>
       <div className="row">
         {RANGES.map((r) => (
           <span
@@ -171,14 +174,14 @@ export function CarbonChart(props: { plantedAt: number; totalKgCo2eSeason: numbe
           {last.v.toFixed(1)} kg
         </text>
 
-        {/* Left = current, right = updated end of selected range */}
+        {/* Left = start of look-back window, right = now */}
         <text
           x={PAD_L}
           y={H - 8}
           fill="hsl(var(--muted-foreground))"
           fontSize={9}
         >
-          {sameDay ? `${currentLabel} · now` : currentLabel}
+          {sameDay ? `${startLabel} · start` : startLabel}
         </text>
         <text
           x={W - PAD_R}
@@ -187,7 +190,7 @@ export function CarbonChart(props: { plantedAt: number; totalKgCo2eSeason: numbe
           fill="hsl(var(--muted-foreground))"
           fontSize={9}
         >
-          {sameDay ? `${updatedLabel} · later` : updatedLabel}
+          {`${nowLabel} · now`}
         </text>
 
         {hovered && (

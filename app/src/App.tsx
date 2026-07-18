@@ -215,6 +215,8 @@ export function App() {
  );
   const [catalogSource, setCatalogSource] = useState<"demo" | "live">("demo");
   const [catalogCount, setCatalogCount] = useState(CATALOG.length);
+  /** Which garden to restore if the user cancels "+ New garden" mid-flow. */
+  const newGardenReturnIdRef = useRef<string | null>(null);
 
   // Upgrade the bundled catalog to the backend's curated one when reachable.
   useEffect(() => {
@@ -534,11 +536,23 @@ export function App() {
     // dialog that embedded webviews (VS Code preview, some in-app browsers)
     // silently suppress, which made this button look broken. Auto-name
     // instead; the name is editable via the "Garden name" field on screen.
+    newGardenReturnIdRef.current = activeGardenId;
     resetWorkingCopy();
     setDraftName(`Garden ${gardens.length + 1}`);
     setStep("scan");
     setEditingLayout(true);
     setActiveTab("planner");
+  }
+
+  /** Abort "+ New garden" and restore the garden that was active before. */
+  function cancelNewGarden() {
+    const returnId = newGardenReturnIdRef.current;
+    newGardenReturnIdRef.current = null;
+    const g =
+      (returnId ? gardens.find((x) => x.id === returnId) : undefined) ?? gardens[0];
+    if (!g) return;
+    loadGarden(g);
+    setActiveTab("garden");
   }
 
   function renameGarden(id: string, name: string) {
@@ -673,8 +687,17 @@ export function App() {
               onChange={(e) => setDraftName(e.target.value)}
               style={{ flex: 1, minWidth: 120 }}
             />
+            {gardens.length > 0 && (
+              <button
+                type="button"
+                className="secondary"
+                onClick={cancelNewGarden}
+              >
+                Cancel
+              </button>
+            )}
           </div>
- )}
+        )}
 
         {showPlanner && (
           <>
@@ -790,6 +813,7 @@ export function App() {
                         const effectivePlantedAt = plantedAt ?? Date.now();
                         if (!activeGardenId) {
                           // Brand-new garden: joins the library now, not before.
+                          newGardenReturnIdRef.current = null;
                           const id = crypto.randomUUID();
                           setGardens((gs) => [
  ...gs,
