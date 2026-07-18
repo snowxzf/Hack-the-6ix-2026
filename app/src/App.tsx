@@ -1114,6 +1114,8 @@ export function App() {
             kgCo2e={impactCo2e}
             plantCount={impactPlantCount}
             showCarbon={carbonWeight > 0}
+            xp={xp}
+            streakDays={streakDays}
           />
         )}
       </div>

@@ -16,7 +16,7 @@ from typing import Any
 
 import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pymongo import MongoClient
 from pymongo.collection import Collection
@@ -35,6 +35,7 @@ try:
         google_cse_configured,
         search_google_web,
     )
+    from .auth import AUTH_CONFIGURED, CurrentUser, current_user
 except ImportError:  # `uvicorn main:app` from backend/
     from food_waste_stats import (
         TORONTO_FOOD_WASTE_BASELINE,
@@ -44,6 +45,7 @@ except ImportError:  # `uvicorn main:app` from backend/
         google_cse_configured,
         search_google_web,
     )
+    from auth import AUTH_CONFIGURED, CurrentUser, current_user
 
 MONGODB_URI = os.getenv("MONGODB_URI", "")
 MONGODB_DB = os.getenv("MONGODB_DB", "plantapp")
@@ -138,6 +140,10 @@ def gardens_coll() -> Collection:
     return get_db()["gardens"]
 
 
+def users_coll() -> Collection:
+    return get_db()["users"]
+
+
 # ── Demo-safe fallbacks ──────────────────────────────────────────────
 # The same curated records seed.py loads into Mongo, read straight from
 # disk: so the whole stack boots for any teammate (and on stage) even
@@ -174,6 +180,10 @@ def find_plant(plant_id: str) -> dict[str, Any] | None:
 
 # In-memory garden store when Mongo is unavailable: plenty for a demo.
 _mem_gardens: dict[str, dict[str, Any]] = {}
+
+# In-memory user store when Mongo is unavailable, keyed by Auth0 sub.
+_mem_users: dict[str, dict[str, Any]] = {}
+_mem_usernames: dict[str, str] = {}  # lowercased username -> auth0 sub
 
 
 def strip_mongo_id(doc: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -620,6 +630,7 @@ def health() -> dict[str, Any]:
             "mongoError": str(exc),
             "plantnetConfigured": bool(PLANTNET_API_KEY),
             "googleCseConfigured": google_cse_configured(),
+            "authConfigured": AUTH_CONFIGURED,
         }
     return {
         "ok": True,
@@ -627,6 +638,7 @@ def health() -> dict[str, Any]:
         "plantCount": plant_count,
         "plantnetConfigured": bool(PLANTNET_API_KEY),
         "googleCseConfigured": google_cse_configured(),
+        "authConfigured": AUTH_CONFIGURED,
     }
 
 
@@ -1525,6 +1537,194 @@ def get_garden(garden_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=404, detail="Garden not found")
     doc["id"] = str(doc.pop("_id"))
     return doc
+
+
+USERNAME_RE = re.compile(r"^[a-zA-Z0-9_]{3,20}$")
+
+
+def _user_doc_public(doc: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "authId": doc.get("authId"),
+        "username": doc.get("username"),
+        "xp": doc.get("xp", 0),
+        "streakDays": doc.get("streakDays", 0),
+    }
+
+
+def get_or_create_user(sub: str, email: str | None) -> dict[str, Any]:
+    """Look up a user by Auth0 sub, creating a bare (usernameless) doc on first login."""
+    if MONGODB_URI:
+        try:
+            doc = users_coll().find_one({"authId": sub})
+            if doc:
+                return strip_mongo_id(doc)  # type: ignore[return-value]
+            now = datetime.now(timezone.utc).isoformat()
+            new_doc = {
+                "authId": sub,
+                "username": None,
+                "usernameLower": None,
+                "email": email,
+                "xp": 0,
+                "streakDays": 0,
+                "friends": [],
+                "createdAt": now,
+                "updatedAt": now,
+            }
+            users_coll().insert_one(dict(new_doc))
+            return new_doc
+        except Exception:  # noqa: BLE001
+            pass
+    existing = _mem_users.get(sub)
+    if existing:
+        return existing
+    now = datetime.now(timezone.utc).isoformat()
+    new_doc = {
+        "authId": sub,
+        "username": None,
+        "usernameLower": None,
+        "email": email,
+        "xp": 0,
+        "streakDays": 0,
+        "friends": [],
+        "createdAt": now,
+        "updatedAt": now,
+    }
+    _mem_users[sub] = new_doc
+    return new_doc
+
+
+def save_user(doc: dict[str, Any]) -> None:
+    doc["updatedAt"] = datetime.now(timezone.utc).isoformat()
+    if MONGODB_URI:
+        try:
+            users_coll().update_one({"authId": doc["authId"]}, {"$set": doc}, upsert=True)
+            return
+        except Exception:  # noqa: BLE001
+            pass
+    _mem_users[doc["authId"]] = doc
+    if doc.get("usernameLower"):
+        _mem_usernames[doc["usernameLower"]] = doc["authId"]
+
+
+def find_user_by_username(username: str) -> dict[str, Any] | None:
+    lower = username.strip().lower()
+    if MONGODB_URI:
+        try:
+            doc = users_coll().find_one({"usernameLower": lower})
+            if doc:
+                return strip_mongo_id(doc)
+        except Exception:  # noqa: BLE001
+            pass
+    sub = _mem_usernames.get(lower)
+    return _mem_users.get(sub) if sub else None
+
+
+def find_user_by_auth_id(auth_id: str) -> dict[str, Any] | None:
+    if MONGODB_URI:
+        try:
+            doc = users_coll().find_one({"authId": auth_id})
+            if doc:
+                return strip_mongo_id(doc)
+        except Exception:  # noqa: BLE001
+            pass
+    return _mem_users.get(auth_id)
+
+
+@app.get("/users/me")
+def get_me(user: CurrentUser = Depends(current_user)) -> dict[str, Any]:
+    return _user_doc_public(get_or_create_user(user.sub, user.email))
+
+
+@app.put("/users/me/username")
+def set_username(
+    body: dict[str, Any], user: CurrentUser = Depends(current_user)
+) -> dict[str, Any]:
+    username = str(body.get("username", "")).strip()
+    if not USERNAME_RE.match(username):
+        raise HTTPException(
+            status_code=400,
+            detail="Username must be 3-20 characters: letters, numbers, underscore only.",
+        )
+    doc = get_or_create_user(user.sub, user.email)
+    existing = find_user_by_username(username)
+    if existing and existing.get("authId") != user.sub:
+        raise HTTPException(status_code=409, detail="That username is taken.")
+    doc["username"] = username
+    doc["usernameLower"] = username.lower()
+    save_user(doc)
+    return _user_doc_public(doc)
+
+
+@app.put("/users/me/stats")
+def sync_stats(
+    body: dict[str, Any], user: CurrentUser = Depends(current_user)
+) -> dict[str, Any]:
+    doc = get_or_create_user(user.sub, user.email)
+    xp = body.get("xp")
+    streak = body.get("streakDays")
+    if isinstance(xp, (int, float)):
+        doc["xp"] = max(0, int(xp))
+    if isinstance(streak, (int, float)):
+        doc["streakDays"] = max(0, int(streak))
+    save_user(doc)
+    return _user_doc_public(doc)
+
+
+@app.post("/friends/add")
+def add_friend(
+    body: dict[str, Any], user: CurrentUser = Depends(current_user)
+) -> dict[str, Any]:
+    username = str(body.get("username", "")).strip()
+    me = get_or_create_user(user.sub, user.email)
+    if not me.get("username"):
+        raise HTTPException(
+            status_code=400, detail="Set your own username before adding friends."
+        )
+    friend = find_user_by_username(username)
+    if not friend:
+        raise HTTPException(
+            status_code=404, detail=f'No user found with username "{username}".'
+        )
+    if friend["authId"] == me["authId"]:
+        raise HTTPException(status_code=400, detail="You can't add yourself.")
+
+    me_friends = set(me.get("friends") or [])
+    me_friends.add(friend["authId"])
+    me["friends"] = sorted(me_friends)
+    save_user(me)
+
+    friend_friends = set(friend.get("friends") or [])
+    friend_friends.add(me["authId"])
+    friend["friends"] = sorted(friend_friends)
+    save_user(friend)
+
+    return {"ok": True, "friend": _user_doc_public(friend)}
+
+
+@app.get("/friends")
+def list_friends(user: CurrentUser = Depends(current_user)) -> dict[str, Any]:
+    me = get_or_create_user(user.sub, user.email)
+    friends = []
+    for fid in me.get("friends") or []:
+        f = find_user_by_auth_id(fid)
+        if f:
+            friends.append(_user_doc_public(f))
+    return {"friends": friends}
+
+
+@app.get("/leaderboard")
+def leaderboard(user: CurrentUser = Depends(current_user)) -> dict[str, Any]:
+    me = get_or_create_user(user.sub, user.email)
+    entries = [_user_doc_public(me)]
+    for fid in me.get("friends") or []:
+        f = find_user_by_auth_id(fid)
+        if f:
+            entries.append(_user_doc_public(f))
+    entries.sort(key=lambda e: e.get("xp", 0), reverse=True)
+    for i, e in enumerate(entries):
+        e["rank"] = i + 1
+        e["isMe"] = e["authId"] == me["authId"]
+    return {"entries": entries}
 
 
 @app.on_event("shutdown")

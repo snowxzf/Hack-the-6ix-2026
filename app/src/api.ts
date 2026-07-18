@@ -473,7 +473,7 @@ export function fetchFoodWasteImpact(
 }
 
 /**
- * Same math as backend/food_waste_stats.py, run locally when offline : 
+ * Same math as backend/food_waste_stats.py, run locally when offline :
  * City of Toronto 2017-2018 audit baselines (see repo README).
  */
 export function localFoodWasteImpact(foodKg: number): FoodWasteImpact {
@@ -484,4 +484,99 @@ export function localFoodWasteImpact(foodKg: number): FoodWasteImpact {
     greenBinKgAvoided: Math.round(foodKg * 0.8 * 10) / 10,
     dollarsSaved: Math.round((foodKg / 100) * 1300),
   };
+}
+
+/* ── Friends & leaderboard (needs an Auth0 access token) ────── */
+
+export interface LeaderboardUser {
+  authId: string;
+  username: string | null;
+  xp: number;
+  streakDays: number;
+}
+
+export interface LeaderboardEntry extends LeaderboardUser {
+  rank: number;
+  isMe: boolean;
+}
+
+/** Discriminated result: distinguishes "not logged in / offline" from real API errors. */
+export type AuthedOutcome<T> =
+  | { ok: true; data: T }
+  | { ok: false; status: number; error: string };
+
+async function authedRequest<T>(
+  path: string,
+  token: string,
+  init?: RequestInit,
+  timeoutMs = 6000,
+): Promise<AuthedOutcome<T>> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(`${API_URL}${path}`, {
+      ...init,
+      signal: ctrl.signal,
+      headers: {
+        ...(init?.headers ?? {}),
+        Authorization: `Bearer ${token}`,
+      },
+    });
+    if (!res.ok) {
+      const body = await res.json().catch(() => null);
+      const error =
+        (body && typeof body === "object" && "detail" in body && String(body.detail)) ||
+        `Request failed (HTTP ${res.status}).`;
+      return { ok: false, status: res.status, error };
+    }
+    return { ok: true, data: (await res.json()) as T };
+  } catch {
+    return { ok: false, status: 0, error: "Cannot reach the API — check the backend is running." };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+export function fetchMyProfile(token: string): Promise<AuthedOutcome<LeaderboardUser>> {
+  return authedRequest<LeaderboardUser>("/users/me", token);
+}
+
+export function claimUsername(
+  token: string,
+  username: string,
+): Promise<AuthedOutcome<LeaderboardUser>> {
+  return authedRequest<LeaderboardUser>("/users/me/username", token, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username }),
+  });
+}
+
+export function syncMyStats(
+  token: string,
+  xp: number,
+  streakDays: number,
+): Promise<AuthedOutcome<LeaderboardUser>> {
+  return authedRequest<LeaderboardUser>("/users/me/stats", token, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ xp, streakDays }),
+  });
+}
+
+export function addFriend(
+  token: string,
+  username: string,
+): Promise<AuthedOutcome<{ ok: boolean; friend: LeaderboardUser }>> {
+  return authedRequest<{ ok: boolean; friend: LeaderboardUser }>("/friends/add", token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username }),
+  });
+}
+
+export function fetchLeaderboard(
+  token: string,
+): Promise<AuthedOutcome<{ entries: LeaderboardEntry[] }>> {
+  return authedRequest<{ entries: LeaderboardEntry[] }>("/leaderboard", token);
 }

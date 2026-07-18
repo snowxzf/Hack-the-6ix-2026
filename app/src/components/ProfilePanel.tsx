@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ImpactStats, type ImpactStatsProps } from "./ImpactStats";
+import { LeaderboardPanel } from "./LeaderboardPanel";
 import { LocationPicker } from "./LocationPicker";
 import {
   DEFAULT_PROFILE,
@@ -214,7 +215,7 @@ function SavedPlantsGallery(props: {
   );
 }
 
-export function ProfilePanel(props: ImpactStatsProps) {
+export function ProfilePanel(props: ImpactStatsProps & { xp: number; streakDays: number }) {
   const [prefs, setPrefs] = useState<NotifPrefs>(loadNotifPrefs);
   const { profile, setProfile } = useUserProfile();
   const { plants: savedPlants, remove: removeSaved } = useSavedPlants();
@@ -421,6 +422,8 @@ export function ProfilePanel(props: ImpactStatsProps) {
         <h3 className="mb-3 font-heading text-2xl font-semibold">Sustainability impact</h3>
         <ImpactStats {...props} />
       </section>
+
+      <LeaderboardPanel xp={props.xp} streakDays={props.streakDays} />
 
       <section className="animate-fade-in-up" style={{ animationDelay: "0.1s" }}>
         <h3 className="mb-3 flex items-center gap-2 font-heading text-2xl font-semibold">
