@@ -10,6 +10,7 @@ your yard, we negotiate. That's the plot twist.
 | Package | What | Owner |
 |---|---|---|
 | `optimizer/` | Layout + carbon optimization engine (pure TS, tested, on-device) | Sara |
+| `yard-scan/` | Camera yard measure: coin scale + device tilt + multi-photo stitch → grid | Jessica / Selina |
 | `app/` | Mobile app (scan → preferences → layout → dashboard) | Selina |
 | `database/` | Curated plant JSON + MongoDB seed script | Jessica |
 | `backend/` | FastAPI: PlantNet → Mongo lookup, weather, gardens | Jessica |
@@ -20,6 +21,12 @@ your yard, we negotiate. That's the plot twist.
 
 ```bash
 cd optimizer && npm install && npm test && npm run demo
+```
+
+**Yard scan** (coin + tilt → garden dimensions → grid)
+
+```bash
+cd yard-scan && npm install && npm test && npm run demo
 ```
 
 **Catalog + API** (secrets in `.env` — copy from `.env.example`)
