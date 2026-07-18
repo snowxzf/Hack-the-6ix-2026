@@ -45,7 +45,7 @@ cd app && npm install && npm run dev
 Open the Vite URL (usually http://localhost:5173). On **Scan**:
 1. Choose **Coin (recommended)** or **Custom object**
 2. Upload a yard photo
-3. Tap both edges of the reference, then bed corners
+3. Tap both edges of the reference; a bed outline is pre-placed — drag its corners to fit (tap to add corners for odd shapes)
 4. **Measure yard →** (or skip to the demo yard)
 
 **Optimizer**
@@ -73,6 +73,20 @@ python -m uvicorn main:app --reload --port 8000
 - Curated source of truth: `database/plants_curated.json` (seed into Mongo; app reads via backend)
 
 **Carbon honesty:** food plants only — `yieldKgPerSeason × co2eSavedPerKg` (Poore & Nemecek / OWID). Ornamentals get no invented CO₂e; their impact case is pollinator/biodiversity.
+
+## Data sources & credits
+
+| Source | Used for | License / tier |
+|---|---|---|
+| [PlantNet](https://my.plantnet.org/) | Photo → species identification | Free API key |
+| [Open-Meteo](https://open-meteo.com/) | Live weather + geocoding for plant checks and harvest estimates | Free, keyless |
+| [OpenPlantDB](https://github.com/cwfrazier1/openplantdb) | Care-field verification: sun, water, height, days to maturity (**42/42 plants verified**) | CC0 (public domain) |
+| [Perenual](https://perenual.com/docs/api) | Second care-data check (10/42 so far; free tier is 100 req/day) | Free API key, non-commercial |
+| [Our World in Data / Poore & Nemecek 2018](https://ourworldindata.org/food-choice-vs-eating-local) | CO₂e factors for store-bought food equivalents | CC BY |
+| [City of Toronto food waste audits](https://www.toronto.ca/services-payments/recycling-organics-garbage/waste-management/waste-reduction/food-waste/) | Pitch impact baselines | Public data |
+
+Our catalog (`database/plants_curated.json`) is hand-curated, then cross-checked
+against these sources — each plant carries `verified` flags per source.
 
 ## Toronto food waste context (pitch data)
 
@@ -134,7 +148,7 @@ Call out one concrete win from the results screen, e.g.:
 
 - **Yard scan:** coin or reference object + phone camera → real grid (`yard-scan/`)
 - **Optimizer:** on-device TypeScript engine, tested (`optimizer/`)
-- **Plants & weather:** curated catalog + live Open-Meteo + PlantNet ID (`backend/`, `database/`)
+- **Plants & weather:** curated catalog verified vs OpenPlantDB + Perenual, live Open-Meteo, PlantNet ID (`backend/`, `database/`)
 - **Honest carbon:** only food yield × published lifecycle factors; ornamentals = pollinator story, not fake CO₂e
 - **Toronto math:** comparisons backed by City audit data, not vibes (`/impact/food-waste`)
 

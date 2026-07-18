@@ -40,3 +40,20 @@ python seed.py
 
 Does **not** change carbon (`yieldKgPerSeason` / `co2eSavedPerKg`) — those come from OWID.
 Caches API responses in `perenual_cache/` (gitignored).
+
+Note: Perenual free tier is 100 requests/day tracked per account **and** per IP,
+so the full pass takes a couple of days. Use OpenPlantDB below for a same-day pass.
+
+## Verify care fields vs OpenPlantDB (no key, no rate limit)
+
+[OpenPlantDB](https://github.com/cwfrazier1/openplantdb) is a CC0 dataset of 6k+
+garden plants (sun, water, height, days to maturity). One download, no API key.
+
+```bash
+python verify_openplantdb.py           # dry-run, writes openplantdb_report.json
+python verify_openplantdb.py --apply   # apply updates + verified.openplantdb=true
+python seed.py                         # push to Mongo
+```
+
+Updates `sun`, `waterEveryDays`, `heightCm`, and veggie `daysToHarvest` min/max
+when they disagree materially. Carbon fields are never touched.

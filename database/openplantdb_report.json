@@ -1,0 +1,1183 @@
+[
+  {
+    "id": "tomato_cherry",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "cherry-tomato",
+      "common_name": "Cherry Tomato",
+      "scientific_name": "Solanum lycopersicum var. cerasiforme",
+      "sun": "full",
+      "water": "moderate",
+      "height_in": {
+        "min": 36,
+        "max": 72
+      },
+      "days_to_maturity": {
+        "min": 55,
+        "max": 75
+      },
+      "frost_tolerance": "tender",
+      "season": "warm"
+    },
+    "changes": {
+      "heightCm": {
+        "from": 150,
+        "to": 183
+      }
+    },
+    "notes": []
+  },
+  {
+    "id": "tomato_beefsteak",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "beefsteak-tomato",
+      "common_name": "Beefsteak Tomato",
+      "scientific_name": "Solanum lycopersicum",
+      "sun": "full",
+      "water": "moderate",
+      "height_in": {
+        "min": 60,
+        "max": 96
+      },
+      "days_to_maturity": {
+        "min": 78,
+        "max": 95
+      },
+      "frost_tolerance": "tender",
+      "season": "warm"
+    },
+    "changes": {
+      "heightCm": {
+        "from": 180,
+        "to": 244
+      }
+    },
+    "notes": []
+  },
+  {
+    "id": "lettuce",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "leaf-lettuce",
+      "common_name": "Leaf Lettuce",
+      "scientific_name": "Lactuca sativa var. crispa",
+      "sun": "partial",
+      "water": "moderate",
+      "height_in": {
+        "min": 6,
+        "max": 12
+      },
+      "days_to_maturity": {
+        "min": 30,
+        "max": 55
+      },
+      "frost_tolerance": "half-hardy",
+      "season": "cool"
+    },
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "carrot",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "carrot",
+      "common_name": "Carrot",
+      "scientific_name": "Daucus carota subsp. sativus",
+      "sun": "full",
+      "water": "moderate",
+      "height_in": {
+        "min": 8,
+        "max": 12
+      },
+      "days_to_maturity": {
+        "min": 60,
+        "max": 80
+      },
+      "frost_tolerance": "half-hardy",
+      "season": "cool"
+    },
+    "changes": {
+      "heightCm": {
+        "from": 91,
+        "to": 30
+      }
+    },
+    "notes": []
+  },
+  {
+    "id": "zucchini",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "squash",
+      "common_name": "Summer Squash",
+      "scientific_name": "Cucurbita pepo",
+      "sun": "full",
+      "water": "moderate",
+      "height_in": {
+        "min": 18,
+        "max": 36
+      },
+      "days_to_maturity": {
+        "min": 50,
+        "max": 65
+      },
+      "frost_tolerance": "tender",
+      "season": "warm"
+    },
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "cucumber",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "cucumber",
+      "common_name": "Cucumber",
+      "scientific_name": "Cucumis sativus",
+      "sun": "full",
+      "water": "high",
+      "height_in": {
+        "min": 12,
+        "max": 60
+      },
+      "days_to_maturity": {
+        "min": 50,
+        "max": 70
+      },
+      "frost_tolerance": "tender",
+      "season": "warm"
+    },
+    "changes": {
+      "waterEveryDays": {
+        "from": 4,
+        "to": 2
+      },
+      "heightCm": {
+        "from": 46,
+        "to": 152
+      }
+    },
+    "notes": []
+  },
+  {
+    "id": "bell_pepper",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "bell-pepper",
+      "common_name": "Bell Pepper",
+      "scientific_name": "Capsicum annuum",
+      "sun": "full",
+      "water": "moderate",
+      "height_in": {
+        "min": 18,
+        "max": 36
+      },
+      "days_to_maturity": {
+        "min": 65,
+        "max": 85
+      },
+      "frost_tolerance": "tender",
+      "season": "warm"
+    },
+    "changes": {
+      "heightCm": {
+        "from": 70,
+        "to": 91
+      }
+    },
+    "notes": []
+  },
+  {
+    "id": "kale",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "kale",
+      "common_name": "Kale",
+      "scientific_name": "Brassica oleracea var. sabellica",
+      "sun": "full",
+      "water": "moderate",
+      "height_in": {
+        "min": 12,
+        "max": 36
+      },
+      "days_to_maturity": {
+        "min": 50,
+        "max": 70
+      },
+      "frost_tolerance": "hardy",
+      "season": "cool"
+    },
+    "changes": {
+      "heightCm": {
+        "from": 60,
+        "to": 91
+      }
+    },
+    "notes": []
+  },
+  {
+    "id": "spinach",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "spinach",
+      "common_name": "Spinach",
+      "scientific_name": "Spinacia oleracea",
+      "sun": "partial",
+      "water": "moderate",
+      "height_in": {
+        "min": 6,
+        "max": 10
+      },
+      "days_to_maturity": {
+        "min": 40,
+        "max": 50
+      },
+      "frost_tolerance": "hardy",
+      "season": "cool"
+    },
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "radish",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "radish",
+      "common_name": "Radish",
+      "scientific_name": "Raphanus sativus",
+      "sun": "full",
+      "water": "moderate",
+      "height_in": {
+        "min": 6,
+        "max": 12
+      },
+      "days_to_maturity": {
+        "min": 22,
+        "max": 35
+      },
+      "frost_tolerance": "half-hardy",
+      "season": "cool"
+    },
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "bean_bush",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "bush-bean",
+      "common_name": "Bush Bean",
+      "scientific_name": "Phaseolus vulgaris",
+      "sun": "full",
+      "water": "moderate",
+      "height_in": {
+        "min": 18,
+        "max": 24
+      },
+      "days_to_maturity": {
+        "min": 50,
+        "max": 65
+      },
+      "frost_tolerance": "tender",
+      "season": "warm"
+    },
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "broccoli",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "broccoli",
+      "common_name": "Broccoli",
+      "scientific_name": "Brassica oleracea var. italica",
+      "sun": "full",
+      "water": "moderate",
+      "height_in": {
+        "min": 18,
+        "max": 36
+      },
+      "days_to_maturity": {
+        "min": 60,
+        "max": 80
+      },
+      "frost_tolerance": "hardy",
+      "season": "cool"
+    },
+    "changes": {
+      "heightCm": {
+        "from": 46,
+        "to": 91
+      },
+      "daysToHarvest": {
+        "from": 85,
+        "to": 70
+      },
+      "daysToHarvestMin": {
+        "from": 70,
+        "to": 60
+      },
+      "daysToHarvestMax": {
+        "from": 100,
+        "to": 80
+      }
+    },
+    "notes": []
+  },
+  {
+    "id": "cabbage",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "cabbage",
+      "common_name": "Cabbage",
+      "scientific_name": "Brassica oleracea var. capitata",
+      "sun": "full",
+      "water": "moderate",
+      "height_in": {
+        "min": 12,
+        "max": 18
+      },
+      "days_to_maturity": {
+        "min": 60,
+        "max": 120
+      },
+      "frost_tolerance": "hardy",
+      "season": "cool"
+    },
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "beet",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "beet",
+      "common_name": "Beet",
+      "scientific_name": "Beta vulgaris",
+      "sun": "full",
+      "water": "moderate",
+      "height_in": {
+        "min": 8,
+        "max": 14
+      },
+      "days_to_maturity": {
+        "min": 50,
+        "max": 70
+      },
+      "frost_tolerance": "half-hardy",
+      "season": "cool"
+    },
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "potato",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "potato",
+      "common_name": "Potato",
+      "scientific_name": "Solanum tuberosum",
+      "sun": "full",
+      "water": "moderate",
+      "height_in": {
+        "min": 18,
+        "max": 30
+      },
+      "days_to_maturity": {
+        "min": 60,
+        "max": 120
+      },
+      "frost_tolerance": "half-hardy",
+      "season": "cool"
+    },
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "onion",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "bulb-onion",
+      "common_name": "Bulb Onion",
+      "scientific_name": "Allium cepa",
+      "sun": "full",
+      "water": "moderate",
+      "height_in": {
+        "min": 12,
+        "max": 18
+      },
+      "days_to_maturity": {
+        "min": 90,
+        "max": 120
+      },
+      "frost_tolerance": "hardy",
+      "season": "cool"
+    },
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "garlic",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "garlic",
+      "common_name": "Garlic",
+      "scientific_name": "Allium sativum",
+      "sun": "full",
+      "water": "moderate",
+      "height_in": {
+        "min": 18,
+        "max": 24
+      },
+      "days_to_maturity": {
+        "min": 240,
+        "max": 270
+      },
+      "frost_tolerance": "hardy",
+      "season": "cool"
+    },
+    "changes": {
+      "daysToHarvest": {
+        "from": 210,
+        "to": 255
+      },
+      "daysToHarvestMin": {
+        "from": 180,
+        "to": 240
+      },
+      "daysToHarvestMax": {
+        "from": 240,
+        "to": 270
+      }
+    },
+    "notes": []
+  },
+  {
+    "id": "pea",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "pea",
+      "common_name": "Garden Pea",
+      "scientific_name": "Pisum sativum",
+      "sun": "full",
+      "water": "moderate",
+      "height_in": {
+        "min": 18,
+        "max": 60
+      },
+      "days_to_maturity": {
+        "min": 55,
+        "max": 70
+      },
+      "frost_tolerance": "half-hardy",
+      "season": "cool"
+    },
+    "changes": {
+      "heightCm": {
+        "from": 120,
+        "to": 152
+      }
+    },
+    "notes": []
+  },
+  {
+    "id": "eggplant",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "eggplant",
+      "common_name": "Eggplant",
+      "scientific_name": "Solanum melongena",
+      "sun": "full",
+      "water": "moderate",
+      "height_in": {
+        "min": 24,
+        "max": 48
+      },
+      "days_to_maturity": {
+        "min": 65,
+        "max": 80
+      },
+      "frost_tolerance": "tender",
+      "season": "warm"
+    },
+    "changes": {
+      "heightCm": {
+        "from": 90,
+        "to": 122
+      }
+    },
+    "notes": []
+  },
+  {
+    "id": "sweet_corn",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "corn",
+      "common_name": "Sweet Corn",
+      "scientific_name": "Zea mays var. saccharata",
+      "sun": "full",
+      "water": "high",
+      "height_in": {
+        "min": 60,
+        "max": 96
+      },
+      "days_to_maturity": {
+        "min": 65,
+        "max": 90
+      },
+      "frost_tolerance": "tender",
+      "season": "warm"
+    },
+    "changes": {
+      "waterEveryDays": {
+        "from": 3,
+        "to": 2
+      },
+      "heightCm": {
+        "from": 200,
+        "to": 244
+      }
+    },
+    "notes": []
+  },
+  {
+    "id": "swiss_chard",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "swiss-chard",
+      "common_name": "Swiss Chard",
+      "scientific_name": "Beta vulgaris subsp. cicla",
+      "sun": "partial",
+      "water": "moderate",
+      "height_in": {
+        "min": 18,
+        "max": 24
+      },
+      "days_to_maturity": {
+        "min": 50,
+        "max": 60
+      },
+      "frost_tolerance": "half-hardy",
+      "season": "cool"
+    },
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "basil",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "basil",
+      "common_name": "Basil",
+      "scientific_name": "Ocimum basilicum",
+      "sun": "full",
+      "water": "moderate",
+      "height_in": {
+        "min": 12,
+        "max": 24
+      },
+      "days_to_maturity": {
+        "min": 60,
+        "max": 90
+      },
+      "frost_tolerance": "tender",
+      "season": "warm"
+    },
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "mint",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "spearmint",
+      "common_name": "Spearmint",
+      "scientific_name": "Mentha spicata",
+      "sun": "partial",
+      "water": "moderate",
+      "height_in": {
+        "min": 12,
+        "max": 24
+      },
+      "days_to_maturity": {
+        "min": 60,
+        "max": 90
+      },
+      "frost_tolerance": "hardy",
+      "season": "perennial"
+    },
+    "changes": {
+      "heightCm": {
+        "from": 40,
+        "to": 61
+      }
+    },
+    "notes": []
+  },
+  {
+    "id": "parsley",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "parsley",
+      "common_name": "Parsley",
+      "scientific_name": "Petroselinum crispum",
+      "sun": "full",
+      "water": "moderate",
+      "height_in": {
+        "min": 10,
+        "max": 18
+      },
+      "days_to_maturity": {
+        "min": 70,
+        "max": 90
+      },
+      "frost_tolerance": "half-hardy",
+      "season": "cool"
+    },
+    "changes": {
+      "sun": {
+        "from": "partial",
+        "to": "full"
+      }
+    },
+    "notes": []
+  },
+  {
+    "id": "cilantro",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "cilantro-coriander-sgs",
+      "common_name": "Cilantro",
+      "scientific_name": "Coriandrum sativum",
+      "sun": "full",
+      "water": "moderate",
+      "height_in": {
+        "min": 18,
+        "max": 24
+      },
+      "days_to_maturity": {
+        "min": 45,
+        "max": 70
+      },
+      "frost_tolerance": "half-hardy",
+      "season": "cool"
+    },
+    "changes": {
+      "sun": {
+        "from": "partial",
+        "to": "full"
+      },
+      "heightCm": {
+        "from": 40,
+        "to": 61
+      }
+    },
+    "notes": []
+  },
+  {
+    "id": "rosemary",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "rosemary-sgs",
+      "common_name": "Rosemary",
+      "scientific_name": "Salvia rosmarinus",
+      "sun": "full",
+      "water": "low",
+      "height_in": {
+        "min": 24,
+        "max": 48
+      },
+      "days_to_maturity": {
+        "min": 120,
+        "max": 200
+      },
+      "frost_tolerance": "half-hardy",
+      "season": "perennial"
+    },
+    "changes": {
+      "heightCm": {
+        "from": 80,
+        "to": 122
+      }
+    },
+    "notes": []
+  },
+  {
+    "id": "thyme",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "thyme-sgs",
+      "common_name": "Thyme",
+      "scientific_name": "Thymus vulgaris",
+      "sun": "full",
+      "water": "low",
+      "height_in": {
+        "min": 6,
+        "max": 12
+      },
+      "days_to_maturity": {
+        "min": 90,
+        "max": 110
+      },
+      "frost_tolerance": "hardy",
+      "season": "perennial"
+    },
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "oregano",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "oregano-sgs",
+      "common_name": "Oregano",
+      "scientific_name": "Origanum vulgare",
+      "sun": "full",
+      "water": "low",
+      "height_in": {
+        "min": 12,
+        "max": 24
+      },
+      "days_to_maturity": {
+        "min": 80,
+        "max": 90
+      },
+      "frost_tolerance": "hardy",
+      "season": "perennial"
+    },
+    "changes": {
+      "waterEveryDays": {
+        "from": 5,
+        "to": 7
+      },
+      "heightCm": {
+        "from": 40,
+        "to": 61
+      }
+    },
+    "notes": []
+  },
+  {
+    "id": "chives",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "chives",
+      "common_name": "Chives",
+      "scientific_name": "Allium schoenoprasum",
+      "sun": "full",
+      "water": "moderate",
+      "height_in": {
+        "min": 12,
+        "max": 18
+      },
+      "days_to_maturity": {
+        "min": 60,
+        "max": 90
+      },
+      "frost_tolerance": "hardy",
+      "season": "perennial"
+    },
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "strawberry",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "allstar-strawberry",
+      "common_name": "Allstar Strawberry (Mid-Late June-Bearing, High-Yield Disease-Resistant)",
+      "scientific_name": "Fragaria \u00d7 ananassa 'Allstar'",
+      "sun": "full",
+      "water": "moderate",
+      "height_in": {
+        "min": 6,
+        "max": 10
+      },
+      "days_to_maturity": {
+        "min": 120,
+        "max": 180
+      },
+      "frost_tolerance": "half-hardy",
+      "season": "perennial"
+    },
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "blueberry",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "highbush-blueberry",
+      "common_name": "Highbush Blueberry",
+      "scientific_name": "Vaccinium corymbosum",
+      "sun": "full",
+      "water": "moderate",
+      "height_in": {
+        "min": 60,
+        "max": 96
+      },
+      "days_to_maturity": {
+        "min": 730,
+        "max": 1095
+      },
+      "frost_tolerance": "hardy",
+      "season": "perennial"
+    },
+    "changes": {
+      "heightCm": {
+        "from": 150,
+        "to": 244
+      }
+    },
+    "notes": []
+  },
+  {
+    "id": "watermelon",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "watermelon",
+      "common_name": "Watermelon",
+      "scientific_name": "Citrullus lanatus",
+      "sun": "full",
+      "water": "moderate",
+      "height_in": {
+        "min": 12,
+        "max": 18
+      },
+      "days_to_maturity": {
+        "min": 70,
+        "max": 90
+      },
+      "frost_tolerance": "tender",
+      "season": "warm"
+    },
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "pumpkin",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "pumpkin",
+      "common_name": "Pumpkin",
+      "scientific_name": "Cucurbita pepo",
+      "sun": "full",
+      "water": "moderate",
+      "height_in": {
+        "min": 12,
+        "max": 24
+      },
+      "days_to_maturity": {
+        "min": 75,
+        "max": 120
+      },
+      "frost_tolerance": "tender",
+      "season": "warm"
+    },
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "raspberry",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "anne-golden-raspberry",
+      "common_name": "Anne Golden Raspberry",
+      "scientific_name": "Rubus idaeus 'Anne'",
+      "sun": "full",
+      "water": "moderate",
+      "height_in": {
+        "min": 48,
+        "max": 72
+      },
+      "days_to_maturity": {
+        "min": 365,
+        "max": 550
+      },
+      "frost_tolerance": "hardy",
+      "season": "perennial"
+    },
+    "changes": {
+      "heightCm": {
+        "from": 150,
+        "to": 183
+      }
+    },
+    "notes": []
+  },
+  {
+    "id": "sunflower",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "autumn-beauty-sunflower",
+      "common_name": "Autumn Beauty Sunflower",
+      "scientific_name": "Helianthus annuus",
+      "sun": "full",
+      "water": "moderate",
+      "height_in": {
+        "min": 60,
+        "max": 84
+      },
+      "days_to_maturity": {
+        "min": 60,
+        "max": 75
+      },
+      "frost_tolerance": "tender",
+      "season": "warm"
+    },
+    "changes": {
+      "heightCm": {
+        "from": 250,
+        "to": 213
+      }
+    },
+    "notes": []
+  },
+  {
+    "id": "marigold",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "marigold-african",
+      "common_name": "African Marigold",
+      "scientific_name": "Tagetes erecta",
+      "sun": "full",
+      "water": "moderate",
+      "height_in": {
+        "min": 18,
+        "max": 36
+      },
+      "days_to_maturity": {
+        "min": 60,
+        "max": 90
+      },
+      "frost_tolerance": "tender",
+      "season": "warm"
+    },
+    "changes": {
+      "heightCm": {
+        "from": 30,
+        "to": 91
+      }
+    },
+    "notes": []
+  },
+  {
+    "id": "zinnia",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "zinnia",
+      "common_name": "Zinnia",
+      "scientific_name": "Zinnia elegans",
+      "sun": "full",
+      "water": "moderate",
+      "height_in": {
+        "min": 12,
+        "max": 48
+      },
+      "days_to_maturity": {
+        "min": 60,
+        "max": 70
+      },
+      "frost_tolerance": "tender",
+      "season": "warm"
+    },
+    "changes": {
+      "heightCm": {
+        "from": 60,
+        "to": 122
+      }
+    },
+    "notes": []
+  },
+  {
+    "id": "nasturtium",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "nasturtium",
+      "common_name": "Nasturtium",
+      "scientific_name": "Tropaeolum majus",
+      "sun": "full",
+      "water": "low",
+      "height_in": {
+        "min": 12,
+        "max": 24
+      },
+      "days_to_maturity": {
+        "min": 35,
+        "max": 60
+      },
+      "frost_tolerance": "half-hardy",
+      "season": "cool"
+    },
+    "changes": {
+      "waterEveryDays": {
+        "from": 3,
+        "to": 7
+      },
+      "heightCm": {
+        "from": 30,
+        "to": 61
+      }
+    },
+    "notes": []
+  },
+  {
+    "id": "lavender",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "lavender-english",
+      "common_name": "English Lavender",
+      "scientific_name": "Lavandula angustifolia",
+      "sun": "full",
+      "water": "low",
+      "height_in": {
+        "min": 12,
+        "max": 24
+      },
+      "days_to_maturity": {
+        "min": 90,
+        "max": 200
+      },
+      "frost_tolerance": "hardy",
+      "season": "perennial"
+    },
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "coneflower",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "echinacea-purpurea",
+      "common_name": "Purple Coneflower",
+      "scientific_name": "Echinacea purpurea",
+      "sun": "full",
+      "water": "low",
+      "height_in": {
+        "min": 24,
+        "max": 48
+      },
+      "days_to_maturity": {
+        "min": 90,
+        "max": 150
+      },
+      "frost_tolerance": "hardy",
+      "season": "perennial"
+    },
+    "changes": {
+      "waterEveryDays": {
+        "from": 5,
+        "to": 7
+      },
+      "heightCm": {
+        "from": 100,
+        "to": 122
+      }
+    },
+    "notes": []
+  },
+  {
+    "id": "bee_balm",
+    "matched": true,
+    "matchMethod": "scientific+common",
+    "openplantdb": {
+      "slug": "monarda",
+      "common_name": "Bee Balm",
+      "scientific_name": "Monarda didyma",
+      "sun": "full",
+      "water": "moderate",
+      "height_in": {
+        "min": 24,
+        "max": 48
+      },
+      "days_to_maturity": {
+        "min": 90,
+        "max": 120
+      },
+      "frost_tolerance": "hardy",
+      "season": "perennial"
+    },
+    "changes": {
+      "heightCm": {
+        "from": 90,
+        "to": 122
+      }
+    },
+    "notes": []
+  },
+  {
+    "id": "lily",
+    "matched": true,
+    "matchMethod": "genus+common",
+    "openplantdb": {
+      "slug": "asiatic-lily",
+      "common_name": "Asiatic Lily",
+      "scientific_name": "Lilium asiatic hybrids",
+      "sun": "full",
+      "water": "moderate",
+      "height_in": {
+        "min": 24,
+        "max": 48
+      },
+      "days_to_maturity": {
+        "min": 80,
+        "max": 120
+      },
+      "frost_tolerance": "hardy",
+      "season": "perennial"
+    },
+    "changes": {
+      "sun": {
+        "from": "partial",
+        "to": "full"
+      },
+      "heightCm": {
+        "from": 80,
+        "to": 122
+      }
+    },
+    "notes": []
+  }
+]
