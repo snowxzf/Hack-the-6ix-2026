@@ -11,7 +11,7 @@ npm test        # 16 tests
 npm run demo    # ASCII gardens in your terminal
 ```
 
-## Integration (UI team — this is all you need)
+## Integration (UI)
 
 ```ts
 import { optimizeGarden, MOCK_CATALOG } from "../optimizer/src/index";
@@ -35,14 +35,14 @@ res.tasks        // "move the bike at row 1, col 2" checklist items
 res.stats.solveMs  // brag number for the pitch (~2–20 ms)
 ```
 
-Jessica: replace `MOCK_CATALOG` by passing `catalog:` with real curated species.
+Replace `MOCK_CATALOG` by passing `catalog:` with real curated species.
 The shape is `Species` in [src/types.ts](src/types.ts) — **`cellsPerPlant` must
 already be converted to grid cells** (1 cell = 30 cm; one "plant" = one planting
 unit at recommended density, square-foot-gardening style).
 
 ## How the algorithm works
 
-The honest problem is 2D bin packing with side constraints — NP-hard. We decompose
+The honest problem is 2D bin packing with side constraints: NP-hard. We decompose
 into three fast stages (total: milliseconds, runs on-device):
 
 **Stage A — Allocation** (`allocate.ts`): *how many of each species?*
@@ -88,7 +88,7 @@ yards!), counts reflect reality and a conflict explains why.
 | Poore & Nemecek (2018), *Science* | Per-food CO₂e factors (via Our World in Data) — basis for `co2eSavedPerKg` |
 | Cleveland et al. (2017), *Landscape and Urban Planning* | Evidence household vegetable gardens can reduce GHG emissions — pitch framing (verify exact numbers before quoting) |
 
-## Placeholders the team must replace before judging
+## Placeholders we need to replace before judging
 
 - `MOCK_CATALOG` numbers (yields, CO₂e factors, spacing) → Jessica's curated catalog
 - `KG_CO2E_PER_KM_DRIVEN = 0.2` in `carbon.ts` → research team verifies
