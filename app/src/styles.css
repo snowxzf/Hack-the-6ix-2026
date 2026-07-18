@@ -80,3 +80,14 @@ label.opt { display: flex; gap: 8px; align-items: center; padding: 7px 0; cursor
 ul.clean { list-style: none; padding: 0; }
 ul.clean li { padding: 5px 0; font-size: 13.5px; }
 img.photo { max-width: 100%; border-radius: 10px; margin: 8px 0; }
+
+.tabbar {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  max-width: 520px; margin: 0 auto;
+  display: flex; background: #171f1a; border-top: 1px solid #263229;
+}
+.tabbar button {
+  flex: 1; background: transparent; border-radius: 0; padding: 12px 0;
+  color: #7d927f; font-size: 13px;
+}
+.tabbar button.on { color: #eafbef; background: #1b241e; }
