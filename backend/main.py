@@ -6,8 +6,10 @@ Keeps secrets (Mongo URI, PlantNet key) off the mobile client.
 
 from __future__ import annotations
 
+import json
 import os
 import re
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -107,7 +109,7 @@ def get_db() -> Database:
             detail="MONGODB_URI is not configured on the server",
         )
     if _client is None:
-        _client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=10000)
+        _client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=2500)
     return _client[MONGODB_DB]
 
 
@@ -117,6 +119,44 @@ def plants_coll() -> Collection:
 
 def gardens_coll() -> Collection:
     return get_db()["gardens"]
+
+
+# ── Demo-safe fallbacks ──────────────────────────────────────────────
+# The same curated records seed.py loads into Mongo, read straight from
+# disk — so the whole stack boots for any teammate (and on stage) even
+# with no MONGODB_URI / dead wifi. Mongo remains the source of truth
+# whenever it answers.
+
+_json_catalog_cache: list[dict[str, Any]] | None = None
+
+
+def _bundled_catalog() -> list[dict[str, Any]]:
+    global _json_catalog_cache
+    if _json_catalog_cache is None:
+        with open(ROOT / "database" / "plants_curated.json") as f:
+            data = json.load(f)
+        _json_catalog_cache = data if isinstance(data, list) else data.get("plants", [])
+    return _json_catalog_cache
+
+
+def all_plants() -> list[dict[str, Any]]:
+    """Catalog from Mongo when reachable; bundled JSON otherwise."""
+    if MONGODB_URI:
+        try:
+            docs = list(plants_coll().find({}, {"_id": 0}))
+            if docs:
+                return docs
+        except Exception:  # noqa: BLE001 — fall back, never 500 the demo
+            pass
+    return _bundled_catalog()
+
+
+def find_plant(plant_id: str) -> dict[str, Any] | None:
+    return next((p for p in all_plants() if p.get("id") == plant_id), None)
+
+
+# In-memory garden store when Mongo is unavailable — plenty for a demo.
+_mem_gardens: dict[str, dict[str, Any]] = {}
 
 
 def strip_mongo_id(doc: dict[str, Any] | None) -> dict[str, Any] | None:
@@ -316,7 +356,7 @@ async def forecast_for(
     if plant_ids and today:
         ids = [x.strip() for x in plant_ids.split(",") if x.strip()]
         for pid in ids:
-            plant = plants_coll().find_one({"id": pid}, {"_id": 0})
+            plant = find_plant(pid)
             if not plant:
                 plant_checks.append(
                     {
@@ -427,9 +467,11 @@ def health() -> dict[str, Any]:
         plant_count = plants_coll().count_documents({})
     except Exception as exc:  # noqa: BLE001 — surface for hackathon debugging
         return {
-            "ok": False,
+            "ok": True,
             "mongo": False,
-            "error": str(exc),
+            "catalogSource": "bundled_json",
+            "plantCount": len(_bundled_catalog()),
+            "mongoError": str(exc),
             "plantnetConfigured": bool(PLANTNET_API_KEY),
         }
     return {
@@ -443,7 +485,7 @@ def health() -> dict[str, Any]:
 @app.get("/plants")
 def list_plants(optimizer: bool = False) -> dict[str, Any]:
     """Full catalog. Pass optimizer=true for Species[] shape only."""
-    docs = list(plants_coll().find({}, {"_id": 0}))
+    docs = all_plants()
     if optimizer:
         return {"plants": [to_species(d) for d in docs]}
     return {"count": len(docs), "plants": docs}
@@ -784,7 +826,7 @@ async def suggest_plants(
     sky = await fetch_sky_snapshot(float(lat), float(lon))
     cw = max(0.0, min(1.0, carbonWeight))
 
-    plants = list(plants_coll().find({}, {"_id": 0}))
+    plants = all_plants()
     if tier:
         plants = [p for p in plants if p.get("tier") == tier]
     if category:
@@ -848,7 +890,7 @@ def search_plants(q: str, limit: int = 10) -> dict[str, Any]:
     qn = norm(q)
     if not qn:
         raise HTTPException(status_code=400, detail="q is required")
-    docs = list(plants_coll().find({}, {"_id": 0}))
+    docs = all_plants()
     hits: list[dict[str, Any]] = []
     for p in docs:
         hay = " ".join(
@@ -868,7 +910,7 @@ def search_plants(q: str, limit: int = 10) -> dict[str, Any]:
 
 @app.get("/plants/{plant_id}")
 def get_plant(plant_id: str) -> dict[str, Any]:
-    doc = plants_coll().find_one({"id": plant_id}, {"_id": 0})
+    doc = find_plant(plant_id)
     if not doc:
         raise HTTPException(status_code=404, detail=f"Plant '{plant_id}' not found")
     return doc
@@ -911,7 +953,7 @@ async def identify(
 
     payload = resp.json()
     results = payload.get("results") or []
-    catalog = list(plants_coll().find({}, {"_id": 0}))
+    catalog = all_plants()
 
     matches: list[dict[str, Any]] = []
     for hit in results[:5]:
@@ -1060,14 +1102,27 @@ def save_garden(body: dict[str, Any]) -> dict[str, Any]:
     }
     if "createdAt" not in doc:
         doc["createdAt"] = doc["updatedAt"]
-    result = gardens_coll().insert_one(doc)
-    return {"id": str(result.inserted_id), "ok": True}
+    if MONGODB_URI:
+        try:
+            result = gardens_coll().insert_one(doc)
+            return {"id": str(result.inserted_id), "ok": True, "storage": "mongo"}
+        except Exception:  # noqa: BLE001
+            pass
+    gid = f"mem-{uuid.uuid4().hex[:10]}"
+    _mem_gardens[gid] = doc
+    return {"id": gid, "ok": True, "storage": "memory"}
 
 
 @app.get("/gardens/{garden_id}")
 def get_garden(garden_id: str) -> dict[str, Any]:
     from bson import ObjectId
     from bson.errors import InvalidId
+
+    if garden_id.startswith("mem-"):
+        doc = _mem_gardens.get(garden_id)
+        if not doc:
+            raise HTTPException(status_code=404, detail="Garden not found")
+        return {"id": garden_id, **doc}
 
     try:
         oid = ObjectId(garden_id)

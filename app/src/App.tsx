@@ -19,6 +19,18 @@ import {
 import type { ScanDiagnostics } from "../../yard-scan/src/index";
 import { COIN_LABELS, SCAN_UX } from "../../yard-scan/src/index";
 import type { Point2, ReferenceKind, ScaleReferenceMode } from "../../yard-scan/src/index";
+import {
+  API_URL,
+  fetchFoodWasteImpact,
+  fetchLiveCatalog,
+  fetchSuggestions,
+  fetchWeather,
+  identifyPlant,
+  localFoodWasteImpact,
+  saveGardenToCloud,
+  type Suggestion,
+  type WeatherData,
+} from "./api";
 
 /** Only the first-time setup flow. Once onboarded, "prefs"/"select"/"results"
  *  are reused as the Planner tab's sub-view instead of a linear step. */
@@ -33,8 +45,12 @@ const STEPS: [Step, string][] = [
   ["results", "5. Layout"],
 ];
 
-const CATALOG = getCatalog();
-const byId = new Map(CATALOG.map((s) => [s.id, s]));
+/** Catalog starts as the bundled mock so first render is instant and the app
+ *  works fully offline; App upgrades these module bindings in place from
+ *  GET /plants once the backend answers (a state bump forces the re-render,
+ *  and nameOf/byId read the current binding at call time). */
+let CATALOG = getCatalog();
+let byId = new Map(CATALOG.map((s) => [s.id, s]));
 const nameOf = (id: string) => byId.get(id)?.name ?? id;
 
 /** Everything needed to resume mid-flow after a refresh. `photo` is
@@ -99,6 +115,20 @@ export function App() {
   const [swapHistory, setSwapHistory] = useState<SwapSnapshot[]>(saved?.swapHistory ?? []);
   const [result, setResult] = useState<OptimizerResponse | null>(saved?.result ?? null);
   const [plantedAt, setPlantedAt] = useState<number | null>(saved?.plantedAt ?? null);
+  const [catalogSource, setCatalogSource] = useState<"demo" | "live">("demo");
+  const [catalogCount, setCatalogCount] = useState(CATALOG.length);
+  const [cloudId, setCloudId] = useState<string | null>(null);
+
+  // Upgrade the bundled catalog to the backend's curated one when reachable.
+  useEffect(() => {
+    fetchLiveCatalog().then((live) => {
+      if (!live) return; // offline — stay on the bundled demo catalog
+      CATALOG = live;
+      byId = new Map(live.map((s) => [s.id, s]));
+      setCatalogSource("live");
+      setCatalogCount(live.length);
+    });
+  }, []);
 
   useEffect(() => {
     const toSave: PersistedState = {
@@ -245,6 +275,11 @@ export function App() {
     <div style={{ paddingBottom: onboarded ? 56 : 0 }}>
       <h1>PlotTwist 🌱</h1>
       <p className="muted">Your garden, optimized — with a twist.</p>
+      <p className="tiny">
+        {catalogSource === "live"
+          ? `☁ live catalog — ${catalogCount} plants · ${API_URL}`
+          : `⚡ demo catalog — ${catalogCount} plants (backend not reachable)`}
+      </p>
 
       {(!onboarded || editingLayout) && (
         <div className="steps">
@@ -328,6 +363,13 @@ export function App() {
                       setEditingLayout(false);
                       setActiveTab("dashboard");
                       setPlantedAt((prev) => prev ?? Date.now());
+                      // Cloud save is best-effort — the demo never blocks on it.
+                      saveGardenToCloud({
+                        garden: requestGarden(),
+                        counts: result?.counts,
+                        carbon: result?.carbon,
+                        preferences: prefs,
+                      }).then(setCloudId);
                     }
                   : undefined
               }
@@ -337,7 +379,12 @@ export function App() {
       )}
 
       {onboarded && activeTab === "dashboard" && result && (
-        <DashboardScreen result={result} plantedAt={plantedAt} onReset={resetAll} />
+        <DashboardScreen
+          result={result}
+          plantedAt={plantedAt}
+          cloudId={cloudId}
+          onReset={resetAll}
+        />
       )}
 
       {onboarded && (
@@ -703,7 +750,59 @@ function ReviewScreen(props: {
           )}
         </div>
       </div>
+
+      <IdentifyCard />
     </>
+  );
+}
+
+/** PlantNet-powered close-up identification (backend /identify). */
+function IdentifyCard() {
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function onFile(file: File) {
+    setBusy(true);
+    setMessage(null);
+    const res = await identifyPlant(file);
+    setBusy(false);
+    if (!res) {
+      setMessage("Identification unavailable — backend offline or PlantNet key missing.");
+      return;
+    }
+    const best =
+      res.bestMatch?.catalogMatch ??
+      res.candidates?.find((c) => c.catalogMatch)?.catalogMatch;
+    if (best) {
+      setMessage(`✓ Looks like ${best.name} — it's in our catalog! Pick it in the dropdown above.`);
+      return;
+    }
+    const top = res.candidates?.[0];
+    if (top) {
+      const common = top.commonNames?.length ? ` (${top.commonNames[0]})` : "";
+      setMessage(`PlantNet says: ${top.scientificName ?? "unknown"}${common} — not in our catalog yet.`);
+      return;
+    }
+    setMessage("No confident match — try a closer photo of a leaf or flower.");
+  }
+
+  return (
+    <div className="card">
+      <h2>Not sure what something is? 📷</h2>
+      <p className="muted">Snap a close-up of one plant and PlantNet will identify it.</p>
+      <div className="row">
+        <input
+          type="file"
+          accept="image/*"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) onFile(f);
+          }}
+        />
+      </div>
+      {busy && <p className="tiny">Asking PlantNet…</p>}
+      {message && <p className="tiny">{message}</p>}
+    </div>
   );
 }
 
@@ -771,6 +870,13 @@ function PrefsScreen(props: {
               })}
             </div>
           </div>
+
+          <SuggestCard
+            tier={props.prefs.tier}
+            carbonWeight={props.carbonWeight}
+            targets={props.targets}
+            setTargets={props.setTargets}
+          />
 
           <div className="card">
             <h2>Must-haves</h2>
@@ -893,6 +999,65 @@ function BeginnerVibes(props: {
   );
 }
 
+
+/** Location-aware picks from the backend's multi-factor ranker (/plants/suggest):
+ *  season + live weather + carbon + native region + skill tier. Hidden offline. */
+function SuggestCard(props: {
+  tier: SkillTier;
+  carbonWeight: number;
+  targets: Target[];
+  setTargets: (t: Target[]) => void;
+}) {
+  const [sugs, setSugs] = useState<Suggestion[] | null | undefined>(undefined);
+
+  useEffect(() => {
+    let alive = true;
+    setSugs(undefined);
+    fetchSuggestions(props.tier, props.carbonWeight).then((s) => {
+      if (alive) setSugs(s);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [props.tier, props.carbonWeight]);
+
+  if (sugs === undefined) {
+    return (
+      <div className="card info">
+        <p className="tiny">✨ Ranking plants for Toronto's season + this week's weather…</p>
+      </div>
+    );
+  }
+  if (!sugs) return null; // backend offline — the card simply doesn't exist
+
+  return (
+    <div className="card info">
+      <h2>Suggested for Toronto, right now ✨</h2>
+      <p className="muted">
+        Ranked live: season fit + this week's forecast + carbon + native region.
+      </p>
+      <div className="row">
+        {sugs.map((s) => {
+          const added = props.targets.some((t) => t.speciesId === s.species.id);
+          return (
+            <span
+              key={s.species.id}
+              className={`chip ${added ? "on" : ""}`}
+              onClick={() => {
+                if (added) return;
+                props.setTargets([...props.targets, { speciesId: s.species.id, min: 1 }]);
+              }}
+            >
+              {added ? "✓ " : "+ "}
+              {s.species.name}
+            </span>
+          );
+        })}
+      </div>
+      <p className="tiny">Tap to add as a must-have.</p>
+    </div>
+  );
+}
 
 /* ─────────────── 4. Select space ─────────────── */
 
@@ -1128,11 +1293,16 @@ function DashboardScreen(props: {
 
   return (
     <>
-      <div className="card warn">
-        <h2>{FAKE_WEATHER_ALERT.title}</h2>
-        <p className="muted">{FAKE_WEATHER_ALERT.advice}</p>
-        <p className="tiny">⚠ PLACEHOLDER: live Open-Meteo forecast pending.</p>
-      </div>
+      <WeatherCard plantIds={planted.map(([id]) => id)} />
+
+      <FoodWasteCard
+        foodKg={result.carbon.foodKgPerSeason}
+        kgCo2e={result.carbon.kgCo2eSeason}
+      />
+
+      {props.cloudId && (
+        <p className="tiny">☁ layout saved to cloud · id {props.cloudId}</p>
+      )}
 
       {props.plantedAt && (
         <CarbonChart plantedAt={props.plantedAt} totalKgCo2eSeason={result.carbon.kgCo2eSeason} />
