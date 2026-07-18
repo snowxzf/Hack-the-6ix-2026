@@ -79,15 +79,27 @@ label.opt { display: flex; gap: 8px; align-items: center; padding: 7px 0; cursor
 .bar div { height: 100%; background: #4ade80; }
 ul.clean { list-style: none; padding: 0; }
 ul.clean li { padding: 5px 0; font-size: 13.5px; }
-img.photo { max-width: 100%; border-radius: 10px; margin: 8px 0; }
-
-.tabbar {
-  position: fixed; bottom: 0; left: 0; right: 0;
-  max-width: 520px; margin: 0 auto;
-  display: flex; background: #171f1a; border-top: 1px solid #263229;
+img.photo { max-width: 100%; border-radius: 10px; margin: 0; display: block; user-select: none; }
+.photo-stage {
+  position: relative; margin: 8px 0; border-radius: 10px; overflow: hidden;
+  cursor: crosshair; border: 1px solid #2c3a30;
 }
-.tabbar button {
-  flex: 1; background: transparent; border-radius: 0; padding: 12px 0;
-  color: #7d927f; font-size: 13px;
+.mark {
+  position: absolute; transform: translate(-50%, -50%);
+  width: 14px; height: 14px; border-radius: 50%;
+  pointer-events: none; z-index: 2;
 }
-.tabbar button.on { color: #eafbef; background: #1b241e; }
+.mark.ref { background: #7fe89a; box-shadow: 0 0 0 2px #0f1512; }
+.mark.bed {
+  background: #60a5fa; color: #0f1512; font-size: 9px; font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+  width: 18px; height: 18px; box-shadow: 0 0 0 2px #0f1512;
+}
+.mark-lines {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  pointer-events: none; z-index: 1;
+}
+input[type="text"] {
+  font: inherit; background: #101713; color: #e8f0ea;
+  border: 1px solid #2c3a30; border-radius: 8px; padding: 7px 9px;
+}
