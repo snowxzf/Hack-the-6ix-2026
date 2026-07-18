@@ -34,11 +34,19 @@ import {
   type Suggestion,
   type WeatherData,
 } from "./api";
+import { BottomNav, type AppTab } from "./components/BottomNav";
+import { HomePanel } from "./components/HomePanel";
+import { LearnPanel } from "./components/LearnPanel";
+import { ProfilePanel } from "./components/ProfilePanel";
+import { SearchPanel } from "./components/SearchPanel";
+import { WeatherBackground } from "./components/WeatherBackground";
+import { WeatherProvider } from "./components/WeatherProvider";
+import { requestDeviceLocation } from "./lib/geo";
 
 /** Only the first-time setup flow. Once onboarded, "prefs"/"select"/"results"
  *  are reused as the Planner tab's sub-view instead of a linear step. */
 type Step = "scan" | "review" | "prefs" | "select" | "results";
-type Tab = "dashboard" | "planner";
+type Tab = AppTab;
 
 const STEPS: [Step, string][] = [
   ["scan", "1. Scan"],
@@ -141,13 +149,24 @@ export function App() {
   const [gardens, setGardens] = useState<SavedGarden[]>(saved?.gardens ?? []);
   const [activeGardenId, setActiveGardenId] = useState<string | null>(
     saved?.activeGardenId ?? null,
-  );
+ );
   // "Onboarded" now just means at least one garden has ever been confirmed —
   // no separate flag to drift out of sync with the gardens list.
   const onboarded = gardens.length > 0;
 
   const [step, setStep] = useState<Step>(saved?.step ?? "scan");
-  const [activeTab, setActiveTab] = useState<Tab>(saved?.activeTab ?? "dashboard");
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    const t = saved?.activeTab as Tab | undefined;
+    return t === "planner" ||
+      t === "learn" ||
+      t === "profile" ||
+      t === "dashboard" ||
+      t === "garden"
+ ? t
+ : "dashboard";
+  });
+  // Search is a full-screen overlay (Base44 /search), not a persisted tab.
+  const [searchOpen, setSearchOpen] = useState(false);
   // Only meaningful once onboarded: false = just viewing the active garden's
   // confirmed layout (only "Edit" makes sense); true = mid-flow, either
   // creating a brand-new garden or walking an existing one back through
@@ -163,7 +182,7 @@ export function App() {
   const [selected, setSelected] = useState<Set<string>>(new Set(saved?.selected ?? []));
   const [prefs, setPrefs] = useState<Preferences>(
     saved?.prefs ?? { tier: "beginner", categories: [] },
-  );
+ );
   const [targets, setTargets] = useState<Target[]>(saved?.targets ?? []);
   const [carbonWeight, setCarbonWeight] = useState(saved?.carbonWeight ?? 0.5);
   const [banned, setBanned] = useState<string[]>(saved?.banned ?? []);
@@ -174,7 +193,7 @@ export function App() {
   const [harvestedUnits, setHarvestedUnits] = useState<string[]>(saved?.harvestedUnits ?? []);
   const [unitPlantedAt, setUnitPlantedAt] = useState<Record<string, number>>(
     saved?.unitPlantedAt ?? {},
-  );
+ );
   const [catalogSource, setCatalogSource] = useState<"demo" | "live">("demo");
   const [catalogCount, setCatalogCount] = useState(CATALOG.length);
 
@@ -200,8 +219,8 @@ export function App() {
     setGardens((gs) =>
       gs.map((g) =>
         g.id === activeGardenId
-          ? {
-              ...g,
+ ? {
+ ...g,
               garden,
               selected: [...selected],
               prefs,
@@ -215,9 +234,9 @@ export function App() {
               harvestedUnits,
               unitPlantedAt,
             }
-          : g,
-      ),
-    );
+ : g,
+ ),
+ );
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     activeGardenId,
@@ -285,8 +304,8 @@ export function App() {
   const paintableKeys = useMemo(() => {
     if (!garden) return [];
     return garden.cells
-      .filter((c) => c.state === "selected" || c.state === "obstacle_movable")
-      .map((c) => cellKey(c.r, c.c));
+ .filter((c) => c.state === "selected" || c.state === "obstacle_movable")
+ .map((c) => cellKey(c.r, c.c));
   }, [garden]);
 
   function applyGarden(g: GardenGrid, diagnostics: ScanDiagnostics | null) {
@@ -295,10 +314,10 @@ export function App() {
     setSelected(
       new Set(
         g.cells
-          .filter((c) => c.state === "selected" || c.state === "obstacle_movable")
-          .map((c) => cellKey(c.r, c.c)),
-      ),
-    );
+ .filter((c) => c.state === "selected" || c.state === "obstacle_movable")
+ .map((c) => cellKey(c.r, c.c)),
+ ),
+ );
     setStep("review");
   }
 
@@ -311,7 +330,7 @@ export function App() {
   function requestGarden(): GardenGrid {
     const g = garden!;
     return {
-      ...g,
+ ...g,
       cells: g.cells.filter((c) => {
         const paintable = c.state === "selected" || c.state === "obstacle_movable";
         return !paintable || selected.has(cellKey(c.r, c.c));
@@ -343,7 +362,7 @@ export function App() {
     const extra = Math.max(1, Math.floor(freed / area(inId)));
     const wanted = (result.counts[inId] ?? 0) + extra;
     const nextTargets = [
-      ...targets.filter((t) => t.speciesId !== inId && t.speciesId !== outId),
+ ...targets.filter((t) => t.speciesId !== inId && t.speciesId !== outId),
       { speciesId: inId, min: Math.max(wanted, targets.find((t) => t.speciesId === inId)?.min ?? 0) },
     ];
     const nextBanned = [...banned, outId];
@@ -499,210 +518,286 @@ export function App() {
   // Shown on every screen (Dashboard + all Planner steps) so it's always
   // clear which garden is on screen.
   const currentGardenName = activeGardenId
-    ? (gardens.find((g) => g.id === activeGardenId)?.name ?? draftName)
-    : draftName;
+ ? (gardens.find((g) => g.id === activeGardenId)?.name ?? draftName)
+ : draftName;
+
+  const weatherPlantIds = useMemo(() => {
+    if (!result?.counts) return ["tomato"];
+    const ids = Object.keys(result.counts).filter((id) => (result.counts[id] ?? 0) > 0);
+    return ids.length ? ids.slice(0, 8) : ["tomato"];
+  }, [result]);
+
+  const impactFoodKg = result?.carbon.foodKgPerSeason ?? 0;
+  const impactCo2e = result?.carbon.kgCo2eSeason ?? 0;
+  const impactPlantCount = result
+ ? Object.values(result.counts).reduce((a, n) => a + n, 0)
+ : 0;
+
+  const { now: clockNow } = useDevClock();
+  const careTasks = useMemo(() => {
+    if (!result?.counts) return [] as { id: string; name: string; detail: string }[];
+    const daysSince = plantedAt
+ ? Math.max(0, Math.floor((clockNow - plantedAt) / (24 * 60 * 60 * 1000)))
+ : 0;
+    const tasks: { id: string; name: string; detail: string }[] = [];
+    for (const [id, n] of Object.entries(result.counts)) {
+      if (n <= 0) continue;
+      const s = byId.get(id);
+      if (!s) continue;
+      const due = daysSince > 0 && daysSince % s.waterEveryDays === 0;
+      if (due || tasks.length < 3) {
+        tasks.push({
+          id,
+          name: due ? `Water ${s.name}` : `Check ${s.name}`,
+          detail: `Every ${s.waterEveryDays}d · ${n} in ${currentGardenName}`,
+        });
+      }
+    }
+    return tasks.filter((t) => t.name.startsWith("Water")).slice(0, 3);
+  }, [result, plantedAt, clockNow, currentGardenName]);
+
+  /** Base44-styled tabs hide the old flow chrome; Plan / first-run keep it. */
+  const showFlowChrome = !onboarded || activeTab === "planner" || editingLayout;
 
   return (
-    <div style={{ paddingBottom: onboarded ? 56 : 0 }}>
-      <DevTools onRestart={hardResetApp} />
-      <h1>PlotTwist 🌱</h1>
-      <p className="muted">Your garden, optimized — with a twist.</p>
-      {(onboarded || editingLayout) && (
-        <p className="tiny">🌱 Garden: <b>{currentGardenName}</b></p>
-      )}
-      <p className="tiny">
-        {catalogSource === "live"
-          ? `☁ live catalog — ${catalogCount} plants · ${API_URL}`
-          : `⚡ demo catalog — ${catalogCount} plants (backend not reachable)`}
-      </p>
+    <WeatherProvider plantIds={weatherPlantIds}>
+      <WeatherBackground />
+      <div className="app-scroll">
+        <DevTools onRestart={hardResetApp} />
 
-      {(!onboarded || editingLayout) && (
-        <div className="steps">
-          {STEPS.map(([id, label]) => (
-            <span key={id} className={id === step ? "on" : ""}>
-              {label}
-            </span>
-          ))}
-        </div>
-      )}
+        {showFlowChrome && (
+          <>
+            <div className="flow-header">
+              <h1>PlotTwist</h1>
+              <p className="muted">Your garden, optimized — with a twist.</p>
+            </div>
+            {(onboarded || editingLayout) && (
+              <p className="tiny">
+                Garden: <b>{currentGardenName}</b>
+              </p>
+            )}
+            <p className="tiny">
+              {catalogSource === "live"
+                ? `Live catalog — ${catalogCount} plants · ${API_URL}`
+                : `Demo catalog — ${catalogCount} plants (backend not reachable)`}
+            </p>
+          </>
+        )}
 
-      {editingLayout && !activeGardenId && (
-        <div className="row">
-          <label className="tiny">Garden name</label>
-          <input
-            type="text"
-            value={draftName}
-            onChange={(e) => setDraftName(e.target.value)}
-            style={{ flex: 1, minWidth: 120 }}
-          />
-        </div>
-      )}
+        {(!onboarded || editingLayout) && (
+          <div className="steps">
+            {STEPS.map(([id, label]) => (
+              <span key={id} className={id === step ? "on" : ""}>
+                {label}
+              </span>
+ ))}
+          </div>
+ )}
 
-      {showPlanner && (
-        <>
-          {step === "scan" && (
-            <ScanScreen
-              photo={photo}
-              setPhoto={setPhoto}
-              onMeasured={applyGarden}
-              onDemo={doDemoScan}
-              onSkip={editingLayout && garden ? () => setStep("review") : undefined}
+        {editingLayout && !activeGardenId && (
+          <div className="row">
+            <label className="tiny">Garden name</label>
+            <input
+              type="text"
+              value={draftName}
+              onChange={(e) => setDraftName(e.target.value)}
+              style={{ flex: 1, minWidth: 120 }}
             />
-          )}
-          {step === "review" && garden && (
-            <ReviewScreen
-              garden={garden}
-              scanInfo={scanInfo}
-              setGarden={setGarden}
-              selected={selected}
-              setSelected={setSelected}
-              onNext={() => setStep("prefs")}
-              skippable={editingLayout}
-            />
-          )}
-          {step === "prefs" && (
-            <PrefsScreen
-              prefs={prefs}
-              setPrefs={setPrefs}
-              targets={targets}
-              setTargets={setTargets}
-              carbonWeight={carbonWeight}
-              setCarbonWeight={setCarbonWeight}
-              onNext={() => setStep("select")}
-              skippable={editingLayout}
-            />
-          )}
-          {step === "select" && garden && (
-            <SelectScreen
-              garden={garden}
-              selected={selected}
-              setSelected={setSelected}
-              paintableKeys={paintableKeys}
-              onNext={() => {
-                setBanned([]);
-                setSwapHistory([]);
-                run([]);
-                setStep("results");
-              }}
-              onBack={() => setStep("prefs")}
-              skippable={editingLayout}
-            />
-          )}
-          {step === "results" && garden && result && onboarded && !editingLayout && (
-            <>
-              <GardenSwitcher
-                gardens={gardens}
-                activeGardenId={activeGardenId}
-                onSwitchGarden={switchGarden}
-                onNewGarden={startNewGarden}
-                onRenameGarden={renameGarden}
-                onDeleteGarden={deleteGarden}
+          </div>
+ )}
+
+        {showPlanner && (
+          <>
+            {step === "scan" && (
+              <ScanScreen
+                photo={photo}
+                setPhoto={setPhoto}
+                onMeasured={applyGarden}
+                onDemo={doDemoScan}
+                onSkip={editingLayout && garden ? () => setStep("review") : undefined}
               />
-              <div className="row">
-                <button
-                  className={`small ${clickMode === "harvest" ? "" : "secondary"}`}
-                  onClick={() => setClickMode((m) => (m === "harvest" ? null : "harvest"))}
-                >
-                  🤏 Harvest
-                </button>
-                <button
-                  className={`small ${clickMode === "reseed" ? "" : "secondary"}`}
-                  onClick={() => setClickMode((m) => (m === "reseed" ? null : "reseed"))}
-                >
-                  🌱 Reseed
-                </button>
-                {clickMode && (
-                  <span className="tiny">
-                    Tap {clickMode === "harvest" ? "a grown" : "an empty"} plant on the grid below.
-                  </span>
-                )}
-              </div>
-            </>
-          )}
-          {step === "results" && garden && result && (
-            <ResultsScreen
-              garden={requestGarden()}
-              result={result}
-              onSwap={applySwap}
-              onUndoSwap={swapHistory.length > 0 ? undoSwap : undefined}
-              harvestedUnits={onboarded && !editingLayout ? new Set(harvestedUnits) : undefined}
-              clickMode={onboarded && !editingLayout ? clickMode : null}
-              onUnitClick={handleUnitClick}
-              onEdit={
-                onboarded && !editingLayout
-                  ? () => {
-                      setEditingLayout(true);
-                      setStep("scan");
-                      setClickMode(null);
-                    }
-                  : undefined
-              }
-              onTweak={!onboarded || editingLayout ? () => setStep("select") : undefined}
-              onConfirm={
-                !onboarded || editingLayout
-                  ? () => {
-                      const effectivePlantedAt = plantedAt ?? Date.now();
-                      if (!activeGardenId) {
-                        // Brand-new garden — joins the library now, not before.
-                        const id = crypto.randomUUID();
-                        setGardens((gs) => [
-                          ...gs,
-                          {
-                            id,
-                            name: draftName.trim() || `Garden ${gs.length + 1}`,
-                            createdAt: Date.now(),
-                            garden: garden!,
-                            selected: [...selected],
-                            prefs,
-                            targets,
-                            carbonWeight,
-                            banned,
-                            swapHistory,
-                            result,
-                            plantedAt: effectivePlantedAt,
-                            cloudId: null,
-                            harvestedUnits: [],
-                            unitPlantedAt: {},
-                          },
-                        ]);
-                        setActiveGardenId(id);
+ )}
+            {step === "review" && garden && (
+              <ReviewScreen
+                garden={garden}
+                scanInfo={scanInfo}
+                setGarden={setGarden}
+                selected={selected}
+                setSelected={setSelected}
+                onNext={() => setStep("prefs")}
+                skippable={editingLayout}
+              />
+ )}
+            {step === "prefs" && (
+              <PrefsScreen
+                prefs={prefs}
+                setPrefs={setPrefs}
+                targets={targets}
+                setTargets={setTargets}
+                carbonWeight={carbonWeight}
+                setCarbonWeight={setCarbonWeight}
+                onNext={() => setStep("select")}
+                skippable={editingLayout}
+              />
+ )}
+            {step === "select" && garden && (
+              <SelectScreen
+                garden={garden}
+                selected={selected}
+                setSelected={setSelected}
+                paintableKeys={paintableKeys}
+                onNext={() => {
+                  setBanned([]);
+                  setSwapHistory([]);
+                  run([]);
+                  setStep("results");
+                }}
+                onBack={() => setStep("prefs")}
+                skippable={editingLayout}
+              />
+ )}
+            {step === "results" && garden && result && onboarded && !editingLayout && (
+              <>
+                <GardenSwitcher
+                  gardens={gardens}
+                  activeGardenId={activeGardenId}
+                  onSwitchGarden={switchGarden}
+                  onNewGarden={startNewGarden}
+                  onRenameGarden={renameGarden}
+                  onDeleteGarden={deleteGarden}
+                />
+                <div className="row">
+                  <button
+                    className={`small ${clickMode === "harvest" ? "" : "secondary"}`}
+                    onClick={() => setClickMode((m) => (m === "harvest" ? null : "harvest"))}
+                  >
+                    Harvest
+                  </button>
+                  <button
+                    className={`small ${clickMode === "reseed" ? "" : "secondary"}`}
+                    onClick={() => setClickMode((m) => (m === "reseed" ? null : "reseed"))}
+                  >
+                    Reseed
+                  </button>
+                  {clickMode && (
+                    <span className="tiny">
+                      Tap {clickMode === "harvest" ? "a grown" : "an empty"} plant on the grid
+                      below.
+                    </span>
+ )}
+                </div>
+              </>
+ )}
+            {step === "results" && garden && result && (
+              <ResultsScreen
+                garden={requestGarden()}
+                result={result}
+                onSwap={applySwap}
+                onUndoSwap={swapHistory.length > 0 ? undoSwap : undefined}
+                harvestedUnits={onboarded && !editingLayout ? new Set(harvestedUnits) : undefined}
+                clickMode={onboarded && !editingLayout ? clickMode : null}
+                onUnitClick={handleUnitClick}
+                onEdit={
+                  onboarded && !editingLayout
+ ? () => {
+                        setEditingLayout(true);
+                        setStep("scan");
+                        setClickMode(null);
                       }
-                      setPlantedAt(effectivePlantedAt);
-                      setEditingLayout(false);
-                      setActiveTab("dashboard");
-                      // Cloud save is best-effort — the demo never blocks on it.
-                      saveGardenToCloud({
-                        garden: requestGarden(),
-                        counts: result?.counts,
-                        carbon: result?.carbon,
-                        preferences: prefs,
-                      }).then(setCloudId);
-                    }
-                  : undefined
-              }
-            />
-          )}
-        </>
-      )}
+ : undefined
+                }
+                onTweak={!onboarded || editingLayout ? () => setStep("select") : undefined}
+                onConfirm={
+ !onboarded || editingLayout
+ ? () => {
+                        const effectivePlantedAt = plantedAt ?? Date.now();
+                        if (!activeGardenId) {
+                          // Brand-new garden — joins the library now, not before.
+                          const id = crypto.randomUUID();
+                          setGardens((gs) => [
+ ...gs,
+                            {
+                              id,
+                              name: draftName.trim() || `Garden ${gs.length + 1}`,
+                              createdAt: Date.now(),
+                              garden: garden!,
+                              selected: [...selected],
+                              prefs,
+                              targets,
+                              carbonWeight,
+                              banned,
+                              swapHistory,
+                              result,
+                              plantedAt: effectivePlantedAt,
+                              cloudId: null,
+                              harvestedUnits: [],
+                              unitPlantedAt: {},
+                            },
+                          ]);
+                          setActiveGardenId(id);
+                        }
+                        setPlantedAt(effectivePlantedAt);
+                        setEditingLayout(false);
+                        setActiveTab("dashboard");
+                        // Cloud save is best-effort — the demo never blocks on it.
+                        saveGardenToCloud({
+                          garden: requestGarden(),
+                          counts: result?.counts,
+                          carbon: result?.carbon,
+                          preferences: prefs,
+                        }).then(setCloudId);
+                      }
+ : undefined
+                }
+              />
+ )}
+          </>
+ )}
 
-      {onboarded && activeTab === "dashboard" && result && (
-        <DashboardScreen
-          result={result}
-          plantedAt={plantedAt}
-          cloudId={cloudId}
-          gardens={gardens}
-          activeGardenId={activeGardenId}
-          onSwitchGarden={switchGarden}
-          onNewGarden={startNewGarden}
-          onRenameGarden={renameGarden}
-          onDeleteGarden={deleteGarden}
-          harvestedUnits={harvestedUnits}
-          unitPlantedAt={unitPlantedAt}
-        />
-      )}
+        {onboarded && activeTab === "dashboard" && (
+          <HomePanel
+            gardenName={currentGardenName}
+            foodKg={impactFoodKg}
+            kgCo2e={impactCo2e}
+            plantCount={impactPlantCount}
+            careTasks={careTasks}
+            onSearch={() => setSearchOpen(true)}
+            onOpenGarden={() => setActiveTab("garden")}
+            onOpenPlan={() => setActiveTab("planner")}
+          />
+ )}
 
-      {onboarded && <TabBar active={activeTab} onSelect={setActiveTab} />}
-    </div>
+        {onboarded && activeTab === "garden" && result && (
+          <DashboardScreen
+            result={result}
+            plantedAt={plantedAt}
+            cloudId={cloudId}
+            gardens={gardens}
+            activeGardenId={activeGardenId}
+            onSwitchGarden={switchGarden}
+            onNewGarden={startNewGarden}
+            onRenameGarden={renameGarden}
+            onDeleteGarden={deleteGarden}
+            harvestedUnits={harvestedUnits}
+            unitPlantedAt={unitPlantedAt}
+          />
+ )}
+
+        {onboarded && activeTab === "learn" && <LearnPanel />}
+
+        {onboarded && activeTab === "profile" && (
+          <ProfilePanel
+            foodKg={impactFoodKg}
+            kgCo2e={impactCo2e}
+            plantCount={impactPlantCount}
+          />
+        )}
+      </div>
+
+      {searchOpen && <SearchPanel onClose={() => setSearchOpen(false)} />}
+
+      {onboarded && <BottomNav active={activeTab} onSelect={setActiveTab} />}
+    </WeatherProvider>
   );
 }
 
@@ -724,7 +819,7 @@ function DevTools(props: { onRestart: () => void }) {
         }}
         title="Developer tools"
       >
-        🛠
+        !
       </button>
       {open && (
         <div className="devtools-panel">
@@ -748,7 +843,7 @@ function DevTools(props: { onRestart: () => void }) {
             onClick={resetDevClock}
             disabled={offsetDays === 0}
           >
-            ↺ Reset clock to real time
+            Reset clock to real time
           </button>
           {/* Two-step "arm then confirm" instead of window.confirm() — some
               embedded webviews (VS Code preview, in-app browsers) silently
@@ -756,37 +851,17 @@ function DevTools(props: { onRestart: () => void }) {
               look broken. */}
           {armed ? (
             <button className="small" onClick={props.onRestart}>
-              ⚠ Click again to wipe everything
+ ! Click again to wipe everything
             </button>
-          ) : (
+ ) : (
             <button className="small secondary" onClick={() => setArmed(true)}>
-              ↺ Restart app (first-time use)
+              Restart app (first-time use)
             </button>
-          )}
+ )}
         </div>
-      )}
+ )}
     </div>
-  );
-}
-
-function TabBar(props: { active: Tab; onSelect: (t: Tab) => void }) {
-  const tabs: [Tab, string][] = [
-    ["dashboard", "🏡 Dashboard"],
-    ["planner", "🛠 Garden Planner"],
-  ];
-  return (
-    <nav className="tabbar">
-      {tabs.map(([id, label]) => (
-        <button
-          key={id}
-          className={id === props.active ? "on" : ""}
-          onClick={() => props.onSelect(id)}
-        >
-          {label}
-        </button>
-      ))}
-    </nav>
-  );
+ );
 }
 
 /* ─────────────── 1. Scan (yard-scan: coin or custom reference) ─────────────── */
@@ -959,11 +1034,11 @@ function ScanScreen(props: {
                 <option key={id} value={id}>
                   {label}
                 </option>
-              ))}
+ ))}
             </select>
           </div>
         </>
-      ) : (
+ ) : (
         <>
           <p className="muted">{SCAN_UX.placeCustom}</p>
           <div className="row">
@@ -985,7 +1060,7 @@ function ScanScreen(props: {
             <span className="tiny">cm wide</span>
           </div>
         </>
-      )}
+ )}
 
       <div className="row">
         <input
@@ -1042,7 +1117,7 @@ function ScanScreen(props: {
                     top: `${(p.y / imgSize.h) * 100}%`,
                   }}
                 />
-              ))}
+ ))}
             {imgSize && (refTaps.length === 2 || bedCorners.length >= 3) && (
               <svg className="mark-lines" viewBox={`0 0 ${imgSize.w} ${imgSize.h}`} preserveAspectRatio="none">
                 {bedCorners.length >= 3 && (
@@ -1053,7 +1128,7 @@ function ScanScreen(props: {
                     strokeWidth={Math.max(2, imgSize.w / 400)}
                     strokeDasharray={`${Math.max(6, imgSize.w / 150)}`}
                   />
-                )}
+ )}
                 {refTaps.length === 2 && (
                   <line
                     x1={refTaps[0]!.x}
@@ -1063,9 +1138,9 @@ function ScanScreen(props: {
                     stroke="#7fe89a"
                     strokeWidth={Math.max(2, imgSize.w / 400)}
                   />
-                )}
+ )}
               </svg>
-            )}
+ )}
             {imgSize &&
               bedCorners.map((p, i) => (
                 <span
@@ -1079,10 +1154,10 @@ function ScanScreen(props: {
                 >
                   {i + 1}
                 </span>
-              ))}
+ ))}
           </div>
         </>
-      )}
+ )}
 
       {error && <p className="tiny" style={{ color: "#f0b4b4" }}>{error}</p>}
 
@@ -1105,7 +1180,7 @@ function ScanScreen(props: {
           <button className="secondary" onClick={props.onSkip}>
             Skip → keep current yard
           </button>
-        )}
+ )}
       </div>
       <p className="tiny">
         Coin path is recommended (known diameter). Custom objects work if you type the
@@ -1113,7 +1188,7 @@ function ScanScreen(props: {
         mild default pitch).
       </p>
     </div>
-  );
+ );
 }
 
 /* ─────────────── 2. Review detected plants ─────────────── */
@@ -1134,10 +1209,10 @@ function ReviewScreen(props: {
     const target = existing[idx];
     const k = cellKey(target.cell[0], target.cell[1]);
     props.setGarden({
-      ...garden,
+ ...garden,
       cells: garden.cells.map((c) =>
         cellKey(c.r, c.c) === k ? { ...c, state: "selected" as const } : c,
-      ),
+ ),
       existing: existing.filter((_, i) => i !== idx),
     });
     props.setSelected(new Set(props.selected).add(k));
@@ -1145,7 +1220,7 @@ function ReviewScreen(props: {
 
   function renameExisting(idx: number, speciesId: string) {
     props.setGarden({
-      ...garden,
+ ...garden,
       existing: existing.map((e, i) => (i === idx ? { ...e, speciesId } : e)),
     });
   }
@@ -1159,15 +1234,15 @@ function ReviewScreen(props: {
             Measured ~{scanInfo.widthCm} × {scanInfo.heightCm} cm ({scanInfo.areaM2} m²)
             using{" "}
             {scanInfo.scale.referenceMode === "coin"
-              ? `coin (${scanInfo.scale.reference})`
-              : scanInfo.scale.referenceLabel || "custom object"}
-            . Gray path / bike / flowers only appear on the demo yard.
+ ? `coin (${scanInfo.scale.reference})`
+ : scanInfo.scale.referenceLabel || "custom object"}
+ . Gray path / bike / flowers only appear on the demo yard.
           </p>
-        ) : (
+ ) : (
           <p className="muted">
-            Gray = path (can't plant). 🚲 = movable obstacle. 🌸 = plants we detected.
+            Gray = path (can't plant). B = movable obstacle. P = plants we detected.
           </p>
-        )}
+ )}
         <GridView garden={garden} />
       </div>
       <div className="card">
@@ -1176,7 +1251,7 @@ function ReviewScreen(props: {
         {existing.map((e, i) => (
           <div className="row spread" key={`${e.cell[0]}-${e.cell[1]}`}>
             <span style={{ fontSize: 14 }}>
-              🌸 row {e.cell[0] + 1}, col {e.cell[1] + 1}
+              Plant at row {e.cell[0] + 1}, col {e.cell[1] + 1}
               <span className="tiny"> {Math.round((e.confidence ?? 0) * 100)}% sure</span>
             </span>
             <span className="row">
@@ -1185,27 +1260,27 @@ function ReviewScreen(props: {
                   <option key={s.id} value={s.id}>
                     {s.name}
                   </option>
-                ))}
+ ))}
               </select>
               <button className="small secondary" onClick={() => removeExisting(i)}>
-                ✕ not a plant
+                 not a plant
               </button>
             </span>
           </div>
-        ))}
+ ))}
         <div className="row">
           <button onClick={props.onNext}>Looks right →</button>
           {props.skippable && (
             <button className="secondary" onClick={props.onNext}>
               Skip → keep as detected
             </button>
-          )}
+ )}
         </div>
       </div>
 
       <IdentifyCard />
     </>
-  );
+ );
 }
 
 function identifyLabel(c: IdentifyCandidate): string {
@@ -1281,7 +1356,7 @@ function IdentifyCard() {
 
   return (
     <div className="card" aria-busy={busy}>
-      <h2>Identify a plant 📷</h2>
+      <h2>Identify a plant</h2>
       <p className="muted">
         Take or upload a close-up of one plant. PlantNet names it; we match care tips from our catalog when we can.
       </p>
@@ -1311,7 +1386,7 @@ function IdentifyCard() {
           >
             Clear
           </button>
-        )}
+ )}
         {/* capture=environment opens the rear camera on mobile browsers */}
         <input
           ref={cameraRef}
@@ -1342,7 +1417,7 @@ function IdentifyCard() {
         <p className="tiny" style={{ marginTop: 8 }}>
           Tip: fill the frame with one leaf or flower — blurry wide shots confuse PlantNet.
         </p>
-      )}
+ )}
 
       {preview && (
         <img
@@ -1351,17 +1426,17 @@ function IdentifyCard() {
           alt="Plant to identify"
           style={{ opacity: busy ? 0.55 : 1, marginTop: 8 }}
         />
-      )}
+ )}
       {busy && (
         <p className="tiny" role="status" style={{ marginTop: 6 }}>
           Asking PlantNet… this can take up to ~30s on slow wifi.
         </p>
-      )}
+ )}
       {error && (
         <p className="identify-error" role="alert">
           {error}
         </p>
-      )}
+ )}
 
       {top && !busy && (
         <div className="identify-result">
@@ -1376,15 +1451,15 @@ function IdentifyCard() {
                   care?.scientificName ??
                   "—"}
                 {top.plantnet?.commonNames?.[0]
-                  ? ` · also called ${top.plantnet.commonNames[0]}`
-                  : ""}
+ ? ` · also called ${top.plantnet.commonNames[0]}`
+ : ""}
               </p>
             </div>
             {confidencePct(top.score) != null && (
               <span className="chip on" style={{ cursor: "default" }}>
                 {confidencePct(top.score)}% sure
               </span>
-            )}
+ )}
           </div>
 
           {care ? (
@@ -1398,58 +1473,58 @@ function IdentifyCard() {
                   <li>
                     <b>Sun:</b> {care.sun}
                   </li>
-                )}
+ )}
                 {care.waterEveryDays != null && (
                   <li>
                     <b>Water:</b> every {care.waterEveryDays} day
                     {care.waterEveryDays === 1 ? "" : "s"}
                   </li>
-                )}
+ )}
                 {care.heightCm != null && (
                   <li>
                     <b>Height:</b> ~{care.heightCm} cm
                   </li>
-                )}
+ )}
                 {care.tempMinC != null && care.tempMaxC != null && (
                   <li>
                     <b>Temp:</b> {care.tempMinC}–{care.tempMaxC} °C
                   </li>
-                )}
+ )}
                 {care.spacingCm != null && (
                   <li>
                     <b>Spacing:</b> ~{care.spacingCm} cm
                   </li>
-                )}
+ )}
                 {care.daysToHarvest != null && (
                   <li>
                     <b>Harvest:</b> ~{care.daysToHarvest} days
                     {care.daysToHarvestMin != null && care.daysToHarvestMax != null
-                      ? ` (range ${care.daysToHarvestMin}–${care.daysToHarvestMax})`
-                      : ""}
+ ? ` (range ${care.daysToHarvestMin}–${care.daysToHarvestMax})`
+ : ""}
                     {care.harvest?.plantSeasons?.length
-                      ? ` · plant in ${care.harvest.plantSeasons.join(", ")}`
-                      : ""}
+ ? ` · plant in ${care.harvest.plantSeasons.join(", ")}`
+ : ""}
                   </li>
-                )}
+ )}
                 {care.harvest?.weatherNotes && (
                   <li>
                     <b>Weather:</b> {care.harvest.weatherNotes}
                   </li>
-                )}
+ )}
                 {care.category && (
                   <li>
                     <b>Category:</b> {care.category}
                     {care.tier ? ` · ${care.tier}` : ""}
                   </li>
-                )}
+ )}
               </ul>
             </>
-          ) : (
+ ) : (
             <p className="muted" style={{ marginTop: 8 }}>
               Not in our curated catalog yet — PlantNet ID only. You can still rename a detected plant
               manually above.
             </p>
-          )}
+ )}
 
           {others.length > 0 && (
             <>
@@ -1462,19 +1537,19 @@ function IdentifyCard() {
                     {identifyLabel(c)}
                     {confidencePct(c.score) != null ? (
                       <span className="tiny"> · {confidencePct(c.score)}%</span>
-                    ) : null}
+ ) : null}
                     {c.catalogMatch?.name ? (
                       <span className="tiny"> · catalog: {c.catalogMatch.name}</span>
-                    ) : null}
+ ) : null}
                   </li>
-                ))}
+ ))}
               </ul>
             </>
-          )}
+ )}
         </div>
-      )}
+ )}
     </div>
-  );
+ );
 }
 
 /* ─────────────── 3. Preferences ─────────────── */
@@ -1491,9 +1566,9 @@ function PrefsScreen(props: {
 }) {
   const categories = [...new Set(CATALOG.map((s) => s.category))];
   const tiers: [SkillTier, string][] = [
-    ["beginner", "🌱 Beginner — pick vibes, we pick plants"],
-    ["intermediate", "🪴 Intermediate — I know my plants"],
-    ["advanced", "🧑‍🌾 Advanced — give me everything"],
+    ["beginner", "Beginner — pick vibes, we pick plants"],
+    ["intermediate", "Intermediate — I know my plants"],
+    ["advanced", "Advanced — give me everything"],
   ];
 
   const isBeginner = props.prefs.tier === "beginner";
@@ -1511,7 +1586,7 @@ function PrefsScreen(props: {
             />
             {label}
           </label>
-        ))}
+ ))}
       </div>
 
       {isBeginner ? <BeginnerVibes prefs={props.prefs} setPrefs={props.setPrefs} /> : (
@@ -1528,16 +1603,16 @@ function PrefsScreen(props: {
                     className={`chip ${on ? "on" : ""}`}
                     onClick={() =>
                       props.setPrefs({
-                        ...props.prefs,
+ ...props.prefs,
                         categories: on
-                          ? props.prefs.categories.filter((c) => c !== cat)
-                          : [...props.prefs.categories, cat],
+ ? props.prefs.categories.filter((c) => c !== cat)
+ : [...props.prefs.categories, cat],
                       })
                     }
                   >
                     {cat}
                   </span>
-                );
+ );
               })}
             </div>
           </div>
@@ -1560,15 +1635,15 @@ function PrefsScreen(props: {
                     props.setTargets(
                       props.targets.map((x, j) =>
                         j === i ? { ...x, speciesId: e.target.value } : x,
-                      ),
-                    )
+ ),
+ )
                   }
                 >
                   {CATALOG.map((s) => (
                     <option key={s.id} value={s.id}>
                       {s.name} ({s.cellsPerPlant[0]}×{s.cellsPerPlant[1]})
                     </option>
-                  ))}
+ ))}
                 </select>
                 <input
                   type="number"
@@ -1578,18 +1653,18 @@ function PrefsScreen(props: {
                     props.setTargets(
                       props.targets.map((x, j) =>
                         j === i ? { ...x, min: Number(e.target.value) } : x,
-                      ),
-                    )
+ ),
+ )
                   }
                 />
                 <button
                   className="small secondary"
                   onClick={() => props.setTargets(props.targets.filter((_, j) => j !== i))}
                 >
-                  ✕
+                  
                 </button>
               </div>
-            ))}
+ ))}
             <button
               className="small secondary"
               onClick={() =>
@@ -1616,7 +1691,7 @@ function PrefsScreen(props: {
             </div>
           </div>
         </>
-      )}
+ )}
 
       <div className="row">
         <button onClick={props.onNext}>Choose planting space →</button>
@@ -1624,10 +1699,10 @@ function PrefsScreen(props: {
           <button className="secondary" onClick={props.onNext}>
             Skip → keep preferences
           </button>
-        )}
+ )}
       </div>
     </>
-  );
+ );
 }
 
 /** Beginner goal cards — replaces the chip/must-have/carbon-slider UI with a
@@ -1639,11 +1714,11 @@ function BeginnerVibes(props: {
   prefs: Preferences;
   setPrefs: (p: Preferences) => void;
 }) {
-  const goals: { emoji: string; label: string; categories: string[] }[] = [
-    { emoji: "🍅", label: "Feed me (easy edibles)", categories: ["veggies", "fruit", "herbs"] },
-    { emoji: "🌸", label: "Make it pretty (flowers)", categories: ["flowers"] },
-    { emoji: "🐝", label: "Help the bees (pollinators)", categories: ["pollinator"] },
-    { emoji: "🪴", label: "Low effort (hardy stuff)", categories: ["herbs", "flowers"] },
+  const goals: { label: string; categories: string[] }[] = [
+    { label: "Feed me (easy edibles)", categories: ["veggies", "fruit", "herbs"] },
+    { label: "Make it pretty (flowers)", categories: ["flowers"] },
+    { label: "Help the bees (pollinators)", categories: ["pollinator"] },
+    { label: "Low effort (hardy stuff)", categories: ["herbs", "flowers"] },
   ];
 
   const current = props.prefs.categories;
@@ -1662,7 +1737,7 @@ function BeginnerVibes(props: {
             style={{ fontSize: 14, padding: "10px 14px" }}
             onClick={() => props.setPrefs({ ...props.prefs, categories: g.categories })}
           >
-            {g.emoji} {g.label}
+            {g.label}
           </span>
         ))}
       </div>
@@ -1695,15 +1770,15 @@ function SuggestCard(props: {
   if (sugs === undefined) {
     return (
       <div className="card info">
-        <p className="tiny">✨ Ranking plants for Toronto's season + this week's weather…</p>
+        <p className="tiny">Ranking plants for Toronto's season + this week's weather…</p>
       </div>
-    );
+ );
   }
   if (!sugs) return null; // backend offline — the card simply doesn't exist
 
   return (
     <div className="card info">
-      <h2>Suggested for Toronto, right now ✨</h2>
+      <h2>Suggested for Toronto, right now</h2>
       <p className="muted">
         Ranked live: season fit + this week's forecast + carbon + native region.
       </p>
@@ -1719,15 +1794,15 @@ function SuggestCard(props: {
                 props.setTargets([...props.targets, { speciesId: s.species.id, min: 1 }]);
               }}
             >
-              {added ? "✓ " : "+ "}
+              {added ? "Added · " : "+ "}
               {s.species.name}
             </span>
-          );
+ );
         })}
       </div>
       <p className="tiny">Tap to add as a must-have.</p>
     </div>
-  );
+ );
 }
 
 /* ─────────────── 4. Select space ─────────────── */
@@ -1781,16 +1856,16 @@ function SelectScreen(props: {
           ← Back
         </button>
         <button disabled={props.selected.size === 0} onClick={props.onNext}>
-          Optimize my garden ✨
+          Optimize my garden
         </button>
         {props.skippable && (
           <button className="secondary" onClick={props.onNext}>
             Skip → keep painted area
           </button>
-        )}
+ )}
       </div>
     </>
-  );
+ );
 }
 
 /* ─────────────── 5. Results / layout playground ─────────────── */
@@ -1839,25 +1914,25 @@ function ResultsScreen(props: {
     <>
       {!result.feasible && (
         <div className="card warn">
-          <h2>Plot twist 🌀</h2>
+          <h2>Plot twist</h2>
           {result.conflicts.map((c, i) => (
             <p className="muted" key={i}>
               {c.message}
             </p>
-          ))}
+ ))}
           {result.compromise && (
             <p className="muted">
               Compromise applied:{" "}
               {Object.entries(result.compromise.original)
-                .map(
+ .map(
                   ([id, n]) =>
                     `${nameOf(id)} ${n} → ${result.compromise!.applied[id] ?? 0}`,
-                )
-                .join(", ")}
+ )
+ .join(", ")}
             </p>
-          )}
+ )}
         </div>
-      )}
+ )}
 
       <div className="card">
         <h2>Your optimized layout</h2>
@@ -1873,22 +1948,22 @@ function ResultsScreen(props: {
         {props.clickMode && (
           <p className="tiny">
             {props.clickMode === "harvest"
-              ? "🤏 Harvest mode — tap a grown plant to harvest it."
-              : "🌱 Reseed mode — tap an empty (dashed) spot to replant it."}
+ ? "Harvest mode — tap a grown plant to harvest it."
+ : "Reseed mode — tap an empty (dashed) spot to replant it."}
           </p>
-        )}
+ )}
         <div className="legend">
           {speciesIds.map((id) => (
             <span className="item" key={id}>
               <span className="dot" style={{ background: speciesColor(id) }} />
               {nameOf(id)} ×{result.counts[id]}
             </span>
-          ))}
+ ))}
           {result.existingBeds.map((b) => (
             <span className="item" key={b.speciesId}>
-              🌸 {nameOf(b.speciesId)} ×{b.count} (already yours)
+              {nameOf(b.speciesId)} ×{b.count} (already yours)
             </span>
-          ))}
+ ))}
         </div>
         <div className="row">
           <div className="stat">
@@ -1916,11 +1991,11 @@ function ResultsScreen(props: {
             ↩ Undo last swap
           </button>
         </div>
-      )}
+ )}
 
       {result.swaps.length > 0 && (
         <div className="card info">
-          <h2>Greener swaps 🌍</h2>
+          <h2>Greener swaps</h2>
           {result.swaps.map((s) => (
             <div className="row spread" key={s.out}>
               <span style={{ fontSize: 13.5 }}>
@@ -1931,50 +2006,58 @@ function ResultsScreen(props: {
                 Swap
               </button>
             </div>
-          ))}
+ ))}
         </div>
-      )}
+ )}
 
       {result.tasks.length > 0 && (
         <div className="card">
           <h2>Before you plant</h2>
           <ul className="clean">
             {result.tasks.map((t, i) => (
-              <li key={i}>☐ {t.message}</li>
-            ))}
+              <li key={i}> {t.message}</li>
+ ))}
           </ul>
         </div>
-      )}
+ )}
 
       <div className="row">
         {props.onEdit && (
           <button className="secondary" onClick={props.onEdit}>
-            ✏️ Edit my garden
+            Edit my garden
           </button>
-        )}
+ )}
         {props.onTweak && (
           <button className="secondary" onClick={props.onTweak}>
             ← Tweak space
           </button>
-        )}
-        {props.onConfirm && <button onClick={props.onConfirm}>Confirm my garden ✓</button>}
+ )}
+        {props.onConfirm && <button onClick={props.onConfirm}>Confirm my garden</button>}
       </div>
     </>
-  );
+ );
 }
 
 /** Live Open-Meteo forecast + per-plant tolerance checks via backend /weather.
- *  Falls back to the canned storm alert when offline — the demo never breaks. */
+ *  Uses device GPS when allowed; falls back to Toronto / canned alert offline. */
 function WeatherCard(props: { plantIds: string[] }) {
   const idsKey = props.plantIds.join(",");
   const [data, setData] = useState<WeatherData | null | undefined>(undefined);
+  const [placeLabel, setPlaceLabel] = useState("your area");
 
   useEffect(() => {
     let alive = true;
     setData(undefined);
-    fetchWeather(props.plantIds).then((d) => {
-      if (alive) setData(d);
-    });
+    (async () => {
+      const geo = await requestDeviceLocation();
+      const d = await fetchWeather(props.plantIds, geo.lat, geo.lon);
+      if (!alive) return;
+      setData(d);
+      const label = d?.location?.resolved?.label;
+      if (label) setPlaceLabel(label);
+      else if (geo.source === "default") setPlaceLabel("Toronto");
+      else setPlaceLabel("your area");
+    })();
     return () => {
       alive = false;
     };
@@ -1984,7 +2067,7 @@ function WeatherCard(props: { plantIds: string[] }) {
   if (data === undefined) {
     return (
       <div className="card">
-        <p className="tiny">🌤 Checking the sky over Toronto…</p>
+        <p className="tiny">Checking the sky over {placeLabel}…</p>
       </div>
     );
   }
@@ -1994,7 +2077,7 @@ function WeatherCard(props: { plantIds: string[] }) {
       <div className="card warn">
         <h2>{FAKE_WEATHER_ALERT.title}</h2>
         <p className="muted">{FAKE_WEATHER_ALERT.advice}</p>
-        <p className="tiny">⚡ offline — demo forecast (live Open-Meteo unavailable)</p>
+        <p className="tiny">Offline — demo forecast (live Open-Meteo unavailable)</p>
       </div>
     );
   }
@@ -2003,45 +2086,51 @@ function WeatherCard(props: { plantIds: string[] }) {
   const week = (data.sky?.week ?? []).slice(0, 4);
   // Tolerance problems arrive nested under issues[]; flatten to messages.
   const warnings = (data.plantChecks ?? [])
-    .filter((c) => !c.ok && c.type !== "unknown_plant")
-    .flatMap((c) => (c.issues ?? []).map((i) => i.message))
-    .filter(Boolean)
-    .slice(0, 4);
+ .filter((c) => !c.ok && c.type !== "unknown_plant")
+ .flatMap((c) => (c.issues ?? []).map((i) => i.message))
+ .filter(Boolean)
+ .slice(0, 4);
   const dayName = (iso: string) =>
     new Date(`${iso}T12:00:00`).toLocaleDateString(undefined, { weekday: "short" });
 
   return (
     <div className={`card ${notes.length > 0 ? "warn" : ""}`}>
-      <h2>{notes.length > 0 ? "Weather guard ⛈" : "Weather guard ☀"}</h2>
+      <h2>{notes.length > 0 ? "Weather guard — alerts" : "Weather guard — clear"}</h2>
       {notes.length === 0 && (
         <p className="muted">All clear in Toronto for the next few days.</p>
-      )}
+ )}
       {notes.map((n, i) => (
         <p className="muted" key={i}>
-          {n.type === "frost_warning" ? "🥶 " : n.type === "skip_watering" ? "💧 " : "⛈ "}
+          <b>
+            {n.type === "frost_warning"
+              ? "Frost: "
+              : n.type === "skip_watering"
+                ? "Watering: "
+                : "Alert: "}
+          </b>
           {n.message}
         </p>
       ))}
       {warnings.map((msg, i) => (
         <p className="muted" key={`p${i}`}>
-          🪴 {msg}
+          {msg}
         </p>
       ))}
       {week.length > 0 && (
         <p className="tiny">
           {week
-            .map(
+ .map(
               (d) =>
                 `${dayName(d.date)} ${Math.round(d.tempMinC ?? 0)}–${Math.round(d.tempMaxC ?? 0)}°${
-                  d.storm ? " ⛈" : (d.precipMm ?? 0) >= 2 ? " 🌧" : ""
+                  d.storm ? " " : (d.precipMm ?? 0) >= 2 ? " " : ""
                 }`,
-            )
-            .join(" · ")}
+ )
+ .join(" · ")}
           {" · live Open-Meteo"}
         </p>
-      )}
+ )}
     </div>
-  );
+ );
 }
 
 /** Optimizer yield vs City of Toronto household food-waste audits. Numbers are
@@ -2065,7 +2154,7 @@ function FoodWasteCard(props: { foodKg: number; kgCo2e: number }) {
 
   return (
     <div className="card info">
-      <h2>Toronto impact 🥕</h2>
+      <h2>Toronto impact</h2>
       <p className="muted">
         Growing <b>{props.foodKg.toFixed(1)} kg</b> of food covers{" "}
         <b>{local.percentOfFruitVegWaste}%</b> of the average Toronto household's yearly
@@ -2074,10 +2163,10 @@ function FoodWasteCard(props: { foodKg: number; kgCo2e: number }) {
       </p>
       <p className="tiny">
         City of Toronto single-family waste audits, 2017–2018
-        {liveChecked ? " · ✓ verified against backend /impact/food-waste" : " · computed locally"}
+        {liveChecked ? " · verified against backend /impact/food-waste" : " · computed locally"}
       </p>
     </div>
-  );
+ );
 }
 
 /* ─────────────── 6. Dashboard ─────────────── */
@@ -2114,7 +2203,7 @@ function GardenSwitcher(props: {
             <option key={g.id} value={g.id}>
               {g.name}
             </option>
-          ))}
+ ))}
         </select>
         <button className="small secondary" onClick={props.onNewGarden}>
           + New garden
@@ -2143,7 +2232,7 @@ function GardenSwitcher(props: {
             Cancel
           </button>
         </div>
-      ) : (
+ ) : (
         <div className="row" style={{ marginTop: 6 }}>
           <button
             className="small secondary"
@@ -2152,7 +2241,7 @@ function GardenSwitcher(props: {
               setRenaming(true);
             }}
           >
-            ✎ Rename
+            Rename
           </button>
           {/* Two-step arm/confirm instead of window.confirm() — see DevTools. */}
           {deleteArmed ? (
@@ -2160,17 +2249,17 @@ function GardenSwitcher(props: {
               className="small"
               onClick={() => props.activeGardenId && props.onDeleteGarden(props.activeGardenId)}
             >
-              ⚠ Click again to delete "{activeGarden?.name}"
+              ! Click again to delete "{activeGarden?.name}"
             </button>
           ) : (
             <button className="small secondary" onClick={() => setDeleteArmed(true)}>
-              🗑 Delete garden
+              Delete garden
             </button>
           )}
         </div>
-      )}
+ )}
     </div>
-  );
+ );
 }
 
 function DashboardScreen(props: {
@@ -2195,8 +2284,8 @@ function DashboardScreen(props: {
   // watering_due_on_day: nothing due on day 0 (just watered by definition),
   // then due every waterEveryDays days after.
   const daysSincePlanted = props.plantedAt
-    ? Math.max(0, Math.floor((now - props.plantedAt) / (24 * 60 * 60 * 1000)))
-    : 0;
+ ? Math.max(0, Math.floor((now - props.plantedAt) / (24 * 60 * 60 * 1000)))
+ : 0;
   const isDueToday = (days: number) => daysSincePlanted > 0 && daysSincePlanted % days === 0;
 
   const trips = new Map<number, string[]>();
@@ -2225,33 +2314,33 @@ function DashboardScreen(props: {
       />
 
       {props.cloudId && (
-        <p className="tiny">☁ layout saved to cloud · id {props.cloudId}</p>
-      )}
+        <p className="tiny">Layout saved to cloud · id {props.cloudId}</p>
+ )}
 
       {props.plantedAt && (
         <CarbonChart plantedAt={props.plantedAt} totalKgCo2eSeason={result.carbon.kgCo2eSeason} />
-      )}
+ )}
 
       <div className="card">
-        <h2>Watering trips 🚿</h2>
+        <h2>Watering trips</h2>
         <p className="muted">Beds that drink together sit together — one trip each.</p>
         <ul className="clean">
           {[...trips.entries()]
-            .sort((a, b) => a[0] - b[0])
-            .map(([days, names]) => (
+ .sort((a, b) => a[0] - b[0])
+ .map(([days, names]) => (
               <li key={days}>
                 <b>Every {days} day{days > 1 ? "s" : ""}:</b> {names.join(", ")}
-                {isDueToday(days) && <span className="tiny"> · 💧 due today (day {daysSincePlanted})</span>}
+                {isDueToday(days) && <span className="tiny"> · due today (day {daysSincePlanted})</span>}
               </li>
-            ))}
+ ))}
         </ul>
       </div>
 
       <div className="card">
         <h2>Your plants</h2>
         <p className="muted">
-          Each stacked bar is one planted spot — hover for its square on the grid. Use 🤏
-          Harvest / 🌱 Reseed on the Garden Planner to act on them.
+          Each stacked bar is one planted spot — hover for its square on the grid. Use 
+          Harvest / Reseed on the Garden Planner to act on them.
         </p>
         {planted.map(([id]) => {
           const s = byId.get(id);
@@ -2261,11 +2350,11 @@ function DashboardScreen(props: {
           const harvest = s.daysToHarvest ?? DAYS_TO_HARVEST[s.category] ?? 60;
           const harvestRange =
             s.daysToHarvestMin != null && s.daysToHarvestMax != null
-              ? ` (${s.daysToHarvestMin}–${s.daysToHarvestMax}d; weather can shift this)`
-              : "";
+ ? ` (${s.daysToHarvestMin}–${s.daysToHarvestMax}d; weather can shift this)`
+ : "";
           const growingCount = units.filter(
             (p) => !harvestedSet.has(cellKey(p.origin[0], p.origin[1])),
-          ).length;
+ ).length;
 
           return (
             <div key={id} style={{ margin: "14px 0" }}>
@@ -2280,8 +2369,8 @@ function DashboardScreen(props: {
                 <span className="tiny">
                   water every {s.waterEveryDays}d ·{" "}
                   {s.yieldKgPerSeason > 0
-                    ? `~${harvest}d to harvest${harvestRange}`
-                    : "ornamental"}
+ ? `~${harvest}d to harvest${harvestRange}`
+ : "ornamental"}
                 </span>
               </div>
 
@@ -2291,8 +2380,8 @@ function DashboardScreen(props: {
                   const isEmpty = harvestedSet.has(key);
                   const effectivePlantedAt = props.unitPlantedAt[key] ?? props.plantedAt;
                   const unitDays = effectivePlantedAt
-                    ? Math.max(0, Math.floor((now - effectivePlantedAt) / (24 * 60 * 60 * 1000)))
-                    : 0;
+ ? Math.max(0, Math.floor((now - effectivePlantedAt) / (24 * 60 * 60 * 1000)))
+ : 0;
                   const progress = Math.min(1, unitDays / harvest);
                   const pct = Math.round(progress * 100);
 
@@ -2302,8 +2391,8 @@ function DashboardScreen(props: {
                       className="unit-row"
                       title={
                         isEmpty
-                          ? `Empty — row ${p.origin[0] + 1}, col ${p.origin[1] + 1}`
-                          : `Row ${p.origin[0] + 1}, col ${p.origin[1] + 1} — day ${unitDays} of ~${harvest} (${pct}%)`
+ ? `Empty — row ${p.origin[0] + 1}, col ${p.origin[1] + 1}`
+ : `Row ${p.origin[0] + 1}, col ${p.origin[1] + 1} — day ${unitDays} of ~${harvest} (${pct}%)`
                       }
                     >
                       <span className="unit-label">
@@ -2313,13 +2402,13 @@ function DashboardScreen(props: {
                         {!isEmpty && <div style={{ width: `${Math.max(4, pct)}%` }} />}
                       </div>
                     </div>
-                  );
+ );
                 })}
               </div>
             </div>
-          );
+ );
         })}
       </div>
     </>
-  );
+ );
 }

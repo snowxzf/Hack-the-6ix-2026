@@ -33,6 +33,8 @@ interface Props {
   showAxisLabels?: boolean;
 }
 
+const LABEL_PX = 16;
+
 export function GridView({
   garden,
   selected,
@@ -71,21 +73,14 @@ export function GridView({
   }
 
   const stateAt = new Map(garden.cells.map((c) => [cellKey(c.r, c.c), c.state]));
-  // Cells map to the whole PlacementInstance (not just a species id) so a
-  // click anywhere in a multi-cell plant's footprint resolves back to its
-  // origin — the same unit key harvestedUnits/onUnitClick use everywhere else.
   const plantedBy = new Map<string, PlacementInstance>();
   const shown = placements ? placements.slice(0, reveal ?? placements.length) : [];
   for (const p of shown) {
     for (const [r, c] of p.cells) plantedBy.set(cellKey(r, c), p);
   }
 
-  const cellPx = Math.max(18, Math.min(34, Math.floor(430 / garden.cols)));
-  // Axis labels get their own leading track — data cells (and headers) are
-  // placed via explicit gridColumn/gridRow so the render order below doesn't
-  // need to change, just shift by one track when labels are on.
-  const axisOffset = showAxisLabels ? 1 : 0;
-  const labelPx = Math.max(14, Math.min(20, Math.floor(cellPx * 0.6)));
+  const axisTracks = showAxisLabels ? 1 : 0;
+
   const cells = [];
   for (let r = 0; r < garden.rows; r++) {
     for (let c = 0; c < garden.cols; c++) {
@@ -106,19 +101,17 @@ export function GridView({
       let style: React.CSSProperties = {};
       let label = "";
       if (species) {
-        // Keep the species' color even once harvested — faded via CSS — so
-        // it's still obvious what used to (and can again) grow there.
         style.background = speciesColor(species);
         cls += " planted";
         if (isEmptyUnit) cls += " empty-unit";
       } else if (state === "existing_plant") {
         cls += " existing";
-        label = "🌸";
+        label = "P";
       } else if (state === "blocked") {
         cls += " blocked";
       } else if (state === "obstacle_movable") {
         cls += " obstacle" + (isSelected ? " sel" : "");
-        label = "🚲";
+        label = "B";
       } else if (state === "selected") {
         cls += isSelected ? " sel" : " unsel";
       } else {
@@ -127,7 +120,7 @@ export function GridView({
       if (actionable) cls += ` actionable mode-${clickMode}`;
 
       if (showAxisLabels) {
-        style = { ...style, gridColumn: c + 1 + axisOffset, gridRow: r + 1 + axisOffset };
+        style = { ...style, gridColumn: c + 1 + axisTracks, gridRow: r + 1 + axisTracks };
       }
 
       cells.push(
@@ -189,24 +182,23 @@ export function GridView({
     }
   }
 
-  return (
-    <div
-      className="grid"
-      onPointerMove={handlePointerMove}
-      style={
-        showAxisLabels
-          ? {
-              gridTemplateColumns: `${labelPx}px repeat(${garden.cols}, ${cellPx}px)`,
-              gridTemplateRows: `${labelPx}px repeat(${garden.rows}, ${cellPx}px)`,
-            }
-          : {
-              gridTemplateColumns: `repeat(${garden.cols}, ${cellPx}px)`,
-              gridAutoRows: `${cellPx}px`,
-            }
+  // Fluid tracks: always fill the phone/card width. Cells stay square via aspect-ratio.
+  const template = showAxisLabels
+    ? {
+        gridTemplateColumns: `${LABEL_PX}px repeat(${garden.cols}, minmax(0, 1fr))`,
+        gridTemplateRows: `${LABEL_PX}px repeat(${garden.rows}, auto)`,
       }
-    >
-      {axisLabels}
-      {cells}
+    : {
+        gridTemplateColumns: `repeat(${garden.cols}, minmax(0, 1fr))`,
+        gridTemplateRows: `repeat(${garden.rows}, auto)`,
+      };
+
+  return (
+    <div className="grid-wrap">
+      <div className="grid" onPointerMove={handlePointerMove} style={template}>
+        {axisLabels}
+        {cells}
+      </div>
     </div>
   );
 }

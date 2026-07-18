@@ -66,7 +66,7 @@ export function measureYardFromTaps(input: MeasureYardInput): YardScanResult {
       },
     ],
     { cellSizeCm: 30 },
-  );
+ );
 }
 
 /** TODO(Jessica): fetch curated catalog from Mongo/plants.json. */
@@ -74,10 +74,10 @@ export function getCatalog(): Species[] {
   return MOCK_CATALOG;
 }
 
-/** TODO(Jessica/UI): wire live Open-Meteo from backend /weather. */
+/** Offline fallback alert when live Open-Meteo is unreachable. */
 export const FAKE_WEATHER_ALERT = {
   severity: "warning" as const,
-  title: "⛈ Thunderstorm Friday ~6 PM",
+  title: "Thunderstorm Friday ~6 PM",
   advice: "Petunia Protection Protocol: cover seedlings and move potted succulents inside.",
 };
 

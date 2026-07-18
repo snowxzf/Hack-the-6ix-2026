@@ -53,8 +53,8 @@ export function SearchPanel(props: { onClose: () => void }) {
   }
 
   return (
-    <div className="fixed inset-0 z-40 flex flex-col bg-background/95 backdrop-blur-sm">
-      <div className="mx-auto w-full max-w-md flex-1 overflow-y-auto px-4 pb-8 pt-4">
+    <div className="absolute inset-0 z-40 flex flex-col bg-white/95">
+      <div className="mx-auto w-full max-w-[430px] flex-1 overflow-y-auto px-4 pb-8 pt-4">
         <div className="space-y-5 py-2">
           <div className="flex animate-fade-in-up items-center gap-3">
             <button
@@ -65,7 +65,7 @@ export function SearchPanel(props: { onClose: () => void }) {
             >
               <ArrowLeft className="h-5 w-5" />
             </button>
-            <h2 className="font-heading text-2xl font-semibold">Search</h2>
+            <h2 className="font-heading text-5xl font-semibold">Search</h2>
           </div>
 
           <form
@@ -107,10 +107,10 @@ export function SearchPanel(props: { onClose: () => void }) {
                   >
                     {s}
                   </button>
-                ))}
+ ))}
               </div>
             </div>
-          )}
+ )}
 
           {loading && (
             <div className="grid grid-cols-1 gap-3">
@@ -122,13 +122,13 @@ export function SearchPanel(props: { onClose: () => void }) {
                     <div className="h-3 w-1/3 bg-muted" />
                   </div>
                 </div>
-              ))}
+ ))}
             </div>
-          )}
+ )}
 
           {!loading && plants.length > 0 && (
             <section className="space-y-2">
-              <h3 className="font-heading text-sm font-semibold">Plants in catalog</h3>
+              <h3 className="font-heading text-lg font-semibold">Plants in catalog</h3>
               {plants.map((p) => (
                 <div
                   key={p.id}
@@ -141,13 +141,13 @@ export function SearchPanel(props: { onClose: () => void }) {
                     {p.sun ? ` · ${p.sun}` : ""}
                   </p>
                 </div>
-              ))}
+ ))}
             </section>
-          )}
+ )}
 
           {!loading && videos.length > 0 && (
             <section className="space-y-3">
-              <h3 className="font-heading text-sm font-semibold">Videos</h3>
+              <h3 className="font-heading text-lg font-semibold">Videos</h3>
               {videos.map((v, i) => (
                 <button
                   key={v.video_id || i}
@@ -172,22 +172,22 @@ export function SearchPanel(props: { onClose: () => void }) {
                       <span className="absolute bottom-1.5 right-1.5 bg-black/75 px-1.5 py-0.5 text-[10px] text-white">
                         {v.duration}
                       </span>
-                    )}
+ )}
                   </div>
                   <div className="p-3">
                     <p className="line-clamp-2 text-sm font-medium">{v.title}</p>
                     <p className="mt-0.5 text-xs text-muted-foreground">{v.channel}</p>
                   </div>
                 </button>
-              ))}
+ ))}
             </section>
-          )}
+ )}
 
           {!loading && searched && videos.length === 0 && plants.length === 0 && (
             <div className="py-10 text-center text-sm text-muted-foreground">
               No results found. Try a different search or check that the backend is running.
             </div>
-          )}
+ )}
         </div>
       </div>
 
@@ -197,7 +197,7 @@ export function SearchPanel(props: { onClose: () => void }) {
           title={active.title}
           onClose={() => setActive(null)}
         />
-      )}
+ )}
     </div>
-  );
+ );
 }

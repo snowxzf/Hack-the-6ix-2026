@@ -44,9 +44,15 @@ export function weatherMeta(data: WeatherData | null, condition: WeatherConditio
       clear_night: "Clear night",
     }[condition] as string);
 
+  const resolved = data?.location?.resolved;
+  const location =
+    resolved?.label ||
+    [resolved?.name, resolved?.admin1, resolved?.country].filter(Boolean).join(", ") ||
+    "Toronto, ON";
+
   return {
     temp: temp ?? 22,
     label,
-    location: "Toronto, ON",
+    location,
   };
 }

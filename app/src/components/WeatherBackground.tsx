@@ -34,7 +34,7 @@ function Cloud({
         </div>
       </div>
     </div>
-  );
+ );
 }
 
 const GRADIENTS: Record<string, string> = {
@@ -65,7 +65,7 @@ export function WeatherBackground() {
         opacity: 0.2 + Math.random() * 0.35,
       })),
     [],
-  );
+ );
 
   const flakes = useMemo(
     () =>
@@ -77,7 +77,7 @@ export function WeatherBackground() {
         opacity: 0.4 + Math.random() * 0.5,
       })),
     [],
-  );
+ );
 
   const stars = useMemo(
     () =>
@@ -88,7 +88,7 @@ export function WeatherBackground() {
         delay: Math.random() * 3,
       })),
     [],
-  );
+ );
 
   return (
     <div className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
@@ -106,7 +106,7 @@ export function WeatherBackground() {
             animation: "sun-glow 4s ease-in-out infinite",
           }}
         />
-      )}
+ )}
 
       {condition === "partly_cloudy" && (
         <>
@@ -121,7 +121,7 @@ export function WeatherBackground() {
           <Cloud left={8} top={18} delay={0} duration={75} scale={1} opacity={0.55} />
           <Cloud left={55} top={32} delay={8} duration={90} scale={0.7} opacity={0.45} />
         </>
-      )}
+ )}
 
       {(condition === "rainy" || condition === "cloudy") && (
         <>
@@ -140,9 +140,9 @@ export function WeatherBackground() {
                   animationDelay: `${d.delay}s`,
                 }}
               />
-            ))}
+ ))}
         </>
-      )}
+ )}
 
       {condition === "snowy" && (
         <>
@@ -160,9 +160,9 @@ export function WeatherBackground() {
                 animationDelay: `${f.delay}s`,
               }}
             />
-          ))}
+ ))}
         </>
-      )}
+ )}
 
       {condition === "clear_night" && (
         <>
@@ -179,7 +179,7 @@ export function WeatherBackground() {
                 animationDelay: `${s.delay}s`,
               }}
             />
-          ))}
+ ))}
           <div
             className="absolute right-8 top-6 h-40 w-40 rounded-full"
             style={{
@@ -188,7 +188,7 @@ export function WeatherBackground() {
             }}
           />
         </>
-      )}
+ )}
     </div>
-  );
+ );
 }

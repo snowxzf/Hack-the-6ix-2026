@@ -72,7 +72,7 @@ export function CarbonChart(props: { plantedAt: number; totalKgCo2eSeason: numbe
 
   return (
     <div className="card">
-      <h2>🌍 Carbon saved over time</h2>
+      <h2>Carbon saved over time</h2>
       <p className="muted">Modeled from your season total — not a live day-by-day log yet.</p>
       <div className="row">
         {RANGES.map((r) => (
@@ -83,7 +83,7 @@ export function CarbonChart(props: { plantedAt: number; totalKgCo2eSeason: numbe
           >
             {r.label}
           </span>
-        ))}
+ ))}
       </div>
       <svg
         viewBox={`0 0 ${W} ${H}`}
@@ -100,7 +100,7 @@ export function CarbonChart(props: { plantedAt: number; totalKgCo2eSeason: numbe
             stroke="#263229"
             strokeWidth={1}
           />
-        ))}
+ ))}
         <text x={PAD_L} y={PAD_T - 5} className="tiny" fill="#6f8377" fontSize={9}>
           {yMax.toFixed(1)} kg
         </text>
@@ -144,7 +144,7 @@ export function CarbonChart(props: { plantedAt: number; totalKgCo2eSeason: numbe
             />
             <circle cx={hovered.x} cy={hovered.y} r={4} fill="#4ade80" stroke="#171f1a" strokeWidth={2} />
           </>
-        )}
+ )}
         <rect
           x={PAD_L}
           y={PAD_T}
@@ -159,7 +159,7 @@ export function CarbonChart(props: { plantedAt: number; totalKgCo2eSeason: numbe
         <p className="tiny">
           {fmtDate(hovered.t)} · <b>{hovered.v.toFixed(1)} kg CO₂e</b> saved so far
         </p>
-      )}
+ )}
     </div>
-  );
+ );
 }

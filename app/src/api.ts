@@ -10,7 +10,7 @@ import type { Species } from "../../optimizer/src/index";
 export const API_URL: string =
   (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:8000";
 
-/** Toronto City Hall — demo default until device GPS is wired. */
+/** Toronto City Hall — fallback when GPS is denied / unavailable. */
 export const DEFAULT_LAT = 43.6532;
 export const DEFAULT_LON = -79.3832;
 
@@ -66,19 +66,39 @@ export interface PlantCheck {
 }
 export interface WeatherData {
   sky?: {
-    now?: { tempC: number | null; weather: string | null };
+    now?: {
+      tempC: number | null;
+      weather: string | null;
+      weatherCode?: number | null;
+      precipMm?: number | null;
+    };
     week?: WeatherDay[];
+  };
+  location?: {
+    lat: number;
+    lon: number;
+    timezone?: string;
+    resolved?: {
+      label?: string;
+      name?: string;
+      admin1?: string;
+      country?: string;
+    } | null;
   };
   notifications?: WeatherNotification[];
   plantChecks?: PlantCheck[];
 }
 
-export function fetchWeather(plantIds: string[]): Promise<WeatherData | null> {
+export function fetchWeather(
+  plantIds: string[],
+  lat: number = DEFAULT_LAT,
+  lon: number = DEFAULT_LON,
+): Promise<WeatherData | null> {
   const ids = encodeURIComponent(plantIds.join(","));
   return request<WeatherData>(
-    `/weather?lat=${DEFAULT_LAT}&lon=${DEFAULT_LON}&plantIds=${ids}`,
+    `/weather?lat=${lat}&lon=${lon}&plantIds=${ids}`,
     undefined,
-    8000, // Open-Meteo upstream can be slow-ish; still bounded
+    10000, // Open-Meteo + reverse geocode; still bounded
   );
 }
 
@@ -98,7 +118,7 @@ export async function fetchSuggestions(
     `/plants/suggest?lat=${DEFAULT_LAT}&lon=${DEFAULT_LON}&tier=${tier}&carbonWeight=${carbonWeight}&limit=6`,
     undefined,
     8000,
-  );
+ );
   return j?.suggestions?.length ? j.suggestions : null;
 }
 
@@ -265,5 +285,91 @@ export function localFoodWasteImpact(foodKg: number): FoodWasteImpact {
     percentOfTotalWaste: Math.round((foodKg / 200) * 100),
     greenBinKgAvoided: Math.round(foodKg * 0.8 * 10) / 10,
     dollarsSaved: Math.round((foodKg / 100) * 1300),
+  };
+}
+
+/* ── Search (plants + demo videos) ───────────────────────── */
+
+export interface SearchVideo {
+  title: string;
+  video_id: string;
+  channel: string;
+  duration?: string;
+}
+
+const SEARCH_SUGGESTIONS = [
+  "Tomato growing tips",
+  "Beginner vegetable garden",
+  "Composting at home",
+  "Container gardening",
+  "Organic pest control",
+];
+
+/** Curated YouTube demos when there's no LLM video search (Base44 used InvokeLLM). */
+const DEMO_VIDEOS: Record<string, SearchVideo[]> = {
+  tomato: [
+    {
+      title: "How to Grow Tomatoes — Complete Guide for Beginners",
+      video_id: "ECibnV1_3jM",
+      channel: "Epic Gardening",
+      duration: "12:04",
+    },
+  ],
+  compost: [
+    {
+      title: "Composting for Beginners",
+      video_id: "FxYw0XPYoqg",
+      channel: "California Academy of Sciences",
+      duration: "5:32",
+    },
+  ],
+  garden: [
+    {
+      title: "Vegetable Garden for Beginners",
+      video_id: "qNtEgeCDVZU",
+      channel: "GrowVeg",
+      duration: "10:18",
+    },
+  ],
+};
+
+export async function fetchSearchSuggestions(): Promise<string[]> {
+  return SEARCH_SUGGESTIONS;
+}
+
+export async function searchPlantsByName(
+  q: string,
+): Promise<{ plants: Species[] } | null> {
+  const j = await request<{ plants: Array<Partial<Species> & { id: string; name: string }>; count: number }>(
+    `/plants/search/by-name?q=${encodeURIComponent(q)}&limit=12`,
+ );
+  if (!j?.plants?.length) return { plants: [] };
+  // Search returns full docs; coerce to optimizer Species shape for the UI.
+  const plants: Species[] = j.plants.map((p) => ({
+    id: p.id,
+    name: p.name,
+    tier: (p.tier as Species["tier"]) ?? "beginner",
+    category: p.category ?? "veggies",
+    cellsPerPlant: (p.cellsPerPlant as [number, number]) ?? [1, 1],
+    sun: (p.sun as Species["sun"]) ?? "full",
+    waterEveryDays: p.waterEveryDays ?? 3,
+    heightCm: p.heightCm ?? 30,
+    yieldKgPerSeason: p.yieldKgPerSeason ?? 0,
+    co2eSavedPerKg: p.co2eSavedPerKg ?? 0,
+    companions: p.companions ?? [],
+  }));
+  return { plants };
+}
+
+export async function searchVideos(
+  q: string,
+): Promise<{ videos: SearchVideo[] } | null> {
+  const term = q.toLowerCase();
+  for (const [key, videos] of Object.entries(DEMO_VIDEOS)) {
+    if (term.includes(key)) return { videos };
+  }
+  // Generic gardening fallback so Search never feels empty offline.
+  return {
+    videos: DEMO_VIDEOS.garden,
   };
 }

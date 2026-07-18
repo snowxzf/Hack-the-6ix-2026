@@ -280,6 +280,41 @@ async def geocode_search(name: str, count: int = 5) -> list[dict[str, Any]]:
     return places
 
 
+async def reverse_geocode(lat: float, lon: float) -> dict[str, Any] | None:
+    """Reverse-geocode lat/lon to a place label (BigDataCloud, keyless)."""
+    url = "https://api.bigdatacloud.net/data/reverse-geocode-client"
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "localityLanguage": "en",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.get(url, params=params)
+        if resp.status_code != 200:
+            return None
+        hit = resp.json() or {}
+        name = hit.get("city") or hit.get("locality") or hit.get("localityInfo", {}).get("informative", [{}])[0].get("name")
+        admin1 = hit.get("principalSubdivision")
+        country = hit.get("countryName")
+        parts = [name, admin1, country]
+        label = ", ".join(p for p in parts if p)
+        if not label:
+            return None
+        return {
+            "name": name,
+            "latitude": lat,
+            "longitude": lon,
+            "country": country,
+            "countryCode": hit.get("countryCode"),
+            "admin1": admin1,
+            "label": label,
+            "timezone": None,
+        }
+    except Exception:
+        return None
+
+
 async def forecast_for(
     lat: float,
     lon: float,
@@ -1209,6 +1244,9 @@ async def weather(
             status_code=400,
             detail="Provide lat & lon, or location= (city/address text)",
         )
+    else:
+        # Device GPS path — attach a human-readable place name when possible
+        resolved = await reverse_geocode(float(lat), float(lon))
 
     return await forecast_for(lat, lon, plant_ids=plantIds, resolved_location=resolved)
 

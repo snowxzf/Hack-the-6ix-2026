@@ -2,14 +2,24 @@ import { BookOpen, ChevronRight, FlaskConical, Sprout, TrendingUp } from "lucide
 import { useState } from "react";
 
 const TIERS = [
-  { id: "beginner", label: "Beginner", icon: Sprout, tint: "bg-green-100 text-green-700" },
+  {
+    id: "beginner",
+    label: "Beginner",
+    icon: Sprout,
+    tint: "bg-[hsl(var(--palette-sage)/0.4)] text-[hsl(var(--palette-forest))]",
+  },
   {
     id: "intermediate",
     label: "Intermediate",
     icon: TrendingUp,
-    tint: "bg-amber-100 text-amber-700",
+    tint: "bg-[hsl(var(--palette-apricot)/0.3)] text-[hsl(var(--palette-brown))]",
   },
-  { id: "advanced", label: "Advanced", icon: FlaskConical, tint: "bg-emerald-100 text-emerald-700" },
+  {
+    id: "advanced",
+    label: "Advanced",
+    icon: FlaskConical,
+    tint: "bg-[hsl(var(--palette-leaf)/0.3)] text-[hsl(var(--palette-olive))]",
+  },
 ] as const;
 
 const GUIDES: Record<(typeof TIERS)[number]["id"], { title: string; blurb: string; mins: number }[]> =
@@ -89,7 +99,7 @@ export function LearnPanel() {
   return (
     <div className="space-y-5 py-2">
       <div className="animate-fade-in-up">
-        <h2 className="font-heading text-2xl font-semibold">Learn</h2>
+        <h2 className="font-heading text-5xl font-semibold">Learn</h2>
         <p className="text-sm text-muted-foreground">Bite-sized guides for every gardener.</p>
       </div>
 
@@ -117,7 +127,7 @@ export function LearnPanel() {
               {label}
             </span>
           </button>
-        ))}
+ ))}
       </div>
 
       <div className="space-y-3">
@@ -137,8 +147,8 @@ export function LearnPanel() {
             </div>
             <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
           </div>
-        ))}
+ ))}
       </div>
     </div>
-  );
+ );
 }

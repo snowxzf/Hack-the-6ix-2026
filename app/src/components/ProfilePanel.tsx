@@ -64,7 +64,7 @@ function NotifToggle({
         />
       </button>
     </div>
-  );
+ );
 }
 
 export function ProfilePanel(props: ImpactStatsProps) {
@@ -81,22 +81,22 @@ export function ProfilePanel(props: ImpactStatsProps) {
   return (
     <div className="space-y-5 py-2">
       <div className="flex animate-fade-in-up items-center gap-4">
-        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary font-heading text-2xl font-semibold text-primary-foreground">
+        <div className="flex h-16 w-16 items-center justify-center bg-primary font-heading text-2xl font-semibold text-primary-foreground">
           P
         </div>
         <div>
-          <h2 className="font-heading text-xl font-semibold">PlotTwist Gardener</h2>
+          <h2 className="font-heading text-4xl font-semibold">PlotTwist Gardener</h2>
           <p className="text-sm text-muted-foreground">Your garden, optimized.</p>
         </div>
       </div>
 
       <section className="animate-fade-in-up" style={{ animationDelay: "0.05s" }}>
-        <h3 className="mb-3 font-heading text-lg font-semibold">Sustainability impact</h3>
+        <h3 className="mb-3 font-heading text-2xl font-semibold">Sustainability impact</h3>
         <ImpactStats {...props} />
       </section>
 
       <section className="animate-fade-in-up" style={{ animationDelay: "0.1s" }}>
-        <h3 className="mb-3 flex items-center gap-2 font-heading text-lg font-semibold">
+        <h3 className="mb-3 flex items-center gap-2 font-heading text-2xl font-semibold">
           <Bell className="h-4 w-4" /> Notifications
         </h3>
         <div className="divide-y divide-border rounded-2xl border border-border bg-card/85 backdrop-blur">
@@ -132,8 +132,8 @@ export function ProfilePanel(props: ImpactStatsProps) {
       </section>
 
       <p className="pt-2 text-center text-[11px] text-muted-foreground/70">
-        PlotTwist — helping plants and people grow 🌱
+        PlotTwist — helping plants and people grow
       </p>
     </div>
-  );
+ );
 }

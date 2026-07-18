@@ -31,7 +31,7 @@ export function ImpactStats({ foodKg, kgCo2e, plantCount, compact }: ImpactStats
       label: compact ? "Plants" : "Plants growing",
       value: String(plantCount),
       sub: compact ? "in your layout" : "species in your garden",
-      tint: "bg-emerald-100 text-emerald-700",
+      tint: "bg-[hsl(var(--palette-sage)/0.35)] text-[hsl(var(--palette-leaf))]",
     },
   ];
 
@@ -51,9 +51,9 @@ export function ImpactStats({ foodKg, kgCo2e, plantCount, compact }: ImpactStats
             <p className="font-heading text-lg font-semibold leading-none">{s.value}</p>
             <p className="mt-1 text-[11px] leading-tight text-muted-foreground">{s.label}</p>
           </div>
-        ))}
+ ))}
       </div>
-    );
+ );
   }
 
   return (
@@ -72,11 +72,11 @@ export function ImpactStats({ foodKg, kgCo2e, plantCount, compact }: ImpactStats
           </div>
           <p className="font-heading text-lg font-semibold">{s.value}</p>
         </div>
-      ))}
+ ))}
       <p className="mt-2 text-[11px] leading-relaxed text-muted-foreground">
         Toronto households waste ~45 kg of fruit & veg yearly — home-grown food helps change
         that.
       </p>
     </div>
-  );
+ );
 }

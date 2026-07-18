@@ -7,6 +7,7 @@ import {
   type ReactNode,
 } from "react";
 import { DEFAULT_LAT, DEFAULT_LON, fetchWeather, type WeatherData } from "../api";
+import { requestDeviceLocation, type GeoCoords } from "../lib/geo";
 import {
   mapWeatherCondition,
   weatherMeta,
@@ -20,6 +21,8 @@ interface WeatherContextValue {
   location: string;
   data: WeatherData | null;
   loading: boolean;
+  /** Where the forecast is for (device GPS when allowed). */
+  coords: GeoCoords | null;
 }
 
 const WeatherContext = createContext<WeatherContextValue | null>(null);
@@ -32,17 +35,26 @@ export function WeatherProvider({
   plantIds?: string[];
 }) {
   const [data, setData] = useState<WeatherData | null>(null);
+  const [coords, setCoords] = useState<GeoCoords | null>(null);
   const [loading, setLoading] = useState(true);
   const idsKey = plantIds.join(",");
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
-    fetchWeather(plantIds.length ? plantIds : ["tomato"]).then((d) => {
+
+    (async () => {
+      const geo = await requestDeviceLocation();
+      if (!alive) return;
+      setCoords(geo);
+
+      const ids = plantIds.length ? plantIds : ["tomato"];
+      const d = await fetchWeather(ids, geo.lat, geo.lon);
       if (!alive) return;
       setData(d);
       setLoading(false);
-    });
+    })();
+
     return () => {
       alive = false;
     };
@@ -60,8 +72,9 @@ export function WeatherProvider({
       location: meta.location,
       data,
       loading,
+      coords,
     }),
-    [condition, meta, data, loading],
+    [condition, meta, data, loading, coords],
   );
 
   return (
@@ -79,6 +92,7 @@ export function useWeather(): WeatherContextValue {
       location: "Toronto, ON",
       data: null,
       loading: false,
+      coords: { lat: DEFAULT_LAT, lon: DEFAULT_LON, source: "default" },
     };
   }
   return ctx;
@@ -86,7 +100,8 @@ export function useWeather(): WeatherContextValue {
 
 /** Standalone fetch for pages that don't sit under the provider tree yet. */
 export async function loadSkySnapshot(): Promise<WeatherData | null> {
-  return fetchWeather(["tomato"]);
+  const geo = await requestDeviceLocation();
+  return fetchWeather(["tomato"], geo.lat, geo.lon);
 }
 
 export { DEFAULT_LAT, DEFAULT_LON };

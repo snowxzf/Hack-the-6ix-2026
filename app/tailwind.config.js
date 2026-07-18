@@ -2,10 +2,23 @@
 export default {
   content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
+    // Replace (don't only extend) so every rounded-* utility is square.
+    borderRadius: {
+      none: "0",
+      sm: "0",
+      DEFAULT: "0",
+      md: "0",
+      lg: "0",
+      xl: "0",
+      "2xl": "0",
+      "3xl": "0",
+      full: "9999px", // weather orbs / toggle knobs only
+    },
     extend: {
       fontFamily: {
-        heading: ["Fraunces", "Georgia", "serif"],
-        body: ["Inter", "system-ui", "sans-serif"],
+        sans: ["Poppins", "system-ui", "-apple-system", "sans-serif"],
+        heading: ["Handmade Smoothy", "Georgia", "Times New Roman", "serif"],
+        body: ["Poppins", "system-ui", "-apple-system", "sans-serif"],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -37,11 +50,6 @@ export default {
           DEFAULT: "hsl(var(--card))",
           foreground: "hsl(var(--card-foreground))",
         },
-      },
-      borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
       },
     },
   },
