@@ -35,6 +35,11 @@ const nameOf = (id: string) => byId.get(id)?.name ?? id;
 /** Everything needed to resume mid-flow after a refresh. `photo` is
  *  deliberately excluded — it's a blob: URL that's invalidated once the
  *  page unloads, so persisting it would just point at a dead image. */
+interface SwapSnapshot {
+  targets: Target[];
+  banned: string[];
+}
+
 interface PersistedState {
   step: Step;
   onboarded: boolean;
@@ -46,6 +51,7 @@ interface PersistedState {
   targets: Target[];
   carbonWeight: number;
   banned: string[];
+  swapHistory: SwapSnapshot[];
   result: OptimizerResponse | null;
 }
 
@@ -81,6 +87,7 @@ export function App() {
   const [targets, setTargets] = useState<Target[]>(saved?.targets ?? []);
   const [carbonWeight, setCarbonWeight] = useState(saved?.carbonWeight ?? 0.5);
   const [banned, setBanned] = useState<string[]>(saved?.banned ?? []);
+  const [swapHistory, setSwapHistory] = useState<SwapSnapshot[]>(saved?.swapHistory ?? []);
   const [result, setResult] = useState<OptimizerResponse | null>(saved?.result ?? null);
 
   useEffect(() => {
@@ -95,6 +102,7 @@ export function App() {
       targets,
       carbonWeight,
       banned,
+      swapHistory,
       result,
     };
     try {
@@ -113,6 +121,7 @@ export function App() {
     targets,
     carbonWeight,
     banned,
+    swapHistory,
     result,
   ]);
 
@@ -177,9 +186,19 @@ export function App() {
       { speciesId: inId, min: Math.max(wanted, targets.find((t) => t.speciesId === inId)?.min ?? 0) },
     ];
     const nextBanned = [...banned, outId];
+    setSwapHistory([...swapHistory, { targets, banned }]);
     setTargets(nextTargets);
     setBanned(nextBanned);
     run(nextBanned, nextTargets);
+  }
+
+  function undoSwap() {
+    const prev = swapHistory[swapHistory.length - 1];
+    if (!prev) return;
+    setSwapHistory(swapHistory.slice(0, -1));
+    setTargets(prev.targets);
+    setBanned(prev.banned);
+    run(prev.banned, prev.targets);
   }
 
   const showPlanner = !onboarded || activeTab === "planner";
@@ -239,6 +258,7 @@ export function App() {
               paintableKeys={paintableKeys}
               onNext={() => {
                 setBanned([]);
+                setSwapHistory([]);
                 run([]);
                 setStep("results");
               }}
@@ -251,6 +271,7 @@ export function App() {
               garden={requestGarden()}
               result={result}
               onSwap={applySwap}
+              onUndoSwap={swapHistory.length > 0 ? undoSwap : undefined}
               onEdit={
                 onboarded && !editingLayout
                   ? () => {
@@ -684,6 +705,7 @@ function ResultsScreen(props: {
   garden: GardenGrid;
   result: OptimizerResponse;
   onSwap: (out: string, inId: string) => void;
+  onUndoSwap?: () => void;
   onEdit?: () => void;
   onTweak?: () => void;
   onConfirm?: () => void;
@@ -775,6 +797,14 @@ function ResultsScreen(props: {
           {result.stats.solveMs} ms
         </p>
       </div>
+
+      {props.onUndoSwap && (
+        <div className="row">
+          <button className="small secondary" onClick={props.onUndoSwap}>
+            ↩ Undo last swap
+          </button>
+        </div>
+      )}
 
       {result.swaps.length > 0 && (
         <div className="card info">
