@@ -1,0 +1,330 @@
+[
+  {
+    "id": "tomato_cherry",
+    "method": "owid_category",
+    "category": "Tomatoes",
+    "current": 1.4,
+    "owid": 2.09,
+    "change": true
+  },
+  {
+    "id": "tomato_beefsteak",
+    "method": "owid_category",
+    "category": "Tomatoes",
+    "current": 1.4,
+    "owid": 2.09,
+    "change": true
+  },
+  {
+    "id": "lettuce",
+    "method": "owid_category",
+    "category": "Other Vegetables",
+    "current": 0.9,
+    "owid": 0.53,
+    "change": true
+  },
+  {
+    "id": "carrot",
+    "method": "owid_category",
+    "category": "Root Vegetables",
+    "current": 0.4,
+    "owid": 0.43,
+    "change": true
+  },
+  {
+    "id": "zucchini",
+    "method": "owid_category",
+    "category": "Other Vegetables",
+    "current": 0.9,
+    "owid": 0.53,
+    "change": true
+  },
+  {
+    "id": "cucumber",
+    "method": "owid_category",
+    "category": "Other Vegetables",
+    "current": 0.9,
+    "owid": 0.53,
+    "change": true
+  },
+  {
+    "id": "bell_pepper",
+    "method": "owid_category",
+    "category": "Other Vegetables",
+    "current": 1.3,
+    "owid": 0.53,
+    "change": true
+  },
+  {
+    "id": "kale",
+    "method": "owid_category",
+    "category": "Brassicas",
+    "current": 0.5,
+    "owid": 0.51,
+    "change": true
+  },
+  {
+    "id": "spinach",
+    "method": "owid_category",
+    "category": "Other Vegetables",
+    "current": 0.5,
+    "owid": 0.53,
+    "change": true
+  },
+  {
+    "id": "radish",
+    "method": "owid_category",
+    "category": "Root Vegetables",
+    "current": 0.4,
+    "owid": 0.43,
+    "change": true
+  },
+  {
+    "id": "bean_bush",
+    "method": "owid_category",
+    "category": "Other Vegetables",
+    "current": 0.8,
+    "owid": 0.53,
+    "change": true
+  },
+  {
+    "id": "broccoli",
+    "method": "owid_category",
+    "category": "Brassicas",
+    "current": 0.5,
+    "owid": 0.51,
+    "change": true
+  },
+  {
+    "id": "cabbage",
+    "method": "owid_category",
+    "category": "Brassicas",
+    "current": 0.5,
+    "owid": 0.51,
+    "change": true
+  },
+  {
+    "id": "beet",
+    "method": "owid_category",
+    "category": "Root Vegetables",
+    "current": 0.4,
+    "owid": 0.43,
+    "change": true
+  },
+  {
+    "id": "potato",
+    "method": "owid_category",
+    "category": "Potatoes",
+    "current": 0.5,
+    "owid": 0.46,
+    "change": true
+  },
+  {
+    "id": "onion",
+    "method": "owid_category",
+    "category": "Onions & Leeks",
+    "current": 0.5,
+    "owid": 0.5,
+    "change": false
+  },
+  {
+    "id": "garlic",
+    "method": "owid_category",
+    "category": "Onions & Leeks",
+    "current": 0.5,
+    "owid": 0.5,
+    "change": false
+  },
+  {
+    "id": "pea",
+    "method": "owid_category",
+    "category": "Peas",
+    "current": 0.8,
+    "owid": 0.98,
+    "change": true
+  },
+  {
+    "id": "eggplant",
+    "method": "owid_category",
+    "category": "Other Vegetables",
+    "current": 1.4,
+    "owid": 0.53,
+    "change": true
+  },
+  {
+    "id": "sweet_corn",
+    "method": "owid_category",
+    "category": "Other Vegetables",
+    "current": 0.6,
+    "owid": 0.53,
+    "change": true
+  },
+  {
+    "id": "swiss_chard",
+    "method": "owid_category",
+    "category": "Other Vegetables",
+    "current": 0.5,
+    "owid": 0.53,
+    "change": true
+  },
+  {
+    "id": "basil",
+    "method": "owid_category",
+    "category": "Other Vegetables",
+    "current": 1.0,
+    "owid": 0.53,
+    "change": true
+  },
+  {
+    "id": "mint",
+    "method": "owid_category",
+    "category": "Other Vegetables",
+    "current": 1.0,
+    "owid": 0.53,
+    "change": true
+  },
+  {
+    "id": "parsley",
+    "method": "owid_category",
+    "category": "Other Vegetables",
+    "current": 1.0,
+    "owid": 0.53,
+    "change": true
+  },
+  {
+    "id": "cilantro",
+    "method": "owid_category",
+    "category": "Other Vegetables",
+    "current": 1.0,
+    "owid": 0.53,
+    "change": true
+  },
+  {
+    "id": "rosemary",
+    "method": "owid_category",
+    "category": "Other Vegetables",
+    "current": 1.0,
+    "owid": 0.53,
+    "change": true
+  },
+  {
+    "id": "thyme",
+    "method": "owid_category",
+    "category": "Other Vegetables",
+    "current": 1.0,
+    "owid": 0.53,
+    "change": true
+  },
+  {
+    "id": "oregano",
+    "method": "owid_category",
+    "category": "Other Vegetables",
+    "current": 1.0,
+    "owid": 0.53,
+    "change": true
+  },
+  {
+    "id": "chives",
+    "method": "owid_category",
+    "category": "Onions & Leeks",
+    "current": 0.5,
+    "owid": 0.5,
+    "change": false
+  },
+  {
+    "id": "strawberry",
+    "method": "owid_category",
+    "category": "Berries & Grapes",
+    "current": 1.2,
+    "owid": 1.53,
+    "change": true
+  },
+  {
+    "id": "blueberry",
+    "method": "owid_category",
+    "category": "Berries & Grapes",
+    "current": 1.2,
+    "owid": 1.53,
+    "change": true
+  },
+  {
+    "id": "watermelon",
+    "method": "owid_category",
+    "category": "Other Fruit",
+    "current": 0.9,
+    "owid": 1.05,
+    "change": true
+  },
+  {
+    "id": "pumpkin",
+    "method": "owid_category",
+    "category": "Other Vegetables",
+    "current": 0.9,
+    "owid": 0.53,
+    "change": true
+  },
+  {
+    "id": "raspberry",
+    "method": "owid_category",
+    "category": "Berries & Grapes",
+    "current": 1.2,
+    "owid": 1.53,
+    "change": true
+  },
+  {
+    "id": "sunflower",
+    "method": "zero_by_rule",
+    "current": 0,
+    "owid": 0.0,
+    "change": false
+  },
+  {
+    "id": "marigold",
+    "method": "zero_by_rule",
+    "current": 0,
+    "owid": 0.0,
+    "change": false
+  },
+  {
+    "id": "zinnia",
+    "method": "zero_by_rule",
+    "current": 0,
+    "owid": 0.0,
+    "change": false
+  },
+  {
+    "id": "nasturtium",
+    "method": "zero_by_rule",
+    "current": 0,
+    "owid": 0.0,
+    "change": false
+  },
+  {
+    "id": "lavender",
+    "method": "zero_by_rule",
+    "current": 0,
+    "owid": 0.0,
+    "change": false
+  },
+  {
+    "id": "coneflower",
+    "method": "zero_by_rule",
+    "current": 0,
+    "owid": 0.0,
+    "change": false
+  },
+  {
+    "id": "bee_balm",
+    "method": "zero_by_rule",
+    "current": 0,
+    "owid": 0.0,
+    "change": false
+  },
+  {
+    "id": "lily",
+    "method": "zero_by_rule",
+    "current": 0,
+    "owid": 0.0,
+    "change": false
+  }
+]

@@ -22,11 +22,26 @@ export function SearchPanel(props: { onClose: () => void }) {
   useEffect(() => {
     let alive = true;
     setSuggestionsLoading(true);
-    fetchSearchSuggestions().then((s) => {
+    (async () => {
+      let lat = 43.6532;
+      let lon = -79.3832;
+      try {
+        const raw = localStorage.getItem("plottwist:manualPlace");
+        if (raw) {
+          const p = JSON.parse(raw) as { lat?: number; lon?: number };
+          if (typeof p.lat === "number" && typeof p.lon === "number") {
+            lat = p.lat;
+            lon = p.lon;
+          }
+        }
+      } catch {
+        /* keep Toronto default */
+      }
+      const s = await fetchSearchSuggestions(lat, lon);
       if (!alive) return;
       setSuggestions(s);
       setSuggestionsLoading(false);
-    });
+    })();
     return () => {
       alive = false;
     };
@@ -94,7 +109,7 @@ export function SearchPanel(props: { onClose: () => void }) {
           {!searched && (
             <div className="animate-fade-in-up" style={{ animationDelay: "0.06s" }}>
               <p className="mb-2 text-xs text-muted-foreground">
-                {suggestionsLoading ? "Loading suggestions for Toronto…" : "Try searching for"}
+                {suggestionsLoading ? "Loading suggestions for your area…" : "Try searching for"}
               </p>
               <div className="flex flex-wrap gap-2">
                 {(suggestionsLoading ? ["…", "…", "…"] : suggestions).map((s, i) => (

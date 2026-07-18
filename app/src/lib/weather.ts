@@ -30,7 +30,12 @@ export function mapWeatherCondition(data: WeatherData | null): WeatherCondition 
   return isNight ? "clear_night" : "partly_cloudy";
 }
 
-export function weatherMeta(data: WeatherData | null, condition: WeatherCondition) {
+export function weatherMeta(
+  data: WeatherData | null,
+  condition: WeatherCondition,
+  /** Typed-city override when the user confirmed a place instead of GPS. */
+  manualLabel?: string,
+) {
   const now = data?.sky?.now;
   const temp = now?.tempC != null ? Math.round(now.tempC) : null;
   const label =
@@ -45,10 +50,17 @@ export function weatherMeta(data: WeatherData | null, condition: WeatherConditio
     }[condition] as string);
 
   const resolved = data?.location?.resolved;
-  const location =
+  const fromApi =
     resolved?.label ||
-    [resolved?.name, resolved?.admin1, resolved?.country].filter(Boolean).join(", ") ||
-    "Toronto, ON";
+    [resolved?.name, resolved?.admin1, resolved?.country].filter(Boolean).join(", ");
+  // Compact: "Toronto, Ontario, Canada" → "Toronto, Ontario"
+  const compact = (s: string) =>
+    s
+      .split(",")
+      .map((p) => p.trim())
+      .slice(0, 2)
+      .join(", ");
+  const location = compact(manualLabel || fromApi || "Toronto, ON");
 
   return {
     temp: temp ?? 22,

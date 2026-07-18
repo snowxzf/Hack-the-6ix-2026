@@ -57,3 +57,18 @@ python seed.py                         # push to Mongo
 
 Updates `sun`, `waterEveryDays`, `heightCm`, and veggie `daysToHarvest` min/max
 when they disagree materially. Carbon fields are never touched.
+
+## Verify carbon factors vs OWID (Poore & Nemecek 2018)
+
+`co2eSavedPerKg` = the supply-chain footprint of the store-bought equivalent
+(kg CO₂e per kg food), from [OWID's ghg-per-kg dataset](https://ourworldindata.org/grapher/ghg-per-kg-poore).
+Each plant maps to an explicit OWID category in `verify_carbon_owid.py`
+(no fuzzy matching for carbon claims). Ornamentals stay 0 by rule.
+
+```bash
+python verify_carbon_owid.py           # dry-run, writes owid_carbon_report.json
+python verify_carbon_owid.py --apply   # apply values + verified.carbon=true
+python seed.py
+```
+
+`yieldKgPerSeason` is agronomic (not in OWID) and stays curated.

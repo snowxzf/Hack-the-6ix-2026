@@ -1,6 +1,7 @@
 import { Bell, CloudRain, Droplets, Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ImpactStats, type ImpactStatsProps } from "./ImpactStats";
+import { LocationPicker } from "./LocationPicker";
 
 const NOTIF_KEY = "plottwist:notifications";
 
@@ -89,6 +90,11 @@ export function ProfilePanel(props: ImpactStatsProps) {
           <p className="text-sm text-muted-foreground">Your garden, optimized.</p>
         </div>
       </div>
+
+      <section className="animate-fade-in-up" style={{ animationDelay: "0.03s" }}>
+        <h3 className="mb-3 font-heading text-2xl font-semibold">Garden location</h3>
+        <LocationPicker />
+      </section>
 
       <section className="animate-fade-in-up" style={{ animationDelay: "0.05s" }}>
         <h3 className="mb-3 font-heading text-2xl font-semibold">Sustainability impact</h3>

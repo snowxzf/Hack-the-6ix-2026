@@ -82,7 +82,7 @@ python -m uvicorn main:app --reload --port 8000
 | [Open-Meteo](https://open-meteo.com/) | Live weather + geocoding for plant checks and harvest estimates | Free, keyless |
 | [OpenPlantDB](https://github.com/cwfrazier1/openplantdb) | Care-field verification: sun, water, height, days to maturity (**42/42 plants verified**) | CC0 (public domain) |
 | [Perenual](https://perenual.com/docs/api) | Second care-data check (10/42 so far; free tier is 100 req/day) | Free API key, non-commercial |
-| [Our World in Data / Poore & Nemecek 2018](https://ourworldindata.org/food-choice-vs-eating-local) | CO₂e factors for store-bought food equivalents | CC BY |
+| [Our World in Data / Poore & Nemecek 2018](https://ourworldindata.org/grapher/ghg-per-kg-poore) | CO₂e factors for store-bought food equivalents (**42/42 verified**, explicit category mapping) | CC BY |
 | [City of Toronto food waste audits](https://www.toronto.ca/services-payments/recycling-organics-garbage/waste-management/waste-reduction/food-waste/) | Pitch impact baselines | Public data |
 
 Our catalog (`database/plants_curated.json`) is hand-curated, then cross-checked

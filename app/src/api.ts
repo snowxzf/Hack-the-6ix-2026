@@ -14,6 +14,19 @@ export const API_URL: string =
 export const DEFAULT_LAT = 43.6532;
 export const DEFAULT_LON = -79.3832;
 
+/** A resolved location the whole app can share (weather, suggestions, harvest). */
+export interface Place {
+  label: string;
+  lat: number;
+  lon: number;
+}
+
+export const DEFAULT_PLACE: Place = {
+  label: "Toronto, Ontario, Canada",
+  lat: DEFAULT_LAT,
+  lon: DEFAULT_LON,
+};
+
 async function request<T>(
   path: string,
   init?: RequestInit,
@@ -102,6 +115,26 @@ export function fetchWeather(
   );
 }
 
+/* ── Geocoding (typed city/address → candidates) ─────────── */
+
+export interface GeocodeResult {
+  label: string;
+  latitude: number;
+  longitude: number;
+  country?: string;
+  admin1?: string;
+}
+
+/** GET /geocode — returns candidates so the UI can confirm ambiguous names. */
+export async function geocodeCity(q: string): Promise<GeocodeResult[] | null> {
+  const j = await request<{ results: GeocodeResult[] }>(
+    `/geocode?q=${encodeURIComponent(q)}&count=5`,
+    undefined,
+    8000,
+  );
+  return j?.results?.length ? j.results : null;
+}
+
 /* ── Location-aware suggestions ──────────────────────────── */
 
 export interface Suggestion {
@@ -113,13 +146,115 @@ export interface Suggestion {
 export async function fetchSuggestions(
   tier: string,
   carbonWeight: number,
+  lat: number = DEFAULT_LAT,
+  lon: number = DEFAULT_LON,
 ): Promise<Suggestion[] | null> {
   const j = await request<{ suggestions: Suggestion[] }>(
-    `/plants/suggest?lat=${DEFAULT_LAT}&lon=${DEFAULT_LON}&tier=${tier}&carbonWeight=${carbonWeight}&limit=6`,
+    `/plants/suggest?lat=${lat}&lon=${lon}&tier=${tier}&carbonWeight=${carbonWeight}&limit=6`,
     undefined,
     8000,
- );
+  );
   return j?.suggestions?.length ? j.suggestions : null;
+}
+
+/* ── Search (plants + videos + suggestion chips) ─────────── */
+
+export interface SearchVideo {
+  video_id: string;
+  title: string;
+  channel?: string;
+  duration?: string;
+}
+
+/** GET /plants/search/by-name — substring match over the curated catalog. */
+export async function searchPlantsByName(
+  q: string,
+): Promise<{ plants: Species[] } | null> {
+  const j = await request<{
+    plants: Array<Partial<Species> & { id: string; name: string }>;
+    count: number;
+  }>(`/plants/search/by-name?q=${encodeURIComponent(q)}&limit=12`);
+  if (!j?.plants?.length) return { plants: [] };
+  // Search returns full docs; coerce to optimizer Species shape for the UI.
+  const plants: Species[] = j.plants.map((p) => ({
+    id: p.id,
+    name: p.name,
+    tier: (p.tier as Species["tier"]) ?? "beginner",
+    category: p.category ?? "veggies",
+    cellsPerPlant: (p.cellsPerPlant as [number, number]) ?? [1, 1],
+    sun: (p.sun as Species["sun"]) ?? "full",
+    waterEveryDays: p.waterEveryDays ?? 3,
+    heightCm: p.heightCm ?? 30,
+    yieldKgPerSeason: p.yieldKgPerSeason ?? 0,
+    co2eSavedPerKg: p.co2eSavedPerKg ?? 0,
+    companions: p.companions ?? [],
+  }));
+  return { plants };
+}
+
+/** Curated demos when the live YouTube scrape is unreachable. */
+const DEMO_VIDEOS: SearchVideo[] = [
+  {
+    title: "How to Grow Tomatoes — Complete Guide for Beginners",
+    video_id: "ECibnV1_3jM",
+    channel: "Epic Gardening",
+    duration: "12:04",
+  },
+  {
+    title: "Vegetable Garden for Beginners",
+    video_id: "qNtEgeCDVZU",
+    channel: "GrowVeg",
+    duration: "10:18",
+  },
+  {
+    title: "Composting for Beginners",
+    video_id: "FxYw0XPYoqg",
+    channel: "California Academy of Sciences",
+    duration: "5:32",
+  },
+];
+
+/** GET /search/videos — keyless YouTube scrape; falls back to curated demos. */
+export async function searchVideos(
+  q: string,
+): Promise<{ videos: SearchVideo[] } | null> {
+  const live = await request<{ videos: SearchVideo[] }>(
+    `/search/videos?q=${encodeURIComponent(q)}`,
+    undefined,
+    12000,
+  );
+  if (live?.videos?.length) return live;
+  const term = q.toLowerCase();
+  const filtered = DEMO_VIDEOS.filter(
+    (v) =>
+      term.includes("tomato")
+        ? v.title.toLowerCase().includes("tomato")
+        : term.includes("compost")
+          ? v.title.toLowerCase().includes("compost")
+          : true,
+  );
+  return { videos: filtered.length ? filtered : DEMO_VIDEOS };
+}
+
+const FALLBACK_SEARCH_SUGGESTIONS = [
+  "Tomato growing tips",
+  "Beginner vegetable garden",
+  "Composting at home",
+  "Container gardening",
+  "Organic pest control",
+];
+
+/** Seasonal "try searching for" chips — live picks when the backend is up. */
+export async function fetchSearchSuggestions(
+  lat: number = DEFAULT_LAT,
+  lon: number = DEFAULT_LON,
+): Promise<string[]> {
+  const sugs = await fetchSuggestions("beginner", 0.5, lat, lon);
+  if (!sugs) return FALLBACK_SEARCH_SUGGESTIONS;
+  const picks = sugs
+    .slice(0, 4)
+    .map((s) => `How to grow ${s.species.name.toLowerCase()}`);
+  return [...picks, "Composting at home"];
 }
 
 /* ── PlantNet identify ───────────────────────────────────── */
@@ -195,7 +330,6 @@ function identifyErrorMessage(status: number, body: string): string {
   if (status >= 500) {
     return "Identify server error — check the backend terminal for details.";
   }
-  // Prefer FastAPI `detail` when it’s a plain string.
   try {
     const j = JSON.parse(body) as { detail?: unknown };
     if (typeof j.detail === "string" && j.detail.trim()) return j.detail;
@@ -285,91 +419,5 @@ export function localFoodWasteImpact(foodKg: number): FoodWasteImpact {
     percentOfTotalWaste: Math.round((foodKg / 200) * 100),
     greenBinKgAvoided: Math.round(foodKg * 0.8 * 10) / 10,
     dollarsSaved: Math.round((foodKg / 100) * 1300),
-  };
-}
-
-/* ── Search (plants + demo videos) ───────────────────────── */
-
-export interface SearchVideo {
-  title: string;
-  video_id: string;
-  channel: string;
-  duration?: string;
-}
-
-const SEARCH_SUGGESTIONS = [
-  "Tomato growing tips",
-  "Beginner vegetable garden",
-  "Composting at home",
-  "Container gardening",
-  "Organic pest control",
-];
-
-/** Curated YouTube demos when there's no LLM video search (Base44 used InvokeLLM). */
-const DEMO_VIDEOS: Record<string, SearchVideo[]> = {
-  tomato: [
-    {
-      title: "How to Grow Tomatoes — Complete Guide for Beginners",
-      video_id: "ECibnV1_3jM",
-      channel: "Epic Gardening",
-      duration: "12:04",
-    },
-  ],
-  compost: [
-    {
-      title: "Composting for Beginners",
-      video_id: "FxYw0XPYoqg",
-      channel: "California Academy of Sciences",
-      duration: "5:32",
-    },
-  ],
-  garden: [
-    {
-      title: "Vegetable Garden for Beginners",
-      video_id: "qNtEgeCDVZU",
-      channel: "GrowVeg",
-      duration: "10:18",
-    },
-  ],
-};
-
-export async function fetchSearchSuggestions(): Promise<string[]> {
-  return SEARCH_SUGGESTIONS;
-}
-
-export async function searchPlantsByName(
-  q: string,
-): Promise<{ plants: Species[] } | null> {
-  const j = await request<{ plants: Array<Partial<Species> & { id: string; name: string }>; count: number }>(
-    `/plants/search/by-name?q=${encodeURIComponent(q)}&limit=12`,
- );
-  if (!j?.plants?.length) return { plants: [] };
-  // Search returns full docs; coerce to optimizer Species shape for the UI.
-  const plants: Species[] = j.plants.map((p) => ({
-    id: p.id,
-    name: p.name,
-    tier: (p.tier as Species["tier"]) ?? "beginner",
-    category: p.category ?? "veggies",
-    cellsPerPlant: (p.cellsPerPlant as [number, number]) ?? [1, 1],
-    sun: (p.sun as Species["sun"]) ?? "full",
-    waterEveryDays: p.waterEveryDays ?? 3,
-    heightCm: p.heightCm ?? 30,
-    yieldKgPerSeason: p.yieldKgPerSeason ?? 0,
-    co2eSavedPerKg: p.co2eSavedPerKg ?? 0,
-    companions: p.companions ?? [],
-  }));
-  return { plants };
-}
-
-export async function searchVideos(
-  q: string,
-): Promise<{ videos: SearchVideo[] } | null> {
-  const term = q.toLowerCase();
-  for (const [key, videos] of Object.entries(DEMO_VIDEOS)) {
-    if (term.includes(key)) return { videos };
-  }
-  // Generic gardening fallback so Search never feels empty offline.
-  return {
-    videos: DEMO_VIDEOS.garden,
   };
 }

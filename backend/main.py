@@ -1192,6 +1192,76 @@ async def geocode(q: str, count: int = 5) -> dict[str, Any]:
     }
 
 
+def _walk_video_renderers(node: Any, out: list[dict[str, Any]], limit: int) -> None:
+    """Depth-first hunt for videoRenderer blobs in YouTube's initial data."""
+    if len(out) >= limit:
+        return
+    if isinstance(node, dict):
+        vr = node.get("videoRenderer")
+        if isinstance(vr, dict) and vr.get("videoId"):
+            title_runs = ((vr.get("title") or {}).get("runs")) or []
+            title = "".join(r.get("text", "") for r in title_runs) or None
+            channel_runs = ((vr.get("ownerText") or {}).get("runs")) or []
+            channel = channel_runs[0].get("text") if channel_runs else None
+            duration = (vr.get("lengthText") or {}).get("simpleText")
+            if title:
+                out.append(
+                    {
+                        "video_id": vr["videoId"],
+                        "title": title,
+                        "channel": channel,
+                        "duration": duration,
+                    }
+                )
+            return
+        for v in node.values():
+            _walk_video_renderers(v, out, limit)
+    elif isinstance(node, list):
+        for v in node:
+            _walk_video_renderers(v, out, limit)
+
+
+@app.get("/search/videos")
+async def search_videos(q: str, limit: int = 6) -> dict[str, Any]:
+    """
+    Keyless YouTube search: fetch the public results page and parse the
+    embedded ytInitialData JSON. Good enough for demo purposes — no API
+    key, no quota. Gardening context is appended to keep results on-topic.
+    """
+    q = (q or "").strip()
+    if not q:
+        raise HTTPException(status_code=400, detail="q is required")
+
+    query = f"{q} gardening"
+    url = "https://www.youtube.com/results"
+    params = {"search_query": query, "hl": "en"}
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/126.0 Safari/537.36"
+        ),
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            resp = await client.get(url, params=params, headers=headers)
+            resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=502, detail=f"YouTube unreachable: {exc}") from exc
+
+    m = re.search(r"var ytInitialData = (\{.*?\});</script>", resp.text, re.DOTALL)
+    if not m:
+        return {"query": q, "videos": []}
+    try:
+        data = json.loads(m.group(1))
+    except json.JSONDecodeError:
+        return {"query": q, "videos": []}
+
+    videos: list[dict[str, Any]] = []
+    _walk_video_renderers(data, videos, max(1, min(limit, 12)))
+    return {"query": q, "videos": videos}
+
+
 @app.get("/weather")
 async def weather(
     lat: float | None = None,

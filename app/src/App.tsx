@@ -1755,32 +1755,62 @@ function SuggestCard(props: {
   setTargets: (t: Target[]) => void;
 }) {
   const [sugs, setSugs] = useState<Suggestion[] | null | undefined>(undefined);
+  const [placeLabel, setPlaceLabel] = useState("your area");
 
   useEffect(() => {
     let alive = true;
     setSugs(undefined);
-    fetchSuggestions(props.tier, props.carbonWeight).then((s) => {
+    (async () => {
+      // Prefer a typed-city override the user confirmed; else device GPS.
+      let lat = 43.6532;
+      let lon = -79.3832;
+      try {
+        const raw = localStorage.getItem("plottwist:manualPlace");
+        if (raw) {
+          const p = JSON.parse(raw) as { lat?: number; lon?: number; label?: string };
+          if (typeof p.lat === "number" && typeof p.lon === "number") {
+            lat = p.lat;
+            lon = p.lon;
+            if (p.label) setPlaceLabel(p.label.split(",")[0] ?? p.label);
+          } else {
+            const geo = await requestDeviceLocation();
+            lat = geo.lat;
+            lon = geo.lon;
+            setPlaceLabel(geo.source === "default" ? "Toronto" : "your area");
+          }
+        } else {
+          const geo = await requestDeviceLocation();
+          lat = geo.lat;
+          lon = geo.lon;
+          setPlaceLabel(geo.source === "default" ? "Toronto" : "your area");
+        }
+      } catch {
+        setPlaceLabel("Toronto");
+      }
+      const s = await fetchSuggestions(props.tier, props.carbonWeight, lat, lon);
       if (alive) setSugs(s);
-    });
+    })();
     return () => {
       alive = false;
     };
   }, [props.tier, props.carbonWeight]);
 
+  const city = placeLabel.split(",")[0] ?? placeLabel;
+
   if (sugs === undefined) {
     return (
       <div className="card info">
-        <p className="tiny">Ranking plants for Toronto's season + this week's weather…</p>
+        <p className="tiny">Ranking plants for {city}&apos;s season + this week&apos;s weather…</p>
       </div>
- );
+    );
   }
   if (!sugs) return null; // backend offline — the card simply doesn't exist
 
   return (
     <div className="card info">
-      <h2>Suggested for Toronto, right now</h2>
+      <h2>Suggested for {city}, right now</h2>
       <p className="muted">
-        Ranked live: season fit + this week's forecast + carbon + native region.
+        Ranked live: season fit + this week&apos;s forecast + carbon + native region.
       </p>
       <div className="row">
         {sugs.map((s) => {
@@ -2097,8 +2127,8 @@ function WeatherCard(props: { plantIds: string[] }) {
     <div className={`card ${notes.length > 0 ? "warn" : ""}`}>
       <h2>{notes.length > 0 ? "Weather guard — alerts" : "Weather guard — clear"}</h2>
       {notes.length === 0 && (
-        <p className="muted">All clear in Toronto for the next few days.</p>
- )}
+        <p className="muted">All clear in {placeLabel} for the next few days.</p>
+      )}
       {notes.map((n, i) => (
         <p className="muted" key={i}>
           <b>
