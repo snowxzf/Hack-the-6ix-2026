@@ -7,8 +7,7 @@ MongoDB is what the live API reads after seeding.
 
 1. Confirm a DB user exists in Atlas → Database Access.
 2. Network Access → allow `0.0.0.0/0` (hackathon).
-3. Copy repo `.env.example` → `.env` and set `MONGODB_URI`
-   (URL-encode special password characters, e.g. `@` → `%40`).
+3. Put secrets in repo-root `.env` (see `.env.example`).
 4. Run:
 
 ```bash
@@ -18,3 +17,22 @@ python seed.py
 
 Collections written: `plantapp.plants`, `plantapp.catalog_meta`.
 Gardens are created at runtime by `POST /gardens` on the backend.
+
+## Verify care fields vs Perenual
+
+1. Add to `.env`: `PERENUAL_API_KEY=...` (from https://perenual.com/docs/api)
+2. Dry-run (writes a diff report, does not change JSON):
+
+```bash
+python verify_perenual.py
+```
+
+3. Apply mapped updates (`sun`, `waterEveryDays`, `heightCm`) + `verified.perenual=true`:
+
+```bash
+python verify_perenual.py --apply
+python seed.py
+```
+
+Does **not** change carbon (`yieldKgPerSeason` / `co2eSavedPerKg`) — those come from OWID.
+Caches API responses in `perenual_cache/` (gitignored).
