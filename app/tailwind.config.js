@@ -17,7 +17,14 @@ export default {
     extend: {
       fontFamily: {
         sans: ["Poppins", "system-ui", "-apple-system", "sans-serif"],
-        heading: ["Handmade Smoothy", "Georgia", "Times New Roman", "serif"],
+        heading: [
+          "Playfair Display",
+          "Iowan Old Style",
+          "Palatino Linotype",
+          "Palatino",
+          "Georgia",
+          "serif",
+        ],
         body: ["Poppins", "system-ui", "-apple-system", "sans-serif"],
       },
       colors: {
