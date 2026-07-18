@@ -8,7 +8,7 @@ import { useDevClock } from "./devClock";
  * zoom the look-back window ending at "now" (real time + optional dev clock).
  * They do not invent future progress: advance the DevTools clock to see more.
  */
-const SEASON_MS = 90 * 24 * 60 * 60 * 1000;
+export const SEASON_MS = 90 * 24 * 60 * 60 * 1000;
 
 type RangeId = "1d" | "1w" | "1m" | "6m" | "1y";
 const RANGES: { id: RangeId; label: string; ms: number }[] = [
@@ -19,7 +19,7 @@ const RANGES: { id: RangeId; label: string; ms: number }[] = [
   { id: "1y", label: "1y", ms: 365 * 24 * 60 * 60 * 1000 },
 ];
 
-function carbonAt(t: number, plantedAt: number, totalKg: number): number {
+export function carbonAt(t: number, plantedAt: number, totalKg: number): number {
   const frac = Math.min(1, Math.max(0, (t - plantedAt) / SEASON_MS));
   return totalKg * frac;
 }

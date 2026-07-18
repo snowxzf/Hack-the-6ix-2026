@@ -48,11 +48,16 @@ export function GridView({
 }: Props) {
   const painting = useRef<boolean | null>(null);
   const lastTouched = useRef<string | null>(null);
+  // Harvest/reseed drag: tracks the last *unit* acted on (not raw cell key),
+  // so dragging across a multi-cell plant's own footprint doesn't re-fire
+  // for every cell it occupies — only on entering a genuinely different unit.
+  const clickDragUnit = useRef<string | null>(null);
 
   useEffect(() => {
     const up = () => {
       painting.current = null;
       lastTouched.current = null;
+      clickDragUnit.current = null;
     };
     window.addEventListener("pointerup", up);
     return () => window.removeEventListener("pointerup", up);
@@ -64,12 +69,22 @@ export function GridView({
    *  We look up the actual cell under the finger via elementFromPoint
    *  instead, using clientX/Y which stay accurate regardless of capture. */
   function handlePointerMove(e: React.PointerEvent) {
-    if (!onPaint || painting.current === null || e.pointerType !== "touch") return;
+    if (e.pointerType !== "touch") return;
     const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
-    const key = el?.dataset.key;
-    if (!key || key === lastTouched.current) return;
-    lastTouched.current = key;
-    onPaint(key, painting.current);
+    if (!el) return;
+    if (onPaint && painting.current !== null) {
+      const key = el.dataset.key;
+      if (!key || key === lastTouched.current) return;
+      lastTouched.current = key;
+      onPaint(key, painting.current);
+      return;
+    }
+    if (onUnitClick && clickDragUnit.current !== null) {
+      const unitKey = el.dataset.unitKey;
+      if (!unitKey || unitKey === clickDragUnit.current) return;
+      clickDragUnit.current = unitKey;
+      onUnitClick(unitKey);
+    }
   }
 
   const stateAt = new Map(garden.cells.map((c) => [cellKey(c.r, c.c), c.state]));
@@ -127,33 +142,46 @@ export function GridView({
         <div
           key={k}
           data-key={k}
+          data-unit-key={unitKey ?? undefined}
           className={cls}
           style={style}
           title={
             actionable
               ? clickMode === "harvest"
-                ? "Click to harvest"
-                : "Click to reseed"
+                ? "Click or drag to harvest"
+                : "Click or drag to reseed"
               : undefined
           }
           onPointerDown={
-            onPaint && paintable
+            actionable
               ? (e) => {
                   e.preventDefault();
-                  painting.current = !selected?.has(k);
-                  lastTouched.current = k;
-                  onPaint(k, painting.current);
+                  clickDragUnit.current = unitKey;
+                  onUnitClick?.(unitKey!);
                 }
-              : undefined
+              : onPaint && paintable
+                ? (e) => {
+                    e.preventDefault();
+                    painting.current = !selected?.has(k);
+                    lastTouched.current = k;
+                    onPaint(k, painting.current);
+                  }
+                : undefined
           }
           onPointerEnter={
-            onPaint && paintable
+            actionable
               ? () => {
-                  if (painting.current !== null) onPaint(k, painting.current);
+                  if (clickDragUnit.current !== null && clickDragUnit.current !== unitKey) {
+                    clickDragUnit.current = unitKey;
+                    onUnitClick?.(unitKey!);
+                  }
                 }
-              : undefined
+              : onPaint && paintable
+                ? () => {
+                    if (painting.current !== null) onPaint(k, painting.current);
+                  }
+                : undefined
           }
-          onClick={actionable ? () => onUnitClick?.(unitKey!) : undefined}
         >
           {label}
         </div>,

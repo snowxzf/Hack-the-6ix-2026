@@ -81,19 +81,19 @@
   }
 
   h1 {
-    font-size: 2.85rem;
+    font-size: clamp(2.1rem, 1.6rem + 4vw, 2.85rem);
     line-height: 1.12;
   }
   h2 {
-    font-size: 1.85rem;
+    font-size: clamp(1.4rem, 1.05rem + 2.8vw, 1.85rem);
     line-height: 1.2;
   }
   h3 {
-    font-size: 1.5rem;
+    font-size: clamp(1.2rem, 0.95rem + 2vw, 1.5rem);
     line-height: 1.25;
   }
   h4 {
-    font-size: 1.25rem;
+    font-size: clamp(1.05rem, 0.9rem + 1.2vw, 1.25rem);
   }
 }
 
@@ -213,7 +213,8 @@ body {
   min-height: 0;
   overflow-x: hidden;
   overflow-y: auto;
-  padding: 12px 12px 28px;
+  padding: 12px max(12px, env(safe-area-inset-right)) max(28px, env(safe-area-inset-bottom))
+    max(12px, env(safe-area-inset-left));
   -webkit-overflow-scrolling: touch;
 }
 
@@ -374,8 +375,8 @@ body {
   background: rgba(255, 255, 255, 0.9);
   border: 1px solid hsl(var(--border));
   border-radius: 0;
-  padding: 14px;
-  margin: 10px 0;
+  padding: 16px;
+  margin: 12px 0;
   backdrop-filter: blur(10px);
   max-width: 100%;
   overflow-x: hidden;
@@ -576,6 +577,12 @@ img.photo {
 .cell.actionable:hover {
   outline: 2px solid hsl(var(--primary));
 }
+.cell.actionable.mode-harvest {
+  cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28"><text x="0" y="22" font-size="24">🤏</text></svg>') 14 14, pointer;
+}
+.cell.actionable.mode-reseed {
+  cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28"><text x="0" y="22" font-size="24">🌱</text></svg>') 14 14, pointer;
+}
 .grid-label {
   display: flex;
   align-items: center;
@@ -729,6 +736,33 @@ label.opt {
     hsl(var(--border)) 8px
   );
 }
+.unit-water-btn {
+  flex-shrink: 0;
+  width: 26px;
+  height: 100% !important;
+  min-height: 16px;
+  padding: 0 !important;
+  border: 0 !important;
+  border-left: 1px solid hsl(var(--border));
+  border-radius: 0 !important;
+  background: hsl(var(--muted)) !important;
+  color: hsl(var(--muted-foreground)) !important;
+  font-size: 10px;
+  line-height: 1;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+/* Only actionable on the plant's actual due day — otherwise greyed out
+   above via the base opacity/cursor, so it can't be spammed off-cadence. */
+.unit-water-btn.due {
+  background: hsl(var(--palette-seafoam) / 0.55) !important;
+  color: hsl(var(--foreground)) !important;
+  cursor: pointer;
+  opacity: 1;
+}
+.unit-water-btn.due:hover {
+  background: hsl(var(--palette-seafoam) / 0.8) !important;
+}
 ul.clean {
   list-style: none;
   padding: 0;
@@ -799,10 +833,24 @@ ul.clean li {
   color: #b45309;
 }
 
+/* Normal-flow header strip (not an overlay) — reserves its own height above
+   .app-scroll so it can never overlap HomePanel's greeting/icons or anything
+   else in the scroll content, regardless of what that content renders. */
+.top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: max(8px, env(safe-area-inset-top));
+  padding-left: max(12px, env(safe-area-inset-left));
+  padding-right: max(12px, env(safe-area-inset-right));
+  position: relative;
+  z-index: 20;
+  flex-shrink: 0;
+}
+
 .devtools {
-  position: absolute;
-  top: 10px;
-  right: 10px;
+  position: relative;
   z-index: 50;
 }
 button.devtools-toggle {
@@ -857,7 +905,7 @@ button.devtools-toggle:hover {
 }
 .flow-header h1 {
   font-family: var(--font-heading);
-  font-size: 2.85rem;
+  font-size: clamp(2.1rem, 1.6rem + 4vw, 2.85rem);
   font-weight: 400;
   margin: 0 0 2px;
 }
@@ -873,13 +921,13 @@ button.devtools-toggle:hover {
   font-family: var(--font-heading);
 }
 .card h1 {
-  font-size: 2.85rem;
+  font-size: clamp(2.1rem, 1.6rem + 4vw, 2.85rem);
 }
 .card h2 {
-  font-size: 1.85rem;
+  font-size: clamp(1.4rem, 1.05rem + 2.8vw, 1.85rem);
 }
 .card h3 {
-  font-size: 1.5rem;
+  font-size: clamp(1.2rem, 0.95rem + 2vw, 1.5rem);
 }
 
 @tailwind utilities;
@@ -924,3 +972,29 @@ select,
 textarea {
   border-radius: 0 !important;
 }
+
+.xp-badge {
+  flex-shrink: 0; z-index: 50;
+  background: hsl(var(--primary)); color: hsl(var(--primary-foreground));
+  border: 1px solid hsl(var(--primary));
+  border-radius: 999px; padding: 6px 12px; font-size: 12px; font-weight: 700;
+}
+
+.celebration-overlay {
+  position: absolute; inset: 0; z-index: 100;
+  background: hsl(var(--foreground) / 0.45);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.celebration-card {
+  background: hsl(var(--card)); border: 2px solid hsl(var(--palette-apricot));
+  border-radius: 0;
+  padding: 28px 24px; max-width: 320px; width: 100%; text-align: center;
+  box-shadow: 0 0 40px hsl(var(--palette-apricot) / 0.35);
+}
+.celebration-emoji { font-size: 48px; margin-bottom: 8px; }
+.celebration-card h2 {
+  margin-top: 0; font-family: var(--font-heading); color: hsl(var(--foreground));
+}
+.celebration-card p { color: hsl(var(--muted-foreground)); }
+.celebration-card button { margin-top: 16px; width: 100%; }

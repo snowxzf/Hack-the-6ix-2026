@@ -15,7 +15,10 @@ export function BottomNav(props: {
   onSelect: (t: AppTab) => void;
 }) {
   return (
-    <nav className="z-30 w-full shrink-0 px-3 pb-3 pt-3">
+    <nav
+      className="z-30 w-full shrink-0 px-3 pt-3"
+      style={{ paddingBottom: "max(0.75rem, env(safe-area-inset-bottom))" }}
+    >
       <div className="flex items-center justify-around border border-border bg-white/95 px-1 py-2 shadow-lg shadow-black/10">
         {ITEMS.map(({ id, icon: Icon, label }) => {
           const isActive = props.active === id;

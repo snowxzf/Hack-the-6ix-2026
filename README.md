@@ -28,7 +28,7 @@ watering logistics, and carbon footprint included. PlotTwist helps plants and pe
 |---|---|---|
 | `optimizer/` | `npm install` | `typescript`, `vitest`, `tsx` |
 | `yard-scan/` | `npm install` | `typescript`, `vitest`, `tsx` |
-| `app/` | `npm install` | `react`, `react-dom`, `vite`, `@vitejs/plugin-react`, `typescript` |
+| `app/` | `npm install` | `react`, `react-dom`, `vite`, `@vitejs/plugin-react`, `typescript`, `tailwindcss` v3, `lucide-react` |
 
 ### Python (API / database)
 
@@ -126,3 +126,90 @@ curl "http://localhost:8000/impact/food-waste?foodKg=22.5"
 ```
 
 Example: a garden yielding **22.5 kg** food/season offsets **50%** of the typical Toronto household’s annual fruit & veg waste, **22.5%** of avoidable waste, and keeps an estimated **18 kg** out of the Green Bin.
+
+## 🎮 XP system
+
+Water, harvest, and keep carbon savings climbing — earn XP and level up!
+Implemented in `app/src/xp.ts` (the rules below) and `App.tsx` (the
+earning/losing/streak engine, a corner XP badge, and level-up/streak popups).
+Local to your device — no accounts, no backend.
+
+### Earning XP
+
+- 💧 **Water a due plant** — +2 XP each
+- 🤏 **Harvest a ready plant** — +5 XP
+- 🌱 **Reseed an empty spot** — +3 XP
+- 🌍 **Carbon milestone** — every 5 kg CO₂e your garden saves → +20 XP
+- 🔥 **Streaks** — see below
+
+### Losing XP
+
+- Miss a scheduled watering → **−4 XP** per plant
+- Leave a ready plant unharvested 7+ days → **−2 XP**, repeats weekly until picked
+- XP never drops below your current level's floor — losses slow your next level, never demote you
+
+### Streaks 🔥
+
+Confirm every watering due each day and your streak climbs; miss one day and it resets to 0.
+
+| Streak | Bonus |
+|---|---|
+| 3 days | +10 XP |
+| 7 days | +25 XP |
+| 30 days | +150 XP |
+
+### Levels
+
+| Level | Title | XP needed |
+|---|---|---|
+| 1 | 🌱 Seedling | 0 |
+| 2 | 🪴 Dirt Enthusiast | 150 |
+| 3 | 🌻 Master Grower | 400 |
+| 4 | 👑 Legendary Gardener | 800 |
+
+## Pitch — what to say
+
+Use this as a script outline (≈2–3 min). Swap in live numbers from your demo layout.
+
+### 1. Hook (problem — local + relatable)
+
+> “Toronto single-family homes throw away **over 200 kg of food every year** — more than **100 kg is avoidable**, and **fruits and vegetables are the #1 wasted food** at about **45 kg per household**. Almost **80%** of that still goes in the Green Bin. Canadians waste **$1,300+** of edible food at home annually. People want to grow their own food, but most don’t know *what* fits *their* yard, sun, or skill level — so good intentions turn into wasted space and wasted groceries.”
+
+### 2. Solution (what PlotTwist does)
+
+> “**PlotTwist** scans your yard, learns what you want to grow, and computes an **optimized planting layout** — space, sunlight, watering, companions, and **carbon impact**. When your dream garden doesn’t fit, we **negotiate** — that’s the plot twist: we trade plants, shrink beds, and show greener swaps instead of saying no.”
+
+### 3. Demo beat (show, don’t tell)
+
+Walk through: **Scan → Preferences → Select → Results → Dashboard**
+
+Call out one concrete win from the results screen, e.g.:
+
+> “This **demo backyard** grows **~X kg of food per season**, offsets **Y%** of the average Toronto household’s **fruit & veg waste**, and saves **~Z kg CO₂e** — food plants only, no greenwashing on flowers.”
+
+(Pull X/Y/Z from the app’s **kg food grown**, `/impact/food-waste?foodKg=X`, and **kg CO₂e saved** stats.)
+
+### 4. Why it’s credible
+
+- **Yard scan:** coin or reference object + phone camera → real grid (`yard-scan/`)
+- **Optimizer:** on-device TypeScript engine, tested (`optimizer/`)
+- **Plants & weather:** curated catalog verified vs OpenPlantDB + Perenual, live Open-Meteo, PlantNet ID (`backend/`, `database/`)
+- **Honest carbon:** only food yield × published lifecycle factors; ornamentals = pollinator story, not fake CO₂e
+- **Toronto math:** comparisons backed by City audit data, not vibes (`/impact/food-waste`)
+
+### 5. Close (impact + vision)
+
+> “We’re not just a garden planner — we’re helping **Toronto households grow food that would otherwise be wasted**, with numbers tied to **City waste audits**. PlotTwist turns a backyard photo into a **measurable** step toward less Green Bin waste, lower grocery bills, and lower food-mile emissions. **Helping plants and people grow.**”
+
+### Sound bites (one-liners if judges ask)
+
+- **Problem:** “The average Toronto home wastes **45 kg of produce a year** — we help you grow that instead.”
+- **Differentiator:** “When your garden doesn’t fit, we **negotiate**, not reject.”
+- **Impact:** “Every kg you grow is a kg that never hit the **Green Bin**.”
+- **Honesty:** “We only claim CO₂e on **food you actually yield** — no invented numbers for petunias.”
+
+### What not to claim
+
+- Don’t say PlotTwist eliminates all household food waste — compare to **baselines** (45 / 100 / 200 kg).
+- Don’t conflate **CO₂e from growing vs buying** with **methane from landfill** unless you add a separate model.
+- The **$1,300** figure is **Canadian national** context on Toronto’s page, not a Toronto-only audit — say “estimated” or “roughly.”

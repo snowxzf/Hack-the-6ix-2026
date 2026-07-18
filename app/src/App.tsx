@@ -9,8 +9,22 @@ import type {
 } from "../../optimizer/src/index";
 import { GridView, cellKey, speciesColor } from "./GridView";
 import { PhotoGridOverlay, type ScanPhotoOverlay } from "./PhotoGridOverlay";
-import { CarbonChart } from "./CarbonChart";
+import { CarbonChart, carbonAt, SEASON_MS } from "./CarbonChart";
 import { advanceDevClock, devNow, resetDevClock, useDevClock } from "./devClock";
+import {
+  CARBON_MILESTONE_KG,
+  clampXpLoss,
+  levelForXp,
+  nextLevelForXp,
+  STREAK_BONUSES,
+  XP_CARBON_MILESTONE,
+  XP_HARVEST,
+  XP_MISSED_WATERING,
+  XP_RESEED,
+  XP_UNHARVESTED_WEEKLY,
+  XP_WATER_PER_PLANT,
+  type LevelInfo,
+} from "./xp";
 import {
   FAKE_WEATHER_ALERT,
   gardenFromRectangleCm,
@@ -117,6 +131,10 @@ interface SavedGarden {
    *  bar restarts independently of both the garden's plantedAt and every
    *  other unit of the same species. Absent = still on the garden's clock. */
   unitPlantedAt: Record<string, number>;
+  /** Per-unit last confirmed-watering timestamp (via the "✓ I watered these"
+   *  button). Once set, it becomes that unit's watering-cadence anchor going
+   *  forward instead of plantedAt/unitPlantedAt — see xp system in README. */
+  lastWateredAt: Record<string, number>;
 }
 
 /** Everything needed to resume mid-flow after a refresh. `photo` and
@@ -144,12 +162,41 @@ interface PersistedState {
   cloudId: string | null;
   harvestedUnits: string[];
   unitPlantedAt: Record<string, number>;
+  lastWateredAt: Record<string, number>;
+  /** XP/streak/level tracking — account-wide (spans every saved garden), not
+   *  per-garden, since it's tracking the user's care habit, not one plot. */
+  xp: number;
+  streakDays: number;
+  /** Last simulated day-index (devNow() / DAY_MS, floored) the daily XP tick
+   *  (missed-watering penalties + streak advance) has processed through. */
+  lastXpTickDay: number | null;
+  /** How many 5kg-CO2e milestones have already paid out XP, across all
+   *  gardens combined — prevents re-awarding the same milestone. */
+  carbonMilestonesClaimed: number;
 }
 
 // Bumped from v2: single-garden fields (onboarded, the working state) split
 // into a `gardens[]` library + one working copy that mirrors whichever
 // garden is active, so a user can create and switch between multiple gardens.
 const STORAGE_KEY = "plottwist:v3";
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** A unit needs water once at least waterEveryDays have passed since its
+ * anchor — and STAYS needing water every day after that (not just the one
+ * exact day it first became due) until it's actually watered, which resets
+ * the anchor and the countdown. Missing a watering doesn't make the button
+ * disappear; it stays clickable/overdue until you act on it.
+ * Anchor = lastWateredAt (once ever confirmed) else unitPlantedAt (once
+ * reseeded) else the garden's own plantedAt. */
+function isUnitDue(
+  now: number,
+  effectiveAnchor: number | null,
+  waterEveryDays: number,
+): boolean {
+  if (!effectiveAnchor || waterEveryDays <= 0) return false;
+  const days = Math.max(0, Math.floor((now - effectiveAnchor) / DAY_MS));
+  return days >= waterEveryDays;
+}
 
 function loadPersisted(): PersistedState | null {
   try {
@@ -212,11 +259,36 @@ export function App() {
   const [harvestedUnits, setHarvestedUnits] = useState<string[]>(saved?.harvestedUnits ?? []);
   const [unitPlantedAt, setUnitPlantedAt] = useState<Record<string, number>>(
     saved?.unitPlantedAt ?? {},
- );
+  );
+  const [lastWateredAt, setLastWateredAt] = useState<Record<string, number>>(
+    saved?.lastWateredAt ?? {},
+  );
   const [catalogSource, setCatalogSource] = useState<"demo" | "live">("demo");
   const [catalogCount, setCatalogCount] = useState(CATALOG.length);
   /** Which garden to restore if the user cancels "+ New garden" mid-flow. */
   const newGardenReturnIdRef = useRef<string | null>(null);
+
+  // Account-wide XP/level/streak — see README "🎮 XP system".
+  const [xp, setXp] = useState(saved?.xp ?? 0);
+  const [streakDays, setStreakDays] = useState(saved?.streakDays ?? 0);
+  const [lastXpTickDay, setLastXpTickDay] = useState<number | null>(
+    saved?.lastXpTickDay ?? null,
+  );
+  const [carbonMilestonesClaimed, setCarbonMilestonesClaimed] = useState(
+    saved?.carbonMilestonesClaimed ?? 0,
+  );
+  // Ephemeral (not persisted) — the level-up/streak popup, if one is showing.
+  const [celebration, setCelebration] = useState<
+    { kind: "level"; level: LevelInfo } | { kind: "streak"; days: number; bonus: number } | null
+  >(null);
+  const { now } = useDevClock();
+  // Guard refs for the combined XP-tick effect below — synchronous (unlike
+  // state) so a same-render duplicate call (React 18 StrictMode's dev-only
+  // double-invocation of effects) sees the update from the first call and
+  // no-ops instead of double-applying penalties/bonuses.
+  const tickDayRef = useRef<number | null>(saved?.lastXpTickDay ?? null);
+  const carbonMilestoneRef = useRef(saved?.carbonMilestonesClaimed ?? 0);
+  const streakDaysRef = useRef(saved?.streakDays ?? 0);
 
   // Upgrade the bundled catalog to the backend's curated one when reachable.
   useEffect(() => {
@@ -255,6 +327,7 @@ export function App() {
               cloudId,
               harvestedUnits,
               unitPlantedAt,
+              lastWateredAt,
             }
  : g,
  ),
@@ -274,6 +347,7 @@ export function App() {
     cloudId,
     harvestedUnits,
     unitPlantedAt,
+    lastWateredAt,
   ]);
 
   useEffect(() => {
@@ -296,6 +370,11 @@ export function App() {
       cloudId,
       harvestedUnits,
       unitPlantedAt,
+      lastWateredAt,
+      xp,
+      streakDays,
+      lastXpTickDay,
+      carbonMilestonesClaimed,
     };
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
@@ -321,7 +400,101 @@ export function App() {
     cloudId,
     harvestedUnits,
     unitPlantedAt,
+    lastWateredAt,
+    xp,
+    streakDays,
+    lastXpTickDay,
+    carbonMilestonesClaimed,
   ]);
+
+  /** (1) Pays out carbon-savings milestones as they're crossed — continuous,
+   *  not day-gated. (2) Once per elapsed simulated day, penalizes any
+   *  watering that was due and never confirmed, and advances/breaks the
+   *  streak. Both land in one combined XP delta applied via a single setXp
+   *  call — two separate effects each computing `xp + delta` from the same
+   *  stale render closure would silently drop one delta when React coalesces
+   *  same-commit setState calls to the same variable. */
+  useEffect(() => {
+    let xpDelta = 0;
+    let celebrationCandidate: { kind: "streak"; days: number; bonus: number } | null = null;
+
+    let totalCarbonSoFar = 0;
+    for (const g of gardens) {
+      if (!g.plantedAt || !g.result) continue;
+      totalCarbonSoFar += carbonAt(now, g.plantedAt, g.result.carbon.kgCo2eSeason);
+    }
+    const milestonesReached = Math.floor(totalCarbonSoFar / CARBON_MILESTONE_KG);
+    if (milestonesReached > carbonMilestoneRef.current) {
+      xpDelta += (milestonesReached - carbonMilestoneRef.current) * XP_CARBON_MILESTONE;
+      carbonMilestoneRef.current = milestonesReached;
+      setCarbonMilestonesClaimed(milestonesReached);
+    }
+
+    const currentDay = Math.floor(now / DAY_MS);
+    if (tickDayRef.current === null) {
+      tickDayRef.current = currentDay;
+    } else if (currentDay > tickDayRef.current) {
+      const fromDay = tickDayRef.current;
+      tickDayRef.current = currentDay;
+      let streak = streakDaysRef.current;
+
+      for (let d = fromDay + 1; d <= currentDay; d++) {
+        let anyDueToday = false;
+        let allConfirmed = true;
+        for (const g of gardens) {
+          if (!g.plantedAt || !g.result) continue;
+          for (const p of g.result.placements) {
+            const key = cellKey(p.origin[0], p.origin[1]);
+            if (g.harvestedUnits.includes(key)) continue;
+            const species = byId.get(p.speciesId);
+            if (!species || species.waterEveryDays <= 0) continue;
+            const anchor = g.lastWateredAt[key] ?? g.unitPlantedAt[key] ?? g.plantedAt;
+            const anchorDay = Math.floor(anchor / DAY_MS);
+            if (!(d > anchorDay && (d - anchorDay) % species.waterEveryDays === 0)) continue;
+            anyDueToday = true;
+            const wateredDay =
+              g.lastWateredAt[key] != null ? Math.floor(g.lastWateredAt[key] / DAY_MS) : null;
+            if (wateredDay !== d) {
+              allConfirmed = false;
+              xpDelta += XP_MISSED_WATERING;
+            }
+          }
+        }
+        if (anyDueToday) {
+          if (allConfirmed) {
+            streak += 1;
+            const bonus = STREAK_BONUSES[streak];
+            if (bonus) {
+              xpDelta += bonus;
+              celebrationCandidate = { kind: "streak", days: streak, bonus };
+            }
+          } else {
+            streak = 0;
+          }
+        }
+      }
+
+      streakDaysRef.current = streak;
+      setStreakDays(streak);
+    }
+
+    if (xpDelta !== 0) {
+      setXp((x) => {
+        const next = xpDelta >= 0 ? x + xpDelta : clampXpLoss(x, xpDelta);
+        const prevLevel = levelForXp(x);
+        const nextLevel = levelForXp(next);
+        if (nextLevel.level > prevLevel.level) {
+          setCelebration({ kind: "level", level: nextLevel });
+        } else if (celebrationCandidate) {
+          setCelebration(celebrationCandidate);
+        }
+        return next;
+      });
+    } else if (celebrationCandidate) {
+      setCelebration(celebrationCandidate);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [now, gardens]);
 
   const paintableKeys = useMemo(() => {
     if (!garden) return [];
@@ -449,12 +622,11 @@ export function App() {
     run(nextBanned, nextTargets);
   }
 
-  /** Load a saved garden into the working copy: the Dashboard's garden
-   *  dropdown only ever appears in plain view mode (never mid-edit, since
-   *  editing keeps activeTab pinned to "planner"), so there's never an
-   *  in-progress draft to lose here. */
   /** Loads a saved garden's data into the working copy: the shared core of
-   *  switchGarden() and "delete the active garden, fall back to another". */
+   *  switchGarden() and "delete the active garden, fall back to another".
+   *  The Dashboard's garden dropdown only ever appears in plain view mode
+   *  (never mid-edit, since editing keeps activeTab pinned to "planner"), so
+   *  there's never an in-progress draft to lose here. */
   function loadGarden(g: SavedGarden) {
     setActiveGardenId(g.id);
     setGarden(g.garden);
@@ -469,6 +641,7 @@ export function App() {
     setCloudId(g.cloudId);
     setHarvestedUnits(g.harvestedUnits ?? []);
     setUnitPlantedAt(g.unitPlantedAt ?? {});
+    setLastWateredAt(g.lastWateredAt ?? {});
     setPhoto(null);
     setScanInfo(null);
     setStep("results");
@@ -492,24 +665,59 @@ export function App() {
     setCloudId(null);
     setHarvestedUnits([]);
     setUnitPlantedAt({});
+    setLastWateredAt({});
     setPhoto(null);
     setScanInfo(null);
     setClickMode(null);
   }
 
+  /** Applies an XP delta (positive or negative), clamping losses at the
+   *  current level's floor, and arms the celebration popup on level-up.
+   *  Reads `xp` from the render closure — fine for the single-call-per-click
+   *  sites here, but callers that might award XP more than once per call
+   *  (the daily tick) must total the delta themselves and call this once,
+   *  not loop it, to avoid acting on a stale `xp`. */
+  function addXp(delta: number) {
+    const next = delta >= 0 ? xp + delta : clampXpLoss(xp, delta);
+    const prevLevel = levelForXp(xp);
+    const nextLevel = levelForXp(next);
+    setXp(next);
+    if (nextLevel.level > prevLevel.level) {
+      setCelebration({ kind: "level", level: nextLevel });
+    }
+  }
+
   /** Harvest one specific planting unit (by its grid-origin key): leaves an
    *  empty, reseedable spot behind rather than just decrementing a count, so
-   *  two same-species plants can be tracked (and shown) independently. */
+   *  two same-species plants can be tracked (and shown) independently.
+   *  Guarded on the current state (not just GridView's drag-dedup) so
+   *  dragging back over an already-harvested unit mid-gesture can't double
+   *  award XP. */
   function harvestUnit(unitKey: string) {
-    setHarvestedUnits((h) => (h.includes(unitKey) ? h : [...h, unitKey]));
+    if (harvestedUnits.includes(unitKey)) return;
+    setHarvestedUnits((h) => [...h, unitKey]);
+    addXp(XP_HARVEST);
   }
 
   /** Replant one empty unit: clears its harvested flag and restarts just
    *  that spot's progress clock from right now, independent of every other
-   *  unit: including other plants of the same species. */
+   *  unit: including other plants of the same species. Same double-XP
+   *  guard as harvestUnit. */
   function reseedUnit(unitKey: string) {
+    if (!harvestedUnits.includes(unitKey)) return;
     setHarvestedUnits((h) => h.filter((k) => k !== unitKey));
     setUnitPlantedAt((r) => ({ ...r, [unitKey]: devNow() }));
+    addXp(XP_RESEED);
+  }
+
+  /** Marks one specific planting unit as watered right now — the 💧 button
+   *  next to its bar in "Your plants". Always available (not gated behind
+   *  the due-today check, so it's never invisible/confusing to find); stamps
+   *  lastWateredAt, which becomes that unit's cadence anchor going forward,
+   *  and awards XP for the single plant. */
+  function waterUnit(unitKey: string) {
+    setLastWateredAt((w) => ({ ...w, [unitKey]: devNow() }));
+    addXp(XP_WATER_PER_PLANT);
   }
 
   /** Grid-click dispatch while a mode is armed: GridView already restricts
@@ -642,9 +850,17 @@ export function App() {
   return (
     <WeatherProvider plantIds={weatherPlantIds}>
       <WeatherBackground />
-      <div className="app-scroll">
+      {/* Normal-flow header strip, not a floating overlay — reserves its own
+          height above .app-scroll so it can never overlap HomePanel's
+          greeting/icons or anything else in the scroll content below it. */}
+      <div className="top-bar">
+        {onboarded ? <XpBadge xp={xp} /> : <span />}
         <DevTools onRestart={hardResetApp} />
-
+      </div>
+      {celebration && (
+        <CelebrationPopup celebration={celebration} onDismiss={() => setCelebration(null)} />
+      )}
+      <div className="app-scroll">
         {showFlowChrome && (
           <>
             <div className="flow-header">
@@ -737,7 +953,7 @@ export function App() {
                 onBack={() => setStep("review")}
                 skippable={editingLayout}
               />
- )}
+            )}
             {step === "select" && garden && (
               <SelectScreen
                 garden={garden}
@@ -753,7 +969,7 @@ export function App() {
                 onBack={() => setStep("prefs")}
                 skippable={editingLayout}
               />
- )}
+            )}
             {step === "results" && garden && result && onboarded && !editingLayout && (
               <>
                 <GardenSwitcher
@@ -782,10 +998,10 @@ export function App() {
                       Tap {clickMode === "harvest" ? "a grown" : "an empty"} plant on the grid
                       below.
                     </span>
- )}
+                  )}
                 </div>
               </>
- )}
+            )}
             {step === "results" && garden && result && (
               <ResultsScreen
                 garden={requestGarden()}
@@ -799,24 +1015,24 @@ export function App() {
                 onUnitClick={handleUnitClick}
                 onEdit={
                   onboarded && !editingLayout
- ? () => {
+                    ? () => {
                         setEditingLayout(true);
                         setStep("scan");
                         setClickMode(null);
                       }
- : undefined
+                    : undefined
                 }
                 onTweak={!onboarded || editingLayout ? () => setStep("select") : undefined}
                 onConfirm={
- !onboarded || editingLayout
- ? () => {
+                  !onboarded || editingLayout
+                    ? () => {
                         const effectivePlantedAt = plantedAt ?? Date.now();
                         if (!activeGardenId) {
                           // Brand-new garden: joins the library now, not before.
                           newGardenReturnIdRef.current = null;
                           const id = crypto.randomUUID();
                           setGardens((gs) => [
- ...gs,
+                            ...gs,
                             {
                               id,
                               name: draftName.trim() || `Garden ${gs.length + 1}`,
@@ -833,6 +1049,7 @@ export function App() {
                               cloudId: null,
                               harvestedUnits: [],
                               unitPlantedAt: {},
+                              lastWateredAt: {},
                             },
                           ]);
                           setActiveGardenId(id);
@@ -848,12 +1065,12 @@ export function App() {
                           preferences: prefs,
                         }).then(setCloudId);
                       }
- : undefined
+                    : undefined
                 }
               />
- )}
+            )}
           </>
- )}
+        )}
 
         {onboarded && activeTab === "dashboard" && (
           <HomePanel
@@ -868,7 +1085,7 @@ export function App() {
             onOpenGarden={() => setActiveTab("garden")}
             onOpenPlan={() => setActiveTab("planner")}
           />
- )}
+        )}
 
         {onboarded && activeTab === "garden" && result && (
           <DashboardScreen
@@ -884,8 +1101,10 @@ export function App() {
             onDeleteGarden={deleteGarden}
             harvestedUnits={harvestedUnits}
             unitPlantedAt={unitPlantedAt}
+            lastWateredAt={lastWateredAt}
+            onWaterUnit={waterUnit}
           />
- )}
+        )}
 
         {onboarded && activeTab === "learn" && <LearnPanel />}
 
@@ -967,7 +1186,53 @@ function DevTools(props: { onRestart: () => void }) {
         </div>
  )}
     </div>
- );
+  );
+}
+
+/** Fixed corner XP/level readout. */
+function XpBadge(props: { xp: number }) {
+  const level = levelForXp(props.xp);
+  const next = nextLevelForXp(props.xp);
+  return (
+    <div className="xp-badge" title={`${level.title} — ${props.xp} XP`}>
+      {level.emoji} Lvl {level.level} · {props.xp}
+      {next ? ` / ${next.minXp} XP` : " XP (max)"}
+    </div>
+  );
+}
+
+/** Celebration overlay for a level-up or a streak-bonus milestone — either
+ *  click dismisses it. Level-up takes priority over a same-tick streak
+ *  bonus (see the combined XP-tick effect), so at most one shows at once. */
+function CelebrationPopup(props: {
+  celebration:
+    | { kind: "level"; level: LevelInfo }
+    | { kind: "streak"; days: number; bonus: number };
+  onDismiss: () => void;
+}) {
+  const { celebration } = props;
+  return (
+    <div className="celebration-overlay" onClick={props.onDismiss}>
+      <div className="celebration-card" onClick={(e) => e.stopPropagation()}>
+        {celebration.kind === "level" ? (
+          <>
+            <div className="celebration-emoji">{celebration.level.emoji}</div>
+            <h2>Level up!</h2>
+            <p className="muted">
+              You're now a <b>{celebration.level.title}</b> — Level {celebration.level.level}.
+            </p>
+          </>
+        ) : (
+          <>
+            <div className="celebration-emoji">🔥</div>
+            <h2>{celebration.days}-Day Streak!</h2>
+            <p className="muted">+{celebration.bonus} XP for watering on schedule.</p>
+          </>
+        )}
+        <button onClick={props.onDismiss}>Nice!</button>
+      </div>
+    </div>
+  );
 }
 
 /* ─────────────── 1. Scan (yard-scan: coin or custom reference) ─────────────── */
@@ -3382,25 +3647,29 @@ function DashboardScreen(props: {
   onDeleteGarden: (id: string) => void;
   harvestedUnits: string[];
   unitPlantedAt: Record<string, number>;
+  lastWateredAt: Record<string, number>;
+  onWaterUnit: (unitKey: string) => void;
 }) {
   const { result } = props;
   const planted = Object.entries(result.counts).filter(([, n]) => n > 0);
   const { now } = useDevClock();
   const harvestedSet = new Set(props.harvestedUnits);
 
-  // Day 0 = planted today. Cadence "due" matches backend/simulation.py's
-  // watering_due_on_day: nothing due on day 0 (just watered by definition),
-  // then due every waterEveryDays days after.
-  const daysSincePlanted = props.plantedAt
- ? Math.max(0, Math.floor((now - props.plantedAt) / (24 * 60 * 60 * 1000)))
- : 0;
-  const isDueToday = (days: number) => daysSincePlanted > 0 && daysSincePlanted % days === 0;
-
-  const trips = new Map<number, string[]>();
-  for (const [id] of planted) {
-    const s = byId.get(id);
+  // Each cadence group tracks its *own* per-unit due-today check (a unit's
+  // anchor shifts to lastWateredAt once it's ever been confirmed, and again
+  // to unitPlantedAt on reseed), not one garden-wide day count — matches
+  // "Your plants" below, which already tracks per-unit progress this way.
+  const trips = new Map<number, { names: Set<string>; dueUnitKeys: string[] }>();
+  for (const p of result.placements) {
+    const key = cellKey(p.origin[0], p.origin[1]);
+    if (harvestedSet.has(key)) continue;
+    const s = byId.get(p.speciesId);
     if (!s) continue;
-    trips.set(s.waterEveryDays, [...(trips.get(s.waterEveryDays) ?? []), s.name]);
+    const entry = trips.get(s.waterEveryDays) ?? { names: new Set<string>(), dueUnitKeys: [] };
+    entry.names.add(s.name);
+    const anchor = props.lastWateredAt[key] ?? props.unitPlantedAt[key] ?? props.plantedAt;
+    if (isUnitDue(now, anchor, s.waterEveryDays)) entry.dueUnitKeys.push(key);
+    trips.set(s.waterEveryDays, entry);
   }
 
   return (
@@ -3434,21 +3703,21 @@ function DashboardScreen(props: {
         <p className="muted">Beds that drink together sit together: one trip each.</p>
         <ul className="clean">
           {[...trips.entries()]
- .sort((a, b) => a[0] - b[0])
- .map(([days, names]) => (
+            .sort((a, b) => a[0] - b[0])
+            .map(([days, { names, dueUnitKeys }]) => (
               <li key={days}>
-                <b>Every {days} day{days > 1 ? "s" : ""}:</b> {names.join(", ")}
-                {isDueToday(days) && <span className="tiny"> · due today (day {daysSincePlanted})</span>}
+                <b>Every {days} day{days > 1 ? "s" : ""}:</b> {[...names].join(", ")}
+                {dueUnitKeys.length > 0 && <span className="tiny"> · 💧 needs water</span>}
               </li>
- ))}
+            ))}
         </ul>
       </div>
 
       <div className="card">
         <h2>Your plants</h2>
         <p className="muted">
-          Each stacked bar is one planted spot: hover for its square on the grid. Use 
-          Harvest / Reseed on the Garden Planner to act on them.
+          Each row is one planted spot — tap 💧 to log watering it, or use Harvest /
+          Reseed on the Garden Planner.
         </p>
         {planted.map(([id]) => {
           const s = byId.get(id);
@@ -3490,6 +3759,15 @@ function DashboardScreen(props: {
                   const denom = harvest ?? 60;
                   const progress = Math.min(1, unitDays / denom);
                   const pct = Math.round(progress * 100);
+                  // Watering has its own anchor/clock, separate from the
+                  // harvest-progress one above: it shifts to lastWateredAt
+                  // once ever confirmed. Once due it STAYS due/clickable
+                  // (doesn't grey back out) until actually watered — missing
+                  // a day shouldn't hide the button, see isUnitDue().
+                  const wateringAnchor =
+                    props.lastWateredAt[key] ?? props.unitPlantedAt[key] ?? props.plantedAt;
+                  const needsWater =
+                    !isEmpty && isUnitDue(now, wateringAnchor, s.waterEveryDays);
 
                   return (
                     <div
@@ -3507,6 +3785,21 @@ function DashboardScreen(props: {
                       <div className={`unit-bar${isEmpty ? " empty" : ""}`}>
                         {!isEmpty && <div style={{ width: `${Math.max(4, pct)}%` }} />}
                       </div>
+                      {!isEmpty && (
+                        <button
+                          type="button"
+                          className={`unit-water-btn${needsWater ? " due" : ""}`}
+                          disabled={!needsWater}
+                          title={
+                            needsWater
+                              ? "Log watering this plant (+2 XP)"
+                              : `Not due yet — waters every ${s.waterEveryDays}d`
+                          }
+                          onClick={() => props.onWaterUnit(key)}
+                        >
+                          💧
+                        </button>
+                      )}
                     </div>
  );
                 })}
