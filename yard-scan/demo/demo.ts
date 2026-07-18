@@ -20,6 +20,7 @@ const left: ScanFrame = {
     { x: 100, y: 700 },
   ],
   coin: {
+    mode: "custom_object",
     kind: "custom",
     customDiameterCm: 5,
     centerPx: { x: 120, y: 680 },

@@ -22,11 +22,15 @@ export function projectFramesToGround(
     frameId: f.id,
     polygonCm: polygonImageToGroundCm(
       f.bedPolygonPx,
-      f.coin ? f.coin.centerPx : originPx,
+      frameReference(f)?.centerPx ?? originPx,
       scale.cmPerPxGround,
       f.attitude.rollRad ?? rollRad,
     ),
   }));
+}
+
+function frameReference(f: ScanFrame) {
+  return f.reference ?? f.coin;
 }
 
 /**

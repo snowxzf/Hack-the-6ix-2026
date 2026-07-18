@@ -52,6 +52,7 @@ describe("scanYard single frame", () => {
         { x: 100, y: 500 },
       ],
       coin: {
+        mode: "custom_object",
         kind: "custom",
         customDiameterCm: 10,
         centerPx: { x: 100, y: 100 },
@@ -85,6 +86,7 @@ describe("scanYard multi-frame stitch", () => {
         { x: 0, y: 200 },
       ],
       coin: {
+        mode: "custom_object",
         kind: "custom",
         customDiameterCm: 10,
         centerPx: { x: 0, y: 0 },

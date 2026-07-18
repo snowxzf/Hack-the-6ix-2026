@@ -1,32 +1,35 @@
 import { attitudeWarnings, groundScaleFromAttitude } from "./attitude";
-import { scaleFromCoin } from "./coin";
+import { scaleFromReference } from "./coin";
 import { boundsOf, polygonAreaCm2 } from "./geometry";
 import { worldPolygonToGardenGrid } from "./grid";
 import { projectFramesToGround, stitchWorldPolygons } from "./stitch";
 import type {
+  ScaleReference,
   ScanFrame,
   ScanOptions,
   ScaleInfo,
   YardScanResult,
 } from "./types";
 
+function frameReference(f: ScanFrame): ScaleReference | undefined {
+  return f.reference ?? f.coin;
+}
+
 /**
  * Full yard-scan pipeline:
- *  1. Find a coin reference across frames → cm/px scale
+ *  1. Find a scale reference (coin recommended, or any known-size object)
  *  2. Apply device pitch/roll → ground-plane scale
  *  3. Project bed polygons to cm
- *  4. Stitch multiple frames if needed (AR pose or pan hints)
+ *  4. Stitch multiple frames if needed
  *  5. Rasterize to GardenGrid for the optimizer
- *
- * The mobile app supplies: camera image → (CV) coin + bed outline,
- * plus CoreMotion/ARKit attitude on each shutter press.
  */
 export function scanYard(
   frames: ScanFrame[],
   options: ScanOptions = {},
 ): YardScanResult {
   const cellSizeCm = options.cellSizeCm ?? 30;
-  const minConf = options.minCoinConfidence ?? 0.4;
+  const minConf =
+    options.minReferenceConfidence ?? options.minCoinConfidence ?? 0.4;
   const warnings: string[] = [];
 
   if (!frames.length) {
@@ -39,38 +42,47 @@ export function scanYard(
     warnings.push(...attitudeWarnings(f.attitude));
   }
 
-  const coinFrame = frames.find(
-    (f) => f.coin && f.coin.confidence >= minConf,
-  );
-  if (!coinFrame?.coin) {
+  const refFrame = frames.find((f) => {
+    const r = frameReference(f);
+    return r && r.confidence >= minConf;
+  });
+  const ref = refFrame ? frameReference(refFrame) : undefined;
+  if (!refFrame || !ref) {
     throw new Error(
-      "Place a coin in at least one frame (or lower minCoinConfidence).",
+      "Mark a scale reference in at least one frame — a coin (recommended) or any object with a known size.",
     );
   }
 
-  const { cmPerPx, referenceDiameterCm } = scaleFromCoin(
-    coinFrame.coin.diameterPx,
-    coinFrame.coin.kind,
-    coinFrame.coin.customDiameterCm,
+  const { cmPerPx, referenceDiameterCm } = scaleFromReference(
+    ref.diameterPx,
+    ref.kind,
+    ref.customDiameterCm,
   );
 
-  const ground = groundScaleFromAttitude(cmPerPx, coinFrame.attitude);
+  const ground = groundScaleFromAttitude(cmPerPx, refFrame.attitude);
   const scale: ScaleInfo = {
     cmPerPx,
-    reference: coinFrame.coin.kind,
+    reference: ref.kind,
+    referenceMode: ref.mode,
+    referenceLabel: ref.label,
     referenceDiameterCm,
     cmPerPxGround: ground,
   };
 
-  if (coinFrame.coin.confidence < 0.7) {
-    warnings.push("Coin detection confidence is moderate — double-check scale.");
+  if (ref.confidence < 0.7) {
+    warnings.push("Reference confidence is moderate — double-check the size you entered.");
+  }
+  if (ref.mode === "custom_object") {
+    warnings.push(
+      "Custom object scale depends on the size you typed — measure carefully.",
+    );
   }
 
   const projected = projectFramesToGround(
     frames,
     scale,
-    coinFrame.coin.centerPx,
-    coinFrame.attitude.rollRad ?? 0,
+    ref.centerPx,
+    refFrame.attitude.rollRad ?? 0,
   );
 
   const worldBed = stitchWorldPolygons(frames, projected);

@@ -1,45 +1,76 @@
 /**
- * Hooks the mobile app implements — CV + device sensors plug in here.
- * This package stays pure math so it runs in Node, RN, or the browser.
+ * Hooks the mobile / test app implements — CV + device sensors plug in here.
  */
 
-import type { CoinDetection, DeviceAttitude, Point2, ReferenceKind } from "./types";
+import { referenceFromEdgeTaps } from "./coin";
+import type {
+  Point2,
+  ReferenceKind,
+  ScaleReference,
+  ScaleReferenceMode,
+  DeviceAttitude,
+} from "./types";
 
 /** Map CoreMotion / ARKit gravity to our pitch-from-nadir convention. */
 export function attitudeFromGravity(
   gravity: { x: number; y: number; z: number },
   rollRad = 0,
 ): DeviceAttitude {
-  // When phone is flat face-up, gravity ≈ (0, 0, -1) in many APIs.
-  // Pitch from nadir ≈ angle between -gravity and the camera look axis.
-  // Simplified: use |z| dominance for overhead shots.
   const g = Math.hypot(gravity.x, gravity.y, gravity.z) || 1;
   const nz = Math.abs(gravity.z) / g;
   const pitchFromNadirRad = Math.acos(Math.min(1, Math.max(0, nz)));
   return { pitchFromNadirRad, rollRad };
 }
 
-/**
- * Placeholder coin detector — replace with Vision/OpenCV circle Hough
- * or a tiny on-device model. For demos, the UI can let the user tap the coin
- * and drag a diameter handle (most reliable at a hackathon).
- */
+/** Quick helper: center + diameter in px (e.g. after circle detect). */
 export function mockCoinFromTap(
   centerPx: Point2,
   diameterPx: number,
   kind: ReferenceKind = "cad_quarter",
   confidence = 0.95,
-): CoinDetection {
-  return { kind, centerPx, diameterPx, confidence };
+): ScaleReference {
+  return {
+    mode: kind === "custom" ? "custom_object" : "coin",
+    kind,
+    centerPx,
+    diameterPx,
+    confidence,
+  };
 }
+
+export function mockReferenceFromTap(
+  centerPx: Point2,
+  diameterPx: number,
+  opts: {
+    mode: ScaleReferenceMode;
+    kind: ReferenceKind;
+    customDiameterCm?: number;
+    label?: string;
+    confidence?: number;
+  },
+): ScaleReference {
+  return {
+    mode: opts.mode,
+    kind: opts.kind,
+    label: opts.label,
+    customDiameterCm: opts.customDiameterCm,
+    centerPx,
+    diameterPx,
+    confidence: opts.confidence ?? 0.95,
+  };
+}
+
+export { referenceFromEdgeTaps };
 
 /** UX copy for the scan screen. */
 export const SCAN_UX = {
   placeCoin:
-    "Place a coin on the soil at the edge of your bed, then frame it in the shot.",
+    "Place a coin on the soil (recommended), then tap both edges of it in the photo.",
+  placeCustom:
+    "Or pick any object in the photo, type how wide it is in cm, and tap both edges.",
   holdOverhead:
     "Hold the phone more overhead (not at a steep angle) for accurate size.",
-  outlineBed: "Tap the corners of your garden bed, or drag the outline.",
+  outlineBed: "Tap the corners of your garden bed (at least 3).",
   multiFrame:
     "Yard too big? Capture overlapping photos left→right; we'll stitch them.",
   confirmDims: (wCm: number, hCm: number) =>

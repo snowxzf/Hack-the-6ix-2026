@@ -1,30 +1,86 @@
 /**
  * ─────────────────────────────────────────────────────────────
- *  JESSICA INTEGRATION POINTS — every fake thing lives here.
- *  Replace the bodies, keep the signatures, nothing else moves.
+ *  JESSICA INTEGRATION POINTS — every fake / live bridge lives here.
  * ─────────────────────────────────────────────────────────────
  */
 import { MOCK_CATALOG, SUBURBAN } from "../../optimizer/src/index";
 import type { GardenGrid, Species } from "../../optimizer/src/index";
+import {
+  scanYard,
+  referenceFromEdgeTaps,
+  type Point2,
+  type ReferenceKind,
+  type ScaleReferenceMode,
+  type YardScanResult,
+} from "../../yard-scan/src/index";
 
-/** TODO(Jessica): photo → CV segmentation → grid. For now every photo becomes the demo yard. */
+/** Fallback demo yard when the user skips measuring. */
 export function scanPhotoToGarden(_photoUrl: string | null): GardenGrid {
   return structuredClone(SUBURBAN);
 }
 
-/** TODO(Jessica): fetch curated catalog from Mongo/plants.json, fall back to bundled mock. */
+export interface MeasureYardInput {
+  imageWidthPx: number;
+  imageHeightPx: number;
+  /** Two taps across the reference object (coin or custom). */
+  referenceEdgeA: Point2;
+  referenceEdgeB: Point2;
+  /** Bed corner taps (≥ 3). */
+  bedCorners: Point2[];
+  mode: ScaleReferenceMode;
+  coinKind?: Exclude<ReferenceKind, "custom">;
+  customSizeCm?: number;
+  customLabel?: string;
+  /** Pitch from nadir; 0 = overhead. Web demo defaults to a mild tilt. */
+  pitchFromNadirRad?: number;
+}
+
+/** Live yard-scan: coin (recommended) or any known-size object → GardenGrid. */
+export function measureYardFromTaps(input: MeasureYardInput): YardScanResult {
+  const mode = input.mode;
+  const kind: ReferenceKind =
+    mode === "coin" ? (input.coinKind ?? "cad_quarter") : "custom";
+
+  if (mode === "custom_object" && !(input.customSizeCm && input.customSizeCm > 0)) {
+    throw new Error("Enter how wide your reference object is (cm).");
+  }
+
+  const reference = referenceFromEdgeTaps(input.referenceEdgeA, input.referenceEdgeB, {
+    mode,
+    kind,
+    customDiameterCm: mode === "custom_object" ? input.customSizeCm : undefined,
+    label: mode === "custom_object" ? input.customLabel || "custom object" : undefined,
+  });
+
+  return scanYard(
+    [
+      {
+        id: "web-frame",
+        widthPx: input.imageWidthPx,
+        heightPx: input.imageHeightPx,
+        attitude: {
+          pitchFromNadirRad: input.pitchFromNadirRad ?? (12 * Math.PI) / 180,
+        },
+        bedPolygonPx: input.bedCorners,
+        reference,
+      },
+    ],
+    { cellSizeCm: 30 },
+  );
+}
+
+/** TODO(Jessica): fetch curated catalog from Mongo/plants.json. */
 export function getCatalog(): Species[] {
   return MOCK_CATALOG;
 }
 
-/** TODO(Jessica/UI): Open-Meteo forecast → rule engine. Hardcoded storm for the demo. */
+/** TODO(Jessica/UI): wire live Open-Meteo from backend /weather. */
 export const FAKE_WEATHER_ALERT = {
   severity: "warning" as const,
   title: "⛈ Thunderstorm Friday ~6 PM",
   advice: "Petunia Protection Protocol: cover seedlings and move potted succulents inside.",
 };
 
-/** TODO(Jessica): per-species daysToHarvest in the real catalog. Rough per-category stand-ins. */
 export const DAYS_TO_HARVEST: Record<string, number> = {
   veggies: 70,
   herbs: 40,

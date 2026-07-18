@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type MouseEvent } from "react";
 import { optimizeGarden } from "../../optimizer/src/index";
 import type {
   GardenGrid,
@@ -12,8 +12,12 @@ import {
   DAYS_TO_HARVEST,
   FAKE_WEATHER_ALERT,
   getCatalog,
+  measureYardFromTaps,
   scanPhotoToGarden,
 } from "./placeholders";
+import type { ScanDiagnostics } from "../../yard-scan/src/index";
+import { COIN_LABELS, SCAN_UX } from "../../yard-scan/src/index";
+import type { Point2, ReferenceKind, ScaleReferenceMode } from "../../yard-scan/src/index";
 
 type Step = "scan" | "review" | "prefs" | "select" | "results" | "dashboard";
 const STEPS: [Step, string][] = [
@@ -33,6 +37,7 @@ export function App() {
   const [step, setStep] = useState<Step>("scan");
   const [photo, setPhoto] = useState<string | null>(null);
   const [garden, setGarden] = useState<GardenGrid | null>(null);
+  const [scanInfo, setScanInfo] = useState<ScanDiagnostics | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [prefs, setPrefs] = useState<Preferences>({ tier: "beginner", categories: [] });
   const [targets, setTargets] = useState<Target[]>([]);
@@ -47,9 +52,9 @@ export function App() {
       .map((c) => cellKey(c.r, c.c));
   }, [garden]);
 
-  function doScan() {
-    const g = scanPhotoToGarden(photo);
+  function applyGarden(g: GardenGrid, diagnostics: ScanDiagnostics | null) {
     setGarden(g);
+    setScanInfo(diagnostics);
     setSelected(
       new Set(
         g.cells
@@ -58,6 +63,10 @@ export function App() {
       ),
     );
     setStep("review");
+  }
+
+  function doDemoScan() {
+    applyGarden(scanPhotoToGarden(photo), null);
   }
 
   /** The user's selection shrinks the garden: unselected plantable cells are
@@ -110,6 +119,7 @@ export function App() {
     setStep("scan");
     setPhoto(null);
     setGarden(null);
+    setScanInfo(null);
     setSelected(new Set());
     setTargets([]);
     setBanned([]);
@@ -129,11 +139,17 @@ export function App() {
       </div>
 
       {step === "scan" && (
-        <ScanScreen photo={photo} setPhoto={setPhoto} onScan={doScan} />
+        <ScanScreen
+          photo={photo}
+          setPhoto={setPhoto}
+          onMeasured={(g, d) => applyGarden(g, d)}
+          onDemo={doDemoScan}
+        />
       )}
       {step === "review" && garden && (
         <ReviewScreen
           garden={garden}
+          scanInfo={scanInfo}
           setGarden={setGarden}
           selected={selected}
           setSelected={setSelected}
@@ -181,20 +197,148 @@ export function App() {
   );
 }
 
-/* ─────────────── 1. Scan (CV placeholder) ─────────────── */
+/* ─────────────── 1. Scan (yard-scan: coin or custom reference) ─────────────── */
 
 function ScanScreen(props: {
   photo: string | null;
   setPhoto: (p: string | null) => void;
-  onScan: () => void;
+  onMeasured: (g: GardenGrid, d: ScanDiagnostics) => void;
+  onDemo: () => void;
 }) {
+  const [mode, setMode] = useState<ScaleReferenceMode>("coin");
+  const [coinKind, setCoinKind] = useState<Exclude<ReferenceKind, "custom">>("cad_quarter");
+  const [customSizeCm, setCustomSizeCm] = useState(8.56); // credit-card width default
+  const [customLabel, setCustomLabel] = useState("credit card");
+  const [tapPhase, setTapPhase] = useState<"reference" | "bed">("reference");
+  const [refTaps, setRefTaps] = useState<Point2[]>([]);
+  const [bedCorners, setBedCorners] = useState<Point2[]>([]);
+  const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  function resetMarks() {
+    setRefTaps([]);
+    setBedCorners([]);
+    setTapPhase("reference");
+    setError(null);
+  }
+
+  function onPhotoClick(e: MouseEvent<HTMLDivElement>) {
+    if (!props.photo || !imgSize) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * imgSize.w;
+    const y = ((e.clientY - rect.top) / rect.height) * imgSize.h;
+    const pt = { x, y };
+
+    if (tapPhase === "reference") {
+      const next = [...refTaps, pt].slice(0, 2);
+      setRefTaps(next);
+      if (next.length === 2) setTapPhase("bed");
+    } else {
+      setBedCorners((c) => [...c, pt]);
+    }
+  }
+
+  function measure() {
+    setError(null);
+    if (!imgSize || refTaps.length < 2 || bedCorners.length < 3) {
+      setError("Tap both edges of your reference, then at least 3 bed corners.");
+      return;
+    }
+    try {
+      const result = measureYardFromTaps({
+        imageWidthPx: imgSize.w,
+        imageHeightPx: imgSize.h,
+        referenceEdgeA: refTaps[0]!,
+        referenceEdgeB: refTaps[1]!,
+        bedCorners,
+        mode,
+        coinKind,
+        customSizeCm,
+        customLabel,
+      });
+      props.onMeasured(result.garden, result.diagnostics);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  const coinOptions = Object.entries(COIN_LABELS) as [
+    Exclude<ReferenceKind, "custom">,
+    string,
+  ][];
+
   return (
     <div className="card">
       <h2>Scan your garden</h2>
       <p className="muted">
-        Take or upload a photo of your yard. We map it onto a 30 cm grid and
-        detect what's already growing.
+        Upload a photo, mark a scale reference, then tap the corners of your bed.
+        We convert pixels → real size → a 30 cm planting grid.
       </p>
+
+      <div className="row">
+        <span
+          className={`chip ${mode === "coin" ? "on" : ""}`}
+          onClick={() => {
+            setMode("coin");
+            resetMarks();
+          }}
+        >
+          Coin (recommended)
+        </span>
+        <span
+          className={`chip ${mode === "custom_object" ? "on" : ""}`}
+          onClick={() => {
+            setMode("custom_object");
+            resetMarks();
+          }}
+        >
+          Custom object
+        </span>
+      </div>
+
+      {mode === "coin" ? (
+        <>
+          <p className="muted">{SCAN_UX.placeCoin}</p>
+          <div className="row">
+            <label className="tiny">Coin type</label>
+            <select
+              value={coinKind}
+              onChange={(e) =>
+                setCoinKind(e.target.value as Exclude<ReferenceKind, "custom">)
+              }
+            >
+              {coinOptions.map(([id, label]) => (
+                <option key={id} value={id}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="muted">{SCAN_UX.placeCustom}</p>
+          <div className="row">
+            <input
+              type="text"
+              placeholder="Object name"
+              value={customLabel}
+              onChange={(e) => setCustomLabel(e.target.value)}
+              style={{ flex: 1, minWidth: 120 }}
+            />
+            <input
+              type="number"
+              min={0.5}
+              step={0.1}
+              value={customSizeCm}
+              onChange={(e) => setCustomSizeCm(Number(e.target.value))}
+              title="Width in cm"
+            />
+            <span className="tiny">cm wide</span>
+          </div>
+        </>
+      )}
+
       <div className="row">
         <input
           type="file"
@@ -202,18 +346,93 @@ function ScanScreen(props: {
           onChange={(e) => {
             const f = e.target.files?.[0];
             props.setPhoto(f ? URL.createObjectURL(f) : null);
+            resetMarks();
+            setImgSize(null);
           }}
         />
       </div>
-      {props.photo && <img className="photo" src={props.photo} alt="your yard" />}
+
+      {props.photo && (
+        <>
+          <p className="tiny">
+            Phase:{" "}
+            <b>{tapPhase === "reference" ? "1) Tap both edges of reference" : "2) Tap bed corners"}</b>
+            {" · "}
+            ref {refTaps.length}/2 · corners {bedCorners.length}
+          </p>
+          <div className="photo-stage" onClick={onPhotoClick}>
+            <img
+              className="photo"
+              src={props.photo}
+              alt="your yard"
+              draggable={false}
+              onLoad={(e) => {
+                const img = e.currentTarget;
+                setImgSize({ w: img.naturalWidth, h: img.naturalHeight });
+              }}
+            />
+            {imgSize &&
+              refTaps.map((p, i) => (
+                <span
+                  key={`r${i}`}
+                  className="mark ref"
+                  style={{
+                    left: `${(p.x / imgSize.w) * 100}%`,
+                    top: `${(p.y / imgSize.h) * 100}%`,
+                  }}
+                />
+              ))}
+            {imgSize && refTaps.length === 2 && (
+              <svg className="mark-lines" viewBox={`0 0 ${imgSize.w} ${imgSize.h}`} preserveAspectRatio="none">
+                <line
+                  x1={refTaps[0]!.x}
+                  y1={refTaps[0]!.y}
+                  x2={refTaps[1]!.x}
+                  y2={refTaps[1]!.y}
+                  stroke="#7fe89a"
+                  strokeWidth={Math.max(2, imgSize.w / 400)}
+                />
+              </svg>
+            )}
+            {imgSize &&
+              bedCorners.map((p, i) => (
+                <span
+                  key={`b${i}`}
+                  className="mark bed"
+                  style={{
+                    left: `${(p.x / imgSize.w) * 100}%`,
+                    top: `${(p.y / imgSize.h) * 100}%`,
+                  }}
+                >
+                  {i + 1}
+                </span>
+              ))}
+          </div>
+        </>
+      )}
+
+      {error && <p className="tiny" style={{ color: "#f0b4b4" }}>{error}</p>}
+
       <div className="row">
-        <button onClick={props.onScan}>
-          {props.photo ? "Scan this photo →" : "No photo? Use the demo yard →"}
+        <button
+          disabled={!props.photo || refTaps.length < 2 || bedCorners.length < 3}
+          onClick={measure}
+        >
+          Measure yard →
+        </button>
+        <button className="secondary small" onClick={resetMarks} disabled={!props.photo}>
+          Clear marks
+        </button>
+      </div>
+      <div className="row">
+        <button className="secondary" onClick={props.onDemo}>
+          Skip — use demo yard →
         </button>
       </div>
       <p className="tiny">
-        ⚠ PLACEHOLDER: photo → grid CV pipeline is Jessica's; every photo currently
-        becomes the demo backyard (stone path, bike, three lilies).
+        Coin path is recommended (known diameter). Custom objects work if you type the
+        real width carefully. Phone tilt correction runs in yard-scan (web demo uses a
+        mild default pitch).
       </p>
     </div>
   );
@@ -223,12 +442,13 @@ function ScanScreen(props: {
 
 function ReviewScreen(props: {
   garden: GardenGrid;
+  scanInfo: ScanDiagnostics | null;
   setGarden: (g: GardenGrid) => void;
   selected: Set<string>;
   setSelected: (s: Set<string>) => void;
   onNext: () => void;
 }) {
-  const { garden } = props;
+  const { garden, scanInfo } = props;
   const existing = garden.existing ?? [];
 
   function removeExisting(idx: number) {
@@ -255,9 +475,20 @@ function ReviewScreen(props: {
     <>
       <div className="card">
         <h2>Here's your yard</h2>
-        <p className="muted">
-          Gray = path (can't plant). 🚲 = movable obstacle. 🌸 = plants we detected.
-        </p>
+        {scanInfo ? (
+          <p className="muted">
+            Measured ~{scanInfo.widthCm} × {scanInfo.heightCm} cm ({scanInfo.areaM2} m²)
+            using{" "}
+            {scanInfo.scale.referenceMode === "coin"
+              ? `coin (${scanInfo.scale.reference})`
+              : scanInfo.scale.referenceLabel || "custom object"}
+            . Gray path / bike / flowers only appear on the demo yard.
+          </p>
+        ) : (
+          <p className="muted">
+            Gray = path (can't plant). 🚲 = movable obstacle. 🌸 = plants we detected.
+          </p>
+        )}
         <GridView garden={garden} />
       </div>
       <div className="card">

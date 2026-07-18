@@ -23,18 +23,6 @@ export interface GardenGrid {
   cells: Cell[];
 }
 
-/** Known reference objects the user can place in frame. */
-export type ReferenceKind =
-  | "cad_penny"
-  | "cad_nickel"
-  | "cad_dime"
-  | "cad_quarter"
-  | "usd_penny"
-  | "usd_nickel"
-  | "usd_dime"
-  | "usd_quarter"
-  | "custom";
-
 /** Device spatial attitude at capture time (radians). */
 export interface DeviceAttitude {
   /**
@@ -59,16 +47,40 @@ export interface Point2 {
   y: number;
 }
 
-/** Image-space detection of the reference coin. */
-export interface CoinDetection {
+/** Known reference objects the user can place in frame. */
+export type ReferenceKind =
+  | "cad_penny"
+  | "cad_nickel"
+  | "cad_dime"
+  | "cad_quarter"
+  | "usd_penny"
+  | "usd_nickel"
+  | "usd_dime"
+  | "usd_quarter"
+  | "custom";
+
+/** How the user provided scale. */
+export type ScaleReferenceMode = "coin" | "custom_object";
+
+/**
+ * Image-space scale reference — either a coin (recommended) or any object
+ * whose real-world width/diameter the user typed in.
+ */
+export interface ScaleReference {
+  mode: ScaleReferenceMode;
   kind: ReferenceKind;
-  /** Diameter of the custom reference in cm (required if kind === "custom"). */
+  /** Optional label for custom objects, e.g. "credit card", "phone". */
+  label?: string;
+  /** Real-world size in cm across the marked pixel span (required for custom). */
   customDiameterCm?: number;
-  /** Bounding circle in image pixels. */
   centerPx: Point2;
+  /** Pixel length of the known real-world dimension (coin diameter or object width). */
   diameterPx: number;
   confidence: number; // 0..1
 }
+
+/** @deprecated Use ScaleReference — kept for older call sites. */
+export type CoinDetection = ScaleReference;
 
 /** One camera capture of (part of) the yard. */
 export interface ScanFrame {
@@ -82,8 +94,13 @@ export interface ScanFrame {
    * Clockwise or counter-clockwise; closed implied.
    */
   bedPolygonPx: Point2[];
-  /** Reference coin in this frame (required on at least one frame in a session). */
-  coin?: CoinDetection;
+  /**
+   * Scale reference in this frame (required on at least one frame).
+   * Prefer `reference`; `coin` is accepted as an alias.
+   */
+  reference?: ScaleReference;
+  /** @deprecated Alias of `reference`. */
+  coin?: ScaleReference;
   /**
    * Optional overlap hint: this frame continues to the right/below of `linksTo`.
    * Used when AR world pose is unavailable (hackathon fallback stitch).
@@ -97,7 +114,7 @@ export interface ScanFrame {
 }
 
 export interface WorldPolygon {
-  /** Vertices in centimeters on the ground plane (origin = first frame coin center). */
+  /** Vertices in centimeters on the ground plane (origin = first frame reference center). */
   pointsCm: Point2[];
   sourceFrameIds: string[];
 }
@@ -105,6 +122,8 @@ export interface WorldPolygon {
 export interface ScaleInfo {
   cmPerPx: number;
   reference: ReferenceKind;
+  referenceMode: ScaleReferenceMode;
+  referenceLabel?: string;
   referenceDiameterCm: number;
   /** Effective cm/px after attitude foreshortening along the camera tilt axis. */
   cmPerPxGround: { x: number; y: number };
@@ -128,6 +147,7 @@ export interface YardScanResult {
 
 export interface ScanOptions {
   cellSizeCm?: number; // default 30
-  /** Minimum confidence to accept a coin detection. */
+  /** Minimum confidence to accept a scale reference. */
   minCoinConfidence?: number;
+  minReferenceConfidence?: number;
 }

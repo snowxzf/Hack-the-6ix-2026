@@ -10,12 +10,43 @@ your yard, we negotiate. That's the plot twist.
 | Package | What | Owner |
 |---|---|---|
 | `optimizer/` | Layout + carbon optimization engine (pure TS, tested, on-device) | Sara |
-| `yard-scan/` | Camera yard measure: coin scale + device tilt + multi-photo stitch → grid | Jessica / Selina |
-| `app/` | Mobile app (scan → preferences → layout → dashboard) | Selina |
+| `yard-scan/` | Camera yard measure: coin (recommended) or custom object + tilt + stitch → grid | Jessica / Selina |
+| `app/` | Web test UI (scan → preferences → layout → dashboard) | Selina |
 | `database/` | Curated plant JSON + MongoDB seed script | Jessica |
-| `backend/` | FastAPI: PlantNet → Mongo lookup, weather, gardens | Jessica |
+| `backend/` | FastAPI: PlantNet → Mongo lookup, weather, gardens, suggestions | Jessica |
+
+## Packages installed
+
+### Node (frontend / engines)
+
+| Folder | Install | Notable packages |
+|---|---|---|
+| `optimizer/` | `npm install` | `typescript`, `vitest`, `tsx` |
+| `yard-scan/` | `npm install` | `typescript`, `vitest`, `tsx` |
+| `app/` | `npm install` | `react`, `react-dom`, `vite`, `@vitejs/plugin-react`, `typescript` |
+
+### Python (API / database)
+
+| Folder | Install | Notable packages |
+|---|---|---|
+| `database/` | `pip install -r requirements.txt` | `pymongo`, `dnspython`, `python-dotenv` |
+| `backend/` | `pip install -r requirements.txt` | `fastapi`, `uvicorn`, `pymongo`, `httpx`, `python-multipart`, `python-dotenv` |
+
+Secrets stay in repo-root `.env` (gitignored). Template: `.env.example`.
 
 ## Quickstart
+
+**Test website** (scan UI + optimizer)
+
+```bash
+cd app && npm install && npm run dev
+```
+
+Open the Vite URL (usually http://localhost:5173). On **Scan**:
+1. Choose **Coin (recommended)** or **Custom object**
+2. Upload a yard photo
+3. Tap both edges of the reference, then bed corners
+4. **Measure yard →** (or skip to the demo yard)
 
 **Optimizer**
 
@@ -23,18 +54,18 @@ your yard, we negotiate. That's the plot twist.
 cd optimizer && npm install && npm test && npm run demo
 ```
 
-**Yard scan** (coin + tilt → garden dimensions → grid)
+**Yard scan** (library only)
 
 ```bash
 cd yard-scan && npm install && npm test && npm run demo
 ```
 
-**Catalog + API** (secrets in `.env` — copy from `.env.example`)
+**Catalog + API**
 
 ```bash
 cd database && pip install -r requirements.txt && python seed.py
 cd ../backend && pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+python -m uvicorn main:app --reload --port 8000
 ```
 
 - API docs: http://localhost:8000/docs

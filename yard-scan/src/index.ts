@@ -7,6 +7,8 @@ export type {
   Point2,
   ReferenceKind,
   ScaleInfo,
+  ScaleReference,
+  ScaleReferenceMode,
   ScanDiagnostics,
   ScanFrame,
   ScanOptions,
@@ -14,7 +16,14 @@ export type {
   YardScanResult,
 } from "./types";
 
-export { COIN_DIAMETER_CM, referenceDiameterCm, scaleFromCoin } from "./coin";
+export {
+  COIN_DIAMETER_CM,
+  COIN_LABELS,
+  referenceDiameterCm,
+  referenceFromEdgeTaps,
+  scaleFromCoin,
+  scaleFromReference,
+} from "./coin";
 export {
   attitudeWarnings,
   groundScaleFromAttitude,
@@ -35,4 +44,5 @@ export {
   SCAN_UX,
   attitudeFromGravity,
   mockCoinFromTap,
+  mockReferenceFromTap,
 } from "./mobile";
