@@ -35,6 +35,8 @@ Docs: http://localhost:8000/docs
 | GET | `/geocode?q=` | Open-Meteo geocoding — city/address → lat/lon candidates (confirm country/admin1) |
 | GET | `/weather?lat=&lon=&plantIds=` | Sky forecast + plant temp checks (GPS path) |
 | GET | `/weather?location=Toronto&confirm=true&plantIds=` | Same, via typed city (geocode first) |
+| GET | `/stats/toronto-food-waste` | Toronto single-family food-waste baselines (2017–2018 audit) |
+| GET | `/impact/food-waste?foodKg=&kgCo2e=` | Compare garden yield to Toronto waste stats (% offsets, Green Bin diversion) |
 | POST | `/gardens` | Save a layout JSON |
 | GET | `/gardens/{id}` | Load a saved layout |
 

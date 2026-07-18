@@ -13,3 +13,7 @@ dist/
 !**/.env.example
 **/atlas-credentials.env
 *credentials*.env
+__pycache__/
+*.pyc
+graphify-out/
+.cursor/

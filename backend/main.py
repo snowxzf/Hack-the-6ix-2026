@@ -20,6 +20,11 @@ from pymongo import MongoClient
 from pymongo.collection import Collection
 from pymongo.database import Database
 
+from food_waste_stats import (
+    TORONTO_FOOD_WASTE_BASELINE,
+    compare_garden_to_toronto_baseline,
+)
+
 ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(ROOT / ".env")
 load_dotenv()
@@ -1020,6 +1025,30 @@ async def weather(
         )
 
     return await forecast_for(lat, lon, plant_ids=plantIds, resolved_location=resolved)
+
+
+@app.get("/stats/toronto-food-waste")
+def toronto_food_waste_baseline() -> dict[str, Any]:
+    """Published Toronto single-family food-waste audit stats (2017–2018)."""
+    return TORONTO_FOOD_WASTE_BASELINE
+
+
+@app.get("/impact/food-waste")
+def food_waste_impact(
+    foodKg: float,
+    kgCo2e: float | None = None,
+) -> dict[str, Any]:
+    """
+    Compare optimizer ``foodKgPerSeason`` (and optional CO₂e) to Toronto baselines.
+
+    Example: ``/impact/food-waste?foodKg=22.5`` → 50% of typical fruit/veg waste.
+    """
+    if foodKg < 0:
+        raise HTTPException(status_code=400, detail="foodKg must be >= 0")
+    return compare_garden_to_toronto_baseline(
+        food_kg_per_season=foodKg,
+        kg_co2e_per_season=kgCo2e,
+    )
 
 
 @app.post("/gardens")
