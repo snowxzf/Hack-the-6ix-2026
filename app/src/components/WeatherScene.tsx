@@ -7,6 +7,7 @@ const SKY: Record<string, string> = {
   rainy: "linear-gradient(to bottom, #565e6a 0%, #737d8a 60%, #949da9 100%)",
   cloudy: "linear-gradient(to bottom, #75818e 0%, #96a0ac 60%, #b5bdc7 100%)",
   snowy: "linear-gradient(to bottom, #8a9fb5 0%, #b6c8d9 60%, #dde9f1 100%)",
+  thunder: "linear-gradient(to bottom, #2a3140 0%, #3d4658 55%, #5a6578 100%)",
   clear_night: "linear-gradient(to bottom, #0c1430 0%, #1a2546 60%, #28365c 100%)",
 };
 
@@ -18,13 +19,16 @@ function SceneCloud({
   scale = 1,
   delay = 0,
   opacity = 0.95,
+  dark = false,
 }: {
   left: number;
   top: number;
   scale?: number;
   delay?: number;
   opacity?: number;
+  dark?: boolean;
 }) {
+  const fill = dark ? "#6b7385" : "#ffffff";
   return (
     <div
       className="absolute"
@@ -37,13 +41,73 @@ function SceneCloud({
     >
       <div style={{ transform: `scale(${scale})`, opacity }}>
         <div className="relative h-9 w-24">
-          <div className="absolute inset-0 rounded-full bg-white" />
-          <div className="absolute -top-4 left-4 h-12 w-12 rounded-full bg-white" />
-          <div className="absolute -top-2 left-12 h-10 w-10 rounded-full bg-white" />
+          <div className="absolute inset-0 rounded-full" style={{ background: fill }} />
+          <div
+            className="absolute -top-4 left-4 h-12 w-12 rounded-full"
+            style={{ background: fill }}
+          />
+          <div
+            className="absolute -top-2 left-12 h-10 w-10 rounded-full"
+            style={{ background: fill }}
+          />
         </div>
       </div>
     </div>
- );
+  );
+}
+
+function LightningBolt({
+  left,
+  top,
+  delay,
+  scale = 1,
+}: {
+  left: number;
+  top: number;
+  delay: number;
+  scale?: number;
+}) {
+  return (
+    <svg
+      className="absolute"
+      style={{
+        left: `${left}%`,
+        top: `${top}%`,
+        width: 28 * scale,
+        height: 56 * scale,
+        animation: `lightning-bolt ${3.5 + delay}s ease-in-out infinite`,
+        animationDelay: `${delay}s`,
+        filter: "drop-shadow(0 0 6px rgba(255,240,160,0.9))",
+      }}
+      viewBox="0 0 32 64"
+      fill="none"
+      aria-hidden
+    >
+      <path
+        d="M18 2 L8 30 H16 L10 62 L28 26 H18 L24 2 Z"
+        fill="#fff8c8"
+        stroke="#ffe566"
+        strokeWidth="1"
+      />
+    </svg>
+  );
+}
+
+function Moon() {
+  // Crescent via offset box-shadow — no sky-color matching needed.
+  return (
+    <div
+      className="absolute right-8 top-4"
+      style={{
+        width: 52,
+        height: 52,
+        borderRadius: "50%",
+        boxShadow: "14px -2px 0 0 #fefce8",
+        filter: "drop-shadow(0 0 14px rgba(255,250,220,0.55))",
+      }}
+      aria-hidden
+    />
+  );
 }
 
 export function WeatherScene() {
@@ -58,7 +122,7 @@ export function WeatherScene() {
         height: 40 + Math.random() * 60,
       })),
     [],
- );
+  );
 
   const flakes = useMemo(
     () =>
@@ -69,7 +133,7 @@ export function WeatherScene() {
         size: 3 + Math.random() * 5,
       })),
     [],
- );
+  );
 
   const stars = useMemo(
     () =>
@@ -80,13 +144,14 @@ export function WeatherScene() {
         delay: Math.random() * 3,
       })),
     [],
- );
+  );
 
   return (
     <div
       className="relative h-36 animate-fade-in-up overflow-hidden border border-border"
       style={{ background: SKY[condition] ?? SKY.partly_cloudy, animationDelay: "0.04s" }}
     >
+      {/* Sunny — sun only */}
       {condition === "sunny" && (
         <div className="absolute -top-3 right-3">
           <div className="relative h-28 w-28">
@@ -97,7 +162,7 @@ export function WeatherScene() {
                   className="absolute left-1/2 top-1/2 h-1.5 w-32 bg-yellow-200/80"
                   style={{ transform: `translate(-50%, -50%) rotate(${a}deg)` }}
                 />
- ))}
+              ))}
             </div>
             <div
               className="absolute inset-4 rounded-full bg-yellow-300"
@@ -105,8 +170,9 @@ export function WeatherScene() {
             />
           </div>
         </div>
- )}
+      )}
 
+      {/* Partly cloudy — sun + clouds (keep current) */}
       {condition === "partly_cloudy" && (
         <>
           <div
@@ -116,28 +182,38 @@ export function WeatherScene() {
           <SceneCloud left={5} top={12} scale={1} delay={0} />
           <SceneCloud left={45} top={28} scale={0.7} delay={6} />
         </>
- )}
+      )}
 
-      {(condition === "rainy" || condition === "cloudy") && (
+      {/* Rain — clouds + rain */}
+      {condition === "rainy" && (
         <>
           <SceneCloud left={8} top={6} scale={1.1} delay={0} />
           <SceneCloud left={48} top={14} scale={0.8} delay={5} />
-          {condition === "rainy" &&
-            drops.map((d, i) => (
-              <div
-                key={i}
-                className="absolute top-0 w-0.5 bg-blue-100/80"
-                style={{
-                  left: `${d.left}%`,
-                  height: `${d.height}px`,
-                  animation: `rain-fall ${d.duration}s linear infinite`,
-                  animationDelay: `${d.delay}s`,
-                }}
-              />
- ))}
+          {drops.map((d, i) => (
+            <div
+              key={i}
+              className="absolute top-0 w-0.5 bg-blue-100/80"
+              style={{
+                left: `${d.left}%`,
+                height: `${d.height}px`,
+                animation: `rain-fall ${d.duration}s linear infinite`,
+                animationDelay: `${d.delay}s`,
+              }}
+            />
+          ))}
         </>
- )}
+      )}
 
+      {/* Cloudy — clouds only, no rain */}
+      {condition === "cloudy" && (
+        <>
+          <SceneCloud left={4} top={8} scale={1.15} delay={0} opacity={0.92} />
+          <SceneCloud left={38} top={18} scale={0.95} delay={4} opacity={0.88} />
+          <SceneCloud left={68} top={6} scale={0.75} delay={9} opacity={0.85} />
+        </>
+      )}
+
+      {/* Snow */}
       {condition === "snowy" && (
         <>
           <SceneCloud left={10} top={8} scale={1} delay={0} />
@@ -153,10 +229,38 @@ export function WeatherScene() {
                 animationDelay: `${f.delay}s`,
               }}
             />
- ))}
+          ))}
         </>
- )}
+      )}
 
+      {/* Thunder — dark clouds + lightning */}
+      {condition === "thunder" && (
+        <>
+          <div
+            className="pointer-events-none absolute inset-0 bg-white"
+            style={{ animation: "lightning-flash 4.2s ease-in-out infinite" }}
+          />
+          <SceneCloud left={2} top={4} scale={1.25} delay={0} dark opacity={0.95} />
+          <SceneCloud left={40} top={10} scale={1.05} delay={3} dark opacity={0.9} />
+          <SceneCloud left={70} top={2} scale={0.85} delay={7} dark opacity={0.88} />
+          <LightningBolt left={28} top={22} delay={0} scale={1.1} />
+          <LightningBolt left={62} top={30} delay={1.4} scale={0.85} />
+          {drops.slice(0, 18).map((d, i) => (
+            <div
+              key={i}
+              className="absolute top-0 w-0.5 bg-blue-100/50"
+              style={{
+                left: `${d.left}%`,
+                height: `${d.height * 0.7}px`,
+                animation: `rain-fall ${d.duration * 1.1}s linear infinite`,
+                animationDelay: `${d.delay}s`,
+              }}
+            />
+          ))}
+        </>
+      )}
+
+      {/* Night — moon + stars */}
       {condition === "clear_night" && (
         <>
           {stars.map((s, i) => (
@@ -172,13 +276,10 @@ export function WeatherScene() {
                 animationDelay: `${s.delay}s`,
               }}
             />
- ))}
-          <div
-            className="absolute right-5 top-3 h-16 w-16 rounded-full bg-yellow-50/90"
-            style={{ boxShadow: "0 0 24px 6px rgba(255,250,220,0.5)" }}
-          />
+          ))}
+          <Moon />
         </>
- )}
+      )}
 
       <div
         className="absolute bottom-2 left-3 text-white"
@@ -188,5 +289,5 @@ export function WeatherScene() {
         <p className="mt-0.5 text-xs opacity-90">{label}</p>
       </div>
     </div>
- );
+  );
 }

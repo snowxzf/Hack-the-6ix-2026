@@ -12,6 +12,12 @@ import { PhotoGridOverlay, type ScanPhotoOverlay } from "./PhotoGridOverlay";
 import { CarbonChart, carbonAt, SEASON_MS } from "./CarbonChart";
 import { advanceDevClock, devNow, resetDevClock, useDevClock } from "./devClock";
 import {
+  DEV_WEATHER_OPTIONS,
+  resetDevWeatherOverride,
+  setDevWeatherOverride,
+  useDevWeatherOverride,
+} from "./devWeather";
+import {
   CARBON_MILESTONE_KG,
   clampXpLoss,
   levelForXp,
@@ -63,6 +69,10 @@ import { WeatherBackground } from "./components/WeatherBackground";
 import { WeatherProvider } from "./components/WeatherProvider";
 import { requestDeviceLocation } from "./lib/geo";
 import { loadSavedPlants, mergeCatalogWithSaved } from "./lib/savedPlants";
+import {
+  syncGreenerSwapsFromCarbonInterest,
+  useUserProfile,
+} from "./lib/userProfile";
 
 /** Only the first-time setup flow. Once onboarded, "prefs"/"select"/"results"
  *  are reused as the Planner tab's sub-view instead of a linear step. */
@@ -168,7 +178,7 @@ interface PersistedState {
   xp: number;
   streakDays: number;
   /** Last simulated day-index (devNow() / DAY_MS, floored) the daily XP tick
-   *  (missed-watering penalties + streak advance) has processed through. */
+   *  (missed watering, unharvested weekly, streak) has processed through. */
   lastXpTickDay: number | null;
   /** How many 5kg-CO2e milestones have already paid out XP, across all
    *  gardens combined — prevents re-awarding the same milestone. */
@@ -408,11 +418,11 @@ export function App() {
   ]);
 
   /** (1) Pays out carbon-savings milestones as they're crossed — continuous,
-   *  not day-gated. (2) Once per elapsed simulated day, penalizes any
-   *  watering that was due and never confirmed, and advances/breaks the
-   *  streak. Both land in one combined XP delta applied via a single setXp
-   *  call — two separate effects each computing `xp + delta` from the same
-   *  stale render closure would silently drop one delta when React coalesces
+   *  not day-gated. (2) Once per elapsed simulated day: missed-watering
+   *  penalties, unharvested-weekly penalties, and streak advance/break.
+   *  All land in one combined XP delta applied via a single setXp call —
+   *  two separate effects each computing `xp + delta` from the same stale
+   *  render closure would silently drop one delta when React coalesces
    *  same-commit setState calls to the same variable. */
   useEffect(() => {
     let xpDelta = 0;
@@ -447,16 +457,36 @@ export function App() {
             const key = cellKey(p.origin[0], p.origin[1]);
             if (g.harvestedUnits.includes(key)) continue;
             const species = byId.get(p.speciesId);
-            if (!species || species.waterEveryDays <= 0) continue;
-            const anchor = g.lastWateredAt[key] ?? g.unitPlantedAt[key] ?? g.plantedAt;
-            const anchorDay = Math.floor(anchor / DAY_MS);
-            if (!(d > anchorDay && (d - anchorDay) % species.waterEveryDays === 0)) continue;
-            anyDueToday = true;
-            const wateredDay =
-              g.lastWateredAt[key] != null ? Math.floor(g.lastWateredAt[key] / DAY_MS) : null;
-            if (wateredDay !== d) {
-              allConfirmed = false;
-              xpDelta += XP_MISSED_WATERING;
+            if (!species) continue;
+
+            // Missed watering (−4): due on day d and never confirmed that day.
+            if (species.waterEveryDays > 0) {
+              const anchor = g.lastWateredAt[key] ?? g.unitPlantedAt[key] ?? g.plantedAt;
+              const anchorDay = Math.floor(anchor / DAY_MS);
+              if (d > anchorDay && (d - anchorDay) % species.waterEveryDays === 0) {
+                anyDueToday = true;
+                const wateredDay =
+                  g.lastWateredAt[key] != null
+                    ? Math.floor(g.lastWateredAt[key] / DAY_MS)
+                    : null;
+                if (wateredDay !== d) {
+                  allConfirmed = false;
+                  xpDelta += XP_MISSED_WATERING;
+                }
+              }
+            }
+
+            // Unharvested weekly (−2): food plant ready for 7+ days, then
+            // again every 7 days until harvested. Ornamentals (null harvest
+            // days) are skipped.
+            const daysToHarvest = harvestDaysFor(species);
+            if (daysToHarvest != null && daysToHarvest > 0) {
+              const plantTs = g.unitPlantedAt[key] ?? g.plantedAt;
+              const plantDay = Math.floor(plantTs / DAY_MS);
+              const daysPastReady = d - (plantDay + daysToHarvest);
+              if (daysPastReady >= 7 && daysPastReady % 7 === 0) {
+                xpDelta += XP_UNHARVESTED_WEEKLY;
+              }
             }
           }
         }
@@ -710,7 +740,7 @@ export function App() {
     addXp(XP_RESEED);
   }
 
-  /** Marks one specific planting unit as watered right now — the 💧 button
+  /** Marks one specific planting unit as watered right now — the + button
    *  next to its bar in "Your plants". Always available (not gated behind
    *  the due-today check, so it's never invisible/confusing to find); stamps
    *  lastWateredAt, which becomes that unit's cadence anchor going forward,
@@ -797,6 +827,7 @@ export function App() {
       // best-effort: if storage is unavailable there's nothing to clear
     }
     resetDevClock();
+    resetDevWeatherOverride();
     window.location.reload();
   }
 
@@ -846,15 +877,21 @@ export function App() {
 
   /** Base44-styled tabs hide the old flow chrome; Plan / first-run keep it. */
   const showFlowChrome = !onboarded || activeTab === "planner" || editingLayout;
+  const showXpBadge =
+    onboarded &&
+    (activeTab === "dashboard" ||
+      activeTab === "garden" ||
+      activeTab === "planner");
 
   return (
     <WeatherProvider plantIds={weatherPlantIds}>
       <WeatherBackground />
       {/* Normal-flow header strip, not a floating overlay — reserves its own
           height above .app-scroll so it can never overlap HomePanel's
-          greeting/icons or anything else in the scroll content below it. */}
-      <div className="top-bar">
-        {onboarded ? <XpBadge xp={xp} /> : <span />}
+          greeting/icons or anything else in the scroll content below it.
+          On Learn/Profile (no XP) it overlays so content can sit higher. */}
+      <div className={`top-bar${showXpBadge ? "" : " top-bar--overlay"}`}>
+        {showXpBadge ? <XpBadge xp={xp} /> : <span />}
         <DevTools onRestart={hardResetApp} />
       </div>
       {celebration && (
@@ -1022,6 +1059,15 @@ export function App() {
                       }
                     : undefined
                 }
+                onSeeProgress={
+                  onboarded
+                    ? () => {
+                        setEditingLayout(false);
+                        setActiveTab("garden");
+                        setClickMode(null);
+                      }
+                    : undefined
+                }
                 onTweak={!onboarded || editingLayout ? () => setStep("select") : undefined}
                 onConfirm={
                   !onboarded || editingLayout
@@ -1136,6 +1182,7 @@ function DevTools(props: { onRestart: () => void }) {
   const [open, setOpen] = useState(false);
   const [armed, setArmed] = useState(false);
   const { offsetDays } = useDevClock();
+  const weatherOverride = useDevWeatherOverride();
   return (
     <div className="devtools">
       <button
@@ -1172,21 +1219,40 @@ function DevTools(props: { onRestart: () => void }) {
           >
             Reset clock to real time
           </button>
+
+          <p className="tiny" style={{ marginTop: 10 }}>
+            Simulate weather:{" "}
+            <b>
+              {DEV_WEATHER_OPTIONS.find((o) => o.id === weatherOverride)?.label ?? "Live"}
+            </b>
+          </p>
+          <div className="devtools-weather-grid">
+            {DEV_WEATHER_OPTIONS.map((opt) => (
+              <button
+                key={opt.label}
+                className={`small ${weatherOverride === opt.id ? "" : "secondary"}`}
+                onClick={() => setDevWeatherOverride(opt.id)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
           {/* Two-step "arm then confirm" instead of window.confirm(): some
               embedded webviews (VS Code preview, in-app browsers) silently
               swallow blocking dialogs, which made a confirm()-gated button
               look broken. */}
           {armed ? (
             <button className="small" onClick={props.onRestart}>
- ! Click again to wipe everything
+              ! Click again to wipe everything
             </button>
- ) : (
+          ) : (
             <button className="small secondary" onClick={() => setArmed(true)}>
               Restart app (first-time use)
             </button>
- )}
+          )}
         </div>
- )}
+      )}
     </div>
   );
 }
@@ -1197,7 +1263,7 @@ function XpBadge(props: { xp: number }) {
   const next = nextLevelForXp(props.xp);
   return (
     <div className="xp-badge" title={`${level.title} — ${props.xp} XP`}>
-      {level.emoji} Lvl {level.level} · {props.xp}
+      Lvl {level.level} · {props.xp}
       {next ? ` / ${next.minXp} XP` : " XP (max)"}
     </div>
   );
@@ -2739,9 +2805,11 @@ function PrefsScreen(props: {
               <input
                 type="checkbox"
                 checked={props.carbonWeight <= 0}
-                onChange={(e) =>
-                  props.setCarbonWeight(e.target.checked ? 0 : 0.5)
-                }
+                onChange={(e) => {
+                  const cares = !e.target.checked;
+                  props.setCarbonWeight(cares ? 0.5 : 0);
+                  syncGreenerSwapsFromCarbonInterest(cares);
+                }}
               />
               Not interested: ignore carbon in layout & recommendations
             </label>
@@ -2769,14 +2837,18 @@ function PrefsScreen(props: {
         <div className="card">
           <h2>Carbon impact?</h2>
           <p className="muted">
-            When on, we quietly prefer crops that displace more store-bought emissions. No greener-swap nudges if you opt out.
+            When on, we quietly prefer crops that displace more store-bought emissions.
+            Greener-swap nudges follow this choice (you can change them later in Profile).
           </p>
           <label className="opt">
             <input
               type="radio"
               name="carbon-interest"
               checked={props.carbonWeight > 0}
-              onChange={() => props.setCarbonWeight(0.5)}
+              onChange={() => {
+                props.setCarbonWeight(0.5);
+                syncGreenerSwapsFromCarbonInterest(true);
+              }}
             />
             Yes: factor it into plant picks
           </label>
@@ -2785,7 +2857,10 @@ function PrefsScreen(props: {
               type="radio"
               name="carbon-interest"
               checked={props.carbonWeight <= 0}
-              onChange={() => props.setCarbonWeight(0)}
+              onChange={() => {
+                props.setCarbonWeight(0);
+                syncGreenerSwapsFromCarbonInterest(false);
+              }}
             />
             No interest: don&apos;t use carbon at all
           </label>
@@ -3057,18 +3132,23 @@ function ResultsScreen(props: {
   onEdit?: () => void;
   onTweak?: () => void;
   onConfirm?: () => void;
+  /** Jump to Garden tab (watering / harvest progress). */
+  onSeeProgress?: () => void;
   harvestedUnits?: Set<string>;
   clickMode?: "harvest" | "reseed" | null;
   onUnitClick?: (unitKey: string) => void;
 }) {
   const { result } = props;
   const careAboutCarbon = props.careAboutCarbon !== false;
+  const { profile } = useUserProfile();
+  const showGreenerSwaps = profile.greenerSwapsEnabled;
   const total = result.placements.length;
   const [reveal, setReveal] = useState(0);
   const [changing, setChanging] = useState(false);
   const [outId, setOutId] = useState("");
   const [inId, setInId] = useState("");
   const [outUnits, setOutUnits] = useState(1);
+  const [legendOpen, setLegendOpen] = useState(false);
 
   // 80ms/bed reads nicely for small gardens, but scales past ~40 beds
   // (90 beds ≈ 7s): scale the interval down so the whole reveal caps at ~3s.
@@ -3176,22 +3256,34 @@ function ResultsScreen(props: {
               : "Reseed mode: tap an empty (dashed) spot to replant it."}
           </p>
         )}
-        <div className="legend">
-          {speciesIds.map((id) => (
-            <span className="item" key={id} title={footprintLabel(id)}>
-              <span className="dot" style={{ background: speciesColor(id) }} />
-              {nameOf(id)} ×{result.counts[id]}
-              <span className="tiny" style={{ marginLeft: 4 }}>
-                · {footprintLabel(id)}
-              </span>
-            </span>
-          ))}
-          {result.existingBeds.map((b) => (
-            <span className="item" key={b.speciesId}>
-              {nameOf(b.speciesId)} ×{b.count} (already yours)
-            </span>
-          ))}
+        <div className="row" style={{ marginTop: 8 }}>
+          <button
+            type="button"
+            className="secondary small"
+            aria-expanded={legendOpen}
+            onClick={() => setLegendOpen((o) => !o)}
+          >
+            {legendOpen ? "Hide color legend" : "Show color legend"}
+          </button>
         </div>
+        {legendOpen && (
+          <div className="legend">
+            {speciesIds.map((id) => (
+              <span className="item" key={id} title={footprintLabel(id)}>
+                <span className="dot" style={{ background: speciesColor(id) }} />
+                {nameOf(id)} ×{result.counts[id]}
+                <span className="tiny" style={{ marginLeft: 4 }}>
+                  · {footprintLabel(id)}
+                </span>
+              </span>
+            ))}
+            {result.existingBeds.map((b) => (
+              <span className="item" key={b.speciesId}>
+                {nameOf(b.speciesId)} ×{b.count} (already yours)
+              </span>
+            ))}
+          </div>
+        )}
 
         {props.onSpaceReplace && !changing && (
           <div className="row" style={{ marginTop: 10 }}>
@@ -3367,7 +3459,7 @@ function ResultsScreen(props: {
         </div>
  )}
 
-      {careAboutCarbon && result.swaps.length > 0 && (
+      {showGreenerSwaps && result.swaps.length > 0 && (
         <div className="card info">
           <h2>Greener swaps</h2>
           {result.swaps.map((s) => (
@@ -3400,12 +3492,17 @@ function ResultsScreen(props: {
           <button className="secondary" onClick={props.onEdit}>
             Edit my garden
           </button>
- )}
+        )}
+        {props.onSeeProgress && (
+          <button className="secondary" onClick={props.onSeeProgress}>
+            See plant progress
+          </button>
+        )}
         {props.onTweak && (
           <button className="secondary" onClick={props.onTweak}>
             ← Tweak space
           </button>
- )}
+        )}
         {props.onConfirm && <button onClick={props.onConfirm}>Confirm my garden</button>}
       </div>
     </>
@@ -3709,7 +3806,7 @@ function DashboardScreen(props: {
             .map(([days, { names, dueUnitKeys }]) => (
               <li key={days}>
                 <b>Every {days} day{days > 1 ? "s" : ""}:</b> {[...names].join(", ")}
-                {dueUnitKeys.length > 0 && <span className="tiny"> · 💧 needs water</span>}
+                {dueUnitKeys.length > 0 && <span className="tiny"> · needs water</span>}
               </li>
             ))}
         </ul>
@@ -3718,7 +3815,7 @@ function DashboardScreen(props: {
       <div className="card">
         <h2>Your plants</h2>
         <p className="muted">
-          Each row is one planted spot — tap 💧 to log watering it, or use Harvest /
+          Each row is one planted spot — tap + to log watering it, or use Harvest /
           Reseed on the Garden Planner.
         </p>
         {planted.map(([id]) => {
@@ -3799,7 +3896,7 @@ function DashboardScreen(props: {
                           }
                           onClick={() => props.onWaterUnit(key)}
                         >
-                          💧
+                          +
                         </button>
                       )}
                     </div>

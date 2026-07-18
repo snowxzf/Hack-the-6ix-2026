@@ -34,6 +34,10 @@ try:
     from .search_web import (
         google_cse_configured,
         search_google_web,
+        search_wikipedia,
+        search_youtube_scrape,
+        search_youtube_videos,
+        youtube_configured,
     )
     from .auth import AUTH_CONFIGURED, CurrentUser, current_user
 except ImportError:  # `uvicorn main:app` from backend/
@@ -44,6 +48,10 @@ except ImportError:  # `uvicorn main:app` from backend/
     from search_web import (
         google_cse_configured,
         search_google_web,
+        search_wikipedia,
+        search_youtube_scrape,
+        search_youtube_videos,
+        youtube_configured,
     )
     from auth import AUTH_CONFIGURED, CurrentUser, current_user
 
@@ -1175,6 +1183,15 @@ async def search_web(q: str, limit: int = 5) -> dict[str, Any]:
     return await search_google_web(q, limit=limit)
 
 
+@app.get("/search/wikipedia")
+async def search_wikipedia_endpoint(q: str, limit: int = 5) -> dict[str, Any]:
+    """Keyless Wikipedia search with page summaries for the Learn tab."""
+    q = (q or "").strip()
+    if not q:
+        raise HTTPException(status_code=400, detail="q is required")
+    return await search_wikipedia(q, limit=limit)
+
+
 @app.get("/plants/{plant_id}")
 async def get_plant(
     plant_id: str,
@@ -1316,101 +1333,23 @@ async def geocode(q: str, count: int = 5) -> dict[str, Any]:
     }
 
 
-def _walk_video_renderers(node: Any, out: list[dict[str, Any]], limit: int) -> None:
-    """Depth-first hunt for videoRenderer blobs in YouTube's initial data."""
-    if len(out) >= limit:
-        return
-    if isinstance(node, dict):
-        vr = node.get("videoRenderer")
-        if isinstance(vr, dict) and vr.get("videoId"):
-            title_runs = ((vr.get("title") or {}).get("runs")) or []
-            title = "".join(r.get("text", "") for r in title_runs) or None
-            channel_runs = ((vr.get("ownerText") or {}).get("runs")) or []
-            channel = channel_runs[0].get("text") if channel_runs else None
-            duration = (vr.get("lengthText") or {}).get("simpleText")
-            if title:
-                out.append(
-                    {
-                        "video_id": vr["videoId"],
-                        "title": title,
-                        "channel": channel,
-                        "duration": duration,
-                    }
-                )
-            return
-        for v in node.values():
-            _walk_video_renderers(v, out, limit)
-    elif isinstance(node, list):
-        for v in node:
-            _walk_video_renderers(v, out, limit)
-
-
 @app.get("/search/videos")
 async def search_videos(q: str, limit: int = 6) -> dict[str, Any]:
     """
-    Keyless YouTube search: fetch the public results page and parse the
-    embedded ytInitialData JSON. Good enough for demo purposes: no API
-    key, no quota. Gardening context is appended to keep results on-topic.
-    Falls back to curated demos if YouTube HTML parsing fails.
+    YouTube for Search / Learn.
+    Prefer Data API when the key has YouTube enabled; otherwise keyless scrape;
+    always fall back to curated embeddable demos so the UI never looks empty.
     """
     q = (q or "").strip()
     if not q:
         raise HTTPException(status_code=400, detail="q is required")
 
-    demo = [
-        {
-            "video_id": "ECibnV1_3jM",
-            "title": "How to Grow Tomatoes: Complete Guide for Beginners",
-            "channel": "Epic Gardening",
-            "duration": "12:04",
-        },
-        {
-            "video_id": "qNtEgeCDVZU",
-            "title": "Vegetable Garden for Beginners",
-            "channel": "GrowVeg",
-            "duration": "10:18",
-        },
-        {
-            "video_id": "FxYw0XPYoqg",
-            "title": "Composting for Beginners",
-            "channel": "California Academy of Sciences",
-            "duration": "5:32",
-        },
-    ]
-
-    query = f"{q} gardening"
-    url = "https://www.youtube.com/results"
-    params = {"search_query": query, "hl": "en", "gl": "US"}
-    headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36"
-        ),
-        "Accept-Language": "en-US,en;q=0.9",
-        "Accept": "text/html,application/xhtml+xml",
-    }
-    try:
-        async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
-            resp = await client.get(url, params=params, headers=headers)
-            resp.raise_for_status()
-    except httpx.HTTPError as exc:
-        return {"query": q, "source": "demo", "videos": demo[: max(1, min(limit, 12))], "error": str(exc)}
-
-    m = re.search(r"var ytInitialData = (\{.*?\});</script>", resp.text, re.DOTALL)
-    if not m:
-        m = re.search(r"ytInitialData\s*=\s*(\{.*?\});</script>", resp.text, re.DOTALL)
-    if not m:
-        return {"query": q, "source": "demo", "videos": demo[: max(1, min(limit, 12))]}
-    try:
-        data = json.loads(m.group(1))
-    except json.JSONDecodeError:
-        return {"query": q, "source": "demo", "videos": demo[: max(1, min(limit, 12))]}
-
-    videos: list[dict[str, Any]] = []
-    _walk_video_renderers(data, videos, max(1, min(limit, 12)))
-    if not videos:
-        return {"query": q, "source": "demo", "videos": demo[: max(1, min(limit, 12))]}
-    return {"query": q, "source": "youtube", "videos": videos}
+    if youtube_configured():
+        live = await search_youtube_videos(q, limit=limit)
+        if live.get("source") == "youtube" and live.get("videos"):
+            return live
+    scraped = await search_youtube_scrape(q, limit=limit)
+    return scraped
 
 
 @app.get("/weather")

@@ -1,16 +1,18 @@
 import {
   Bell,
   Bookmark,
+  Camera,
   CloudRain,
   Droplets,
   ExternalLink,
+  Leaf,
   Moon,
   Pencil,
   Sun,
   Trash2,
   X,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ImpactStats, type ImpactStatsProps } from "./ImpactStats";
 import { LeaderboardPanel } from "./LeaderboardPanel";
 import { LocationPicker } from "./LocationPicker";
@@ -21,6 +23,7 @@ import {
   type UserProfile,
 } from "../lib/userProfile";
 import { useSavedPlants, type SavedPlant } from "../lib/savedPlants";
+import { levelForXp, nextLevelForXp } from "../xp";
 
 const SAVED_PREVIEW_COUNT = 3;
 
@@ -215,6 +218,114 @@ function SavedPlantsGallery(props: {
   );
 }
 
+function AvatarPlantPicker(props: {
+  plants: SavedPlant[];
+  selectedId: string | null;
+  onSelect: (plantId: string | null) => void;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") props.onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = prev;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [props.onClose]);
+
+  const withPhotos = props.plants.filter((p) => !!p.image);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex flex-col bg-background/95 backdrop-blur-md"
+      role="dialog"
+      aria-label="Choose profile photo"
+    >
+      <div className="flex items-center justify-between border-b border-border px-4 py-3">
+        <div>
+          <p className="font-heading text-lg font-semibold">Profile photo</p>
+          <p className="text-xs text-muted-foreground">
+            Pick a plant you&apos;ve identified
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={props.onClose}
+          aria-label="Close"
+          className="border border-border bg-card p-2 text-muted-foreground hover:text-foreground"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+      <div className="flex-1 overflow-y-auto px-4 py-4">
+        <button
+          type="button"
+          onClick={() => props.onSelect(null)}
+          className={`mb-4 flex w-full items-center gap-3 border px-3 py-3 text-left ${
+            !props.selectedId
+              ? "border-primary bg-primary/5"
+              : "border-border bg-card/85 hover:border-primary/40"
+          }`}
+        >
+          <span className="flex h-12 w-12 items-center justify-center bg-primary font-heading text-lg font-semibold text-primary-foreground">
+            Aa
+          </span>
+          <span>
+            <span className="block text-sm font-medium">Use initials</span>
+            <span className="block text-xs text-muted-foreground">
+              Default letter avatar
+            </span>
+          </span>
+        </button>
+
+        {withPhotos.length === 0 ? (
+          <div className="border border-dashed border-border bg-card/60 px-4 py-8 text-center">
+            <Camera className="mx-auto mb-2 h-6 w-6 text-muted-foreground" />
+            <p className="text-sm font-medium text-foreground">
+              No plant photos yet
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Identify plants from Home (camera) and save them — then pick one as
+              your profile picture.
+            </p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-3 gap-2">
+            {withPhotos.map((p) => {
+              const selected = props.selectedId === p.id;
+              return (
+                <button
+                  key={p.id}
+                  type="button"
+                  onClick={() => props.onSelect(p.id)}
+                  className={`overflow-hidden border text-left ${
+                    selected
+                      ? "border-primary ring-2 ring-primary/30"
+                      : "border-border hover:border-primary/50"
+                  }`}
+                >
+                  <img
+                    src={p.image}
+                    alt=""
+                    className="aspect-square w-full object-cover"
+                  />
+                  <p className="truncate px-1.5 py-1 text-[10px] font-medium leading-tight">
+                    {p.commonName}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function ProfilePanel(props: ImpactStatsProps & { xp: number; streakDays: number }) {
   const [prefs, setPrefs] = useState<NotifPrefs>(loadNotifPrefs);
   const { profile, setProfile } = useUserProfile();
@@ -222,6 +333,16 @@ export function ProfilePanel(props: ImpactStatsProps & { xp: number; streakDays:
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<UserProfile>(profile);
   const [galleryOpen, setGalleryOpen] = useState(false);
+  const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
+
+  const level = levelForXp(props.xp);
+  const nextLevel = nextLevelForXp(props.xp);
+  const xpIntoLevel = props.xp - level.minXp;
+  const xpSpan = nextLevel ? nextLevel.minXp - level.minXp : 0;
+  const xpToNext = nextLevel ? Math.max(0, nextLevel.minXp - props.xp) : 0;
+  const xpProgressPct = nextLevel
+    ? Math.min(100, Math.max(0, (xpIntoLevel / Math.max(1, xpSpan)) * 100))
+    : 100;
 
   useEffect(() => {
     try {
@@ -250,6 +371,8 @@ export function ProfilePanel(props: ImpactStatsProps & { xp: number; streakDays:
       name: draft.name.trim() || DEFAULT_PROFILE.name,
       age: draft.age,
       bio: draft.bio.trim(),
+      avatarPlantId: profile.avatarPlantId,
+      greenerSwapsEnabled: profile.greenerSwapsEnabled,
     });
     setEditing(false);
   }
@@ -259,13 +382,42 @@ export function ProfilePanel(props: ImpactStatsProps & { xp: number; streakDays:
   const sortedSaved = [...savedPlants].sort((a, b) => b.savedAt - a.savedAt);
   const previewPlants = sortedSaved.slice(0, SAVED_PREVIEW_COUNT);
   const hasMoreSaved = sortedSaved.length > SAVED_PREVIEW_COUNT;
+  const avatarPlant = useMemo(
+    () => sortedSaved.find((p) => p.id === profile.avatarPlantId) ?? null,
+    [sortedSaved, profile.avatarPlantId],
+  );
+
+  function chooseAvatar(plantId: string | null) {
+    setProfile({ ...profile, avatarPlantId: plantId });
+    setAvatarPickerOpen(false);
+  }
 
   return (
     <div className="space-y-5 py-2">
       <div className="flex animate-fade-in-up items-start gap-4">
-        <div className="flex h-16 w-16 shrink-0 items-center justify-center bg-primary font-heading text-2xl font-semibold text-primary-foreground">
-          {initial}
-        </div>
+        <button
+          type="button"
+          onClick={() => setAvatarPickerOpen(true)}
+          className="group relative h-16 w-16 shrink-0 overflow-hidden border border-border bg-primary"
+          title="Choose a saved plant as your photo"
+          aria-label="Edit profile photo"
+        >
+          {avatarPlant?.image ? (
+            <img
+              src={avatarPlant.image}
+              alt=""
+              className="h-full w-full object-cover"
+            />
+          ) : (
+            <span className="flex h-full w-full items-center justify-center font-heading text-2xl font-semibold text-primary-foreground">
+              {initial}
+            </span>
+          )}
+          <span className="absolute inset-x-0 bottom-0 flex items-center justify-center gap-1 bg-foreground/65 py-0.5 text-[9px] font-medium text-primary-foreground opacity-90 group-hover:opacity-100">
+            <Camera className="h-2.5 w-2.5" />
+            Edit
+          </span>
+        </button>
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
@@ -293,6 +445,42 @@ export function ProfilePanel(props: ImpactStatsProps & { xp: number; streakDays:
           )}
         </div>
       </div>
+
+      <section
+        className="animate-fade-in-up space-y-3 border border-border bg-card/85 p-4 backdrop-blur"
+        style={{ animationDelay: "0.02s" }}
+      >
+        <div className="flex items-baseline justify-between gap-2">
+          <p className="min-w-0 font-heading text-xl font-semibold leading-snug">
+            Planter progress: {level.title}
+          </p>
+          <p className="shrink-0 text-[11px] text-muted-foreground">
+            {nextLevel ? (
+              <>next milestone: {nextLevel.title}</>
+            ) : (
+              <>max level</>
+            )}
+          </p>
+        </div>
+        <div
+          className="h-2 w-full border border-border bg-secondary"
+          role="progressbar"
+          aria-valuenow={Math.round(xpProgressPct)}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-label="XP progress to next level"
+        >
+          <div
+            className="h-full bg-primary transition-[width] duration-300"
+            style={{ width: `${xpProgressPct}%` }}
+          />
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {nextLevel
+            ? `${props.xp} / ${nextLevel.minXp} XP · ${xpToNext} XP to go`
+            : `${props.xp} XP`}
+        </p>
+      </section>
 
       {editing && (
         <section
@@ -409,7 +597,21 @@ export function ProfilePanel(props: ImpactStatsProps & { xp: number; streakDays:
         <SavedPlantsGallery
           plants={sortedSaved}
           onClose={() => setGalleryOpen(false)}
-          onRemove={removeSaved}
+          onRemove={(id) => {
+            if (profile.avatarPlantId === id) {
+              setProfile({ ...profile, avatarPlantId: null });
+            }
+            removeSaved(id);
+          }}
+        />
+      )}
+
+      {avatarPickerOpen && (
+        <AvatarPlantPicker
+          plants={sortedSaved}
+          selectedId={profile.avatarPlantId}
+          onSelect={chooseAvatar}
+          onClose={() => setAvatarPickerOpen(false)}
         />
       )}
 
@@ -424,6 +626,19 @@ export function ProfilePanel(props: ImpactStatsProps & { xp: number; streakDays:
       </section>
 
       <LeaderboardPanel xp={props.xp} streakDays={props.streakDays} />
+
+      <section className="animate-fade-in-up" style={{ animationDelay: "0.07s" }}>
+        <h3 className="mb-3 font-heading text-2xl font-semibold">Suggestions</h3>
+        <div className="divide-y divide-border rounded-2xl border border-border bg-card/85 backdrop-blur">
+          <NotifToggle
+            icon={Leaf}
+            label="Greener swap suggestions"
+            desc="CO₂-friendlier plant swaps on your layout"
+            on={profile.greenerSwapsEnabled}
+            onChange={(v) => setProfile({ ...profile, greenerSwapsEnabled: v })}
+          />
+        </div>
+      </section>
 
       <section className="animate-fade-in-up" style={{ animationDelay: "0.1s" }}>
         <h3 className="mb-3 flex items-center gap-2 font-heading text-2xl font-semibold">

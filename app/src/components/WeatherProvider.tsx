@@ -20,6 +20,7 @@ import {
   weatherMeta,
   type WeatherCondition,
 } from "../lib/weather";
+import { useDevWeatherOverride } from "../devWeather";
 
 const MANUAL_PLACE_KEY = "plottwist:manualPlace";
 
@@ -73,6 +74,7 @@ export function WeatherProvider({
   const [loading, setLoading] = useState(true);
   const [tick, setTick] = useState(0);
   const idsKey = plantIds.join(",");
+  const forced = useDevWeatherOverride();
 
   const setManualPlace = useCallback((place: Place | null) => {
     setManualPlaceState(place);
@@ -119,11 +121,25 @@ export function WeatherProvider({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idsKey, manualPlace?.lat, manualPlace?.lon, manualPlace?.label, tick]);
 
-  const condition = useMemo(() => mapWeatherCondition(data), [data]);
-  const meta = useMemo(
-    () => weatherMeta(data, condition, manualPlace?.label),
-    [data, condition, manualPlace?.label],
-  );
+  const condition = useMemo(() => {
+    if (forced) return forced;
+    return mapWeatherCondition(data);
+  }, [forced, data]);
+  const meta = useMemo(() => {
+    const base = weatherMeta(data, condition, manualPlace?.label);
+    if (!forced) return base;
+    // Prefer the simulated condition name over whatever live Open-Meteo said.
+    const labels: Record<WeatherCondition, string> = {
+      sunny: "Sunny",
+      partly_cloudy: "Partly cloudy",
+      rainy: "Light rain",
+      cloudy: "Overcast",
+      snowy: "Snowing",
+      thunder: "Thunderstorm",
+      clear_night: "Clear night",
+    };
+    return { ...base, label: labels[forced] };
+  }, [data, condition, manualPlace?.label, forced]);
 
   const value = useMemo<WeatherContextValue>(
     () => ({

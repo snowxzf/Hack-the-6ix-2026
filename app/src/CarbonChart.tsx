@@ -6,6 +6,7 @@ import { useDevClock } from "./devClock";
  * produces a season-end total, so this assumes a linear ramp from 0 at
  * plantedAt to that total over SEASON_MS. Range chips (1d / 1w / …) only
  * zoom the look-back window ending at "now" (real time + optional dev clock).
+ * Bottom labels stay plant-day (left) and now (right) — chips don't rewrite them.
  * They do not invent future progress: advance the DevTools clock to see more.
  */
 export const SEASON_MS = 90 * 24 * 60 * 60 * 1000;
@@ -46,11 +47,13 @@ export function CarbonChart(props: { plantedAt: number; totalKgCo2eSeason: numbe
   const { now } = useDevClock();
   const rangeMs = RANGES.find((r) => r.id === range)!.ms;
   // Look back from now: right edge is always your current progress.
-  const rangeStart = now - rangeMs;
+  // Clamp so we never start before planting (no pre-zero fake history).
+  const rangeStart = Math.max(props.plantedAt, now - rangeMs);
   const yMax = Math.max(props.totalKgCo2eSeason, 0.1);
 
   const points = Array.from({ length: SAMPLES }, (_, i) => {
-    const t = rangeStart + ((now - rangeStart) * i) / (SAMPLES - 1);
+    const span = Math.max(1, now - rangeStart);
+    const t = rangeStart + (span * i) / (SAMPLES - 1);
     const v = carbonAt(t, props.plantedAt, props.totalKgCo2eSeason);
     return {
       t,
@@ -80,9 +83,10 @@ export function CarbonChart(props: { plantedAt: number; totalKgCo2eSeason: numbe
     setHover(i);
   }
 
-  const startLabel = fmtDate(rangeStart);
+  // Left date is stable (plant day); right date tracks "now" as time advances.
+  // Range chips only zoom the plot — they must not rewrite the plant-date label.
+  const startLabel = fmtDate(props.plantedAt);
   const nowLabel = fmtDate(now);
-  const sameDay = startLabel === nowLabel;
 
   return (
     <div className="card">
@@ -174,14 +178,14 @@ export function CarbonChart(props: { plantedAt: number; totalKgCo2eSeason: numbe
           {last.v.toFixed(1)} kg
         </text>
 
-        {/* Left = start of look-back window, right = now */}
+        {/* Left = plant day (stable); right = now (moves with the clock) */}
         <text
           x={PAD_L}
           y={H - 8}
           fill="hsl(var(--muted-foreground))"
           fontSize={9}
         >
-          {sameDay ? `${startLabel} · start` : startLabel}
+          {`${startLabel} · planted`}
         </text>
         <text
           x={W - PAD_R}

@@ -156,6 +156,42 @@
   }
 }
 
+@keyframes lightning-flash {
+  0%,
+  88%,
+  100% {
+    opacity: 0;
+  }
+  90% {
+    opacity: 0.55;
+  }
+  92% {
+    opacity: 0.08;
+  }
+  94% {
+    opacity: 0.7;
+  }
+  96% {
+    opacity: 0;
+  }
+}
+
+@keyframes lightning-bolt {
+  0%,
+  88%,
+  100% {
+    opacity: 0;
+  }
+  90%,
+  94% {
+    opacity: 1;
+  }
+  92%,
+  96% {
+    opacity: 0.15;
+  }
+}
+
 @keyframes fade-in-up {
   from {
     opacity: 0;
@@ -747,7 +783,9 @@ label.opt {
   border-radius: 0 !important;
   background: hsl(var(--muted)) !important;
   color: hsl(var(--muted-foreground)) !important;
-  font-size: 10px;
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 600;
   line-height: 1;
   cursor: not-allowed;
   opacity: 0.5;
@@ -847,11 +885,26 @@ ul.clean li {
   position: relative;
   z-index: 20;
   flex-shrink: 0;
+  overflow: visible;
+}
+
+/* Learn / Profile: don't reserve a blank XP row — float DevTools only. */
+.top-bar--overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  justify-content: flex-end;
+  pointer-events: none;
+}
+.top-bar--overlay .devtools {
+  pointer-events: auto;
 }
 
 .devtools {
   position: relative;
   z-index: 50;
+  overflow: visible;
 }
 button.devtools-toggle {
   display: inline-flex;
@@ -877,10 +930,12 @@ button.devtools-toggle:hover {
   opacity: 1;
 }
 .devtools-panel {
-  position: absolute;
-  top: 36px;
-  right: 0;
-  width: 190px;
+  position: fixed;
+  top: calc(max(8px, env(safe-area-inset-top)) + 40px);
+  right: max(12px, calc((100vw - min(100vw, 430px)) / 2 + 12px));
+  width: min(300px, calc(100vw - 24px));
+  max-height: min(80dvh, 560px);
+  overflow-y: auto;
   background: hsl(var(--card));
   border: 1px solid hsl(var(--border));
   border-radius: 0;
@@ -888,7 +943,20 @@ button.devtools-toggle:hover {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+  z-index: 100;
+}
+
+.devtools-weather-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin: 4px 0;
+}
+
+.devtools-weather-grid > button.small {
+  flex: 1 1 calc(50% - 4px);
+  min-width: 0;
 }
 
 .flow-header .flow-brand {
@@ -974,10 +1042,17 @@ textarea {
 }
 
 .xp-badge {
-  flex-shrink: 0; z-index: 50;
-  background: hsl(var(--primary)); color: hsl(var(--primary-foreground));
+  flex-shrink: 0;
+  z-index: 50;
+  background: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
   border: 1px solid hsl(var(--primary));
-  border-radius: 999px; padding: 6px 12px; font-size: 12px; font-weight: 700;
+  border-radius: 0;
+  padding: 6px 12px;
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
 }
 
 .celebration-overlay {

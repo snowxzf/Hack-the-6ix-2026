@@ -230,22 +230,24 @@ export async function searchPlantsByName(
 /** Curated demos when the live YouTube scrape is unreachable. */
 const DEMO_VIDEOS: SearchVideo[] = [
   {
-    title: "How to Grow Tomatoes: Complete Guide for Beginners",
-    video_id: "ECibnV1_3jM",
+    title: "New Vegetable Garden: How To Get Started",
+    video_id: "NlS_dTDsHHQ",
+    channel: "YouTube",
+  },
+  {
+    title: "EVERYTHING I Wish I Knew When I Started Growing Tomatoes",
+    video_id: "9seQurhbLPM",
     channel: "Epic Gardening",
-    duration: "12:04",
   },
   {
-    title: "Vegetable Garden for Beginners",
-    video_id: "qNtEgeCDVZU",
-    channel: "GrowVeg",
-    duration: "10:18",
+    title: "Beginner's Guide to Composting",
+    video_id: "egyNJ7xPyoQ",
+    channel: "Nelson City Council",
   },
   {
-    title: "Composting for Beginners",
-    video_id: "FxYw0XPYoqg",
-    channel: "California Academy of Sciences",
-    duration: "5:32",
+    title: "Science-Based Companion Planting Combinations That WORK",
+    video_id: "mhr3REshTss",
+    channel: "Epic Gardening",
   },
 ];
 
@@ -279,6 +281,28 @@ export async function searchWebGuides(
     `/search/web?q=${encodeURIComponent(q)}&limit=5`,
     undefined,
     12000,
+  );
+}
+
+export interface WikipediaResult {
+  title: string;
+  description?: string;
+  snippet: string;
+  extract?: string;
+  image?: string;
+  thumbnail?: string;
+  url: string;
+  displayUrl?: string;
+}
+
+/** GET /search/wikipedia: keyless Wikipedia summaries for Learn search. */
+export async function searchWikipedia(
+  q: string,
+): Promise<{ results: WikipediaResult[] } | null> {
+  return request<{ results: WikipediaResult[] }>(
+    `/search/wikipedia?q=${encodeURIComponent(q)}&limit=5`,
+    undefined,
+    15000,
   );
 }
 
