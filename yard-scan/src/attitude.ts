@@ -74,6 +74,50 @@ export function attitudeWarnings(attitude: DeviceAttitude): string[] {
   return warnings;
 }
 
+/**
+ * Estimate pitch-from-nadir when the bed outline is a rectangle on the ground
+ * (desk, raised bed, patio slab) but the photo was taken at an angle.
+ *
+ * We pick the pitch that makes opposite sides equal length after the
+ * 1/cos(pitch) depth stretch — no device sensors required. Falls back to
+ * `fallbackRad` when the outline isn't a 4-point quad.
+ */
+export function estimatePitchFromRectangle(
+  bedPolygonPx: Point2[],
+  cmPerPxImage: number,
+  originPx: Point2,
+  fallbackRad = (12 * Math.PI) / 180,
+): { pitchFromNadirRad: number; oppositeSideErrorCm: number } {
+  if (bedPolygonPx.length !== 4 || cmPerPxImage <= 0) {
+    return { pitchFromNadirRad: fallbackRad, oppositeSideErrorCm: NaN };
+  }
+
+  let bestPitch = fallbackRad;
+  let bestErr = Number.POSITIVE_INFINITY;
+
+  // 0°…70° in 1° steps — fine enough for garden-scale error
+  for (let deg = 0; deg <= 70; deg += 1) {
+    const pitch = (deg * Math.PI) / 180;
+    const ground = groundScaleFromAttitude(cmPerPxImage, {
+      pitchFromNadirRad: pitch,
+    });
+    const pts = bedPolygonPx.map((p) => imageToGroundCm(p, originPx, ground));
+    const side = (i: number, j: number) => {
+      const a = pts[i]!;
+      const b = pts[j]!;
+      return Math.hypot(b.x - a.x, b.y - a.y);
+    };
+    // opposite sides: 0–1 vs 2–3, and 1–2 vs 3–0
+    const err = Math.abs(side(0, 1) - side(2, 3)) + Math.abs(side(1, 2) - side(3, 0));
+    if (err < bestErr) {
+      bestErr = err;
+      bestPitch = pitch;
+    }
+  }
+
+  return { pitchFromNadirRad: bestPitch, oppositeSideErrorCm: bestErr };
+}
+
 function clamp(v: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, v));
 }

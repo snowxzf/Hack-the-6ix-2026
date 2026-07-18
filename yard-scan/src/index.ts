@@ -26,10 +26,15 @@ export {
 } from "./coin";
 export {
   attitudeWarnings,
+  estimatePitchFromRectangle,
   groundScaleFromAttitude,
   imageToGroundCm,
   polygonImageToGroundCm,
 } from "./attitude";
+export {
+  measureRectBedWithReference,
+  type RectifiedMeasure,
+} from "./rectify";
 export {
   boundsOf,
   convexHull,
@@ -37,7 +42,11 @@ export {
   polygonAreaCm2,
   translatePolygon,
 } from "./geometry";
-export { projectFramesToGround, stitchWorldPolygons } from "./stitch";
+export {
+  coinGhostForNextFrame,
+  projectFramesToGround,
+  stitchWorldPolygons,
+} from "./stitch";
 export { worldPolygonToGardenGrid } from "./grid";
 export { scanYard } from "./pipeline";
 export {

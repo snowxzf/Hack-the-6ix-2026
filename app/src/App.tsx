@@ -8,17 +8,19 @@ import type {
   Target,
 } from "../../optimizer/src/index";
 import { GridView, cellKey, speciesColor } from "./GridView";
+import { PhotoGridOverlay, type ScanPhotoOverlay } from "./PhotoGridOverlay";
 import { CarbonChart } from "./CarbonChart";
 import { advanceDevClock, devNow, resetDevClock, useDevClock } from "./devClock";
 import {
   DAYS_TO_HARVEST,
   FAKE_WEATHER_ALERT,
   getCatalog,
+  measureYardFromFrames,
   measureYardFromTaps,
   scanPhotoToGarden,
 } from "./placeholders";
 import type { ScanDiagnostics } from "../../yard-scan/src/index";
-import { COIN_LABELS, SCAN_UX } from "../../yard-scan/src/index";
+import { COIN_LABELS, SCAN_UX, coinGhostForNextFrame } from "../../yard-scan/src/index";
 import type { Point2, ReferenceKind, ScaleReferenceMode } from "../../yard-scan/src/index";
 import {
   API_URL,
@@ -179,6 +181,7 @@ export function App() {
   const [photo, setPhoto] = useState<string | null>(null);
   const [garden, setGarden] = useState<GardenGrid | null>(saved?.garden ?? null);
   const [scanInfo, setScanInfo] = useState<ScanDiagnostics | null>(null);
+  const [scanOverlay, setScanOverlay] = useState<ScanPhotoOverlay | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set(saved?.selected ?? []));
   const [prefs, setPrefs] = useState<Preferences>(
     saved?.prefs ?? { tier: "beginner", categories: [] },
@@ -308,21 +311,26 @@ export function App() {
  .map((c) => cellKey(c.r, c.c));
   }, [garden]);
 
-  function applyGarden(g: GardenGrid, diagnostics: ScanDiagnostics | null) {
+  function applyGarden(
+    g: GardenGrid,
+    diagnostics: ScanDiagnostics | null,
+    overlay: ScanPhotoOverlay | null = null,
+  ) {
     setGarden(g);
     setScanInfo(diagnostics);
+    setScanOverlay(overlay);
     setSelected(
       new Set(
         g.cells
- .filter((c) => c.state === "selected" || c.state === "obstacle_movable")
- .map((c) => cellKey(c.r, c.c)),
- ),
- );
+          .filter((c) => c.state === "selected" || c.state === "obstacle_movable")
+          .map((c) => cellKey(c.r, c.c)),
+      ),
+    );
     setStep("review");
   }
 
   function doDemoScan() {
-    applyGarden(scanPhotoToGarden(photo), null);
+    applyGarden(scanPhotoToGarden(photo), null, null);
   }
 
   /** The user's selection shrinks the garden: unselected plantable cells are
@@ -621,13 +629,14 @@ export function App() {
               <ReviewScreen
                 garden={garden}
                 scanInfo={scanInfo}
+                scanOverlay={scanOverlay}
                 setGarden={setGarden}
                 selected={selected}
                 setSelected={setSelected}
                 onNext={() => setStep("prefs")}
                 skippable={editingLayout}
               />
- )}
+            )}
             {step === "prefs" && (
               <PrefsScreen
                 prefs={prefs}
@@ -866,15 +875,29 @@ function DevTools(props: { onRestart: () => void }) {
 
 /* ─────────────── 1. Scan (yard-scan: coin or custom reference) ─────────────── */
 
+type SavedScanFrame = {
+  id: string;
+  photoUrl: string;
+  imageWidthPx: number;
+  imageHeightPx: number;
+  referenceEdgeA: Point2;
+  referenceEdgeB: Point2;
+  bedCorners: Point2[];
+};
+
 function ScanScreen(props: {
   photo: string | null;
   setPhoto: (p: string | null) => void;
-  onMeasured: (g: GardenGrid, d: ScanDiagnostics) => void;
+  onMeasured: (
+    g: GardenGrid,
+    d: ScanDiagnostics,
+    overlay: ScanPhotoOverlay | null,
+  ) => void;
   onDemo: () => void;
   onSkip?: () => void;
 }) {
   const [mode, setMode] = useState<ScaleReferenceMode>("coin");
-  const [coinKind, setCoinKind] = useState<Exclude<ReferenceKind, "custom">>("cad_quarter");
+  const [coinKind, setCoinKind] = useState<Exclude<ReferenceKind, "custom"> | "">("");
   const [customSizeCm, setCustomSizeCm] = useState(8.56); // credit-card width default
   const [customLabel, setCustomLabel] = useState("credit card");
   const [tapPhase, setTapPhase] = useState<"reference" | "bed">("reference");
@@ -884,6 +907,29 @@ function ScanScreen(props: {
   const [error, setError] = useState<string | null>(null);
   const [drag, setDrag] = useState<{ kind: "ref" | "bed"; index: number } | null>(null);
   const dragMovedRef = useRef(false);
+  const [stitchMode, setStitchMode] = useState(false);
+  const [panDirection, setPanDirection] = useState<"right" | "left">("right");
+  const [overlapFraction, setOverlapFraction] = useState(0.3);
+  const [savedFrames, setSavedFrames] = useState<SavedScanFrame[]>([]);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const cameraInputRef = useRef<HTMLInputElement | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const [liveCamera, setLiveCamera] = useState(false);
+  const [cameraError, setCameraError] = useState<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+      streamRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!liveCamera || !videoRef.current || !streamRef.current) return;
+    videoRef.current.srcObject = streamRef.current;
+    void videoRef.current.play().catch(() => undefined);
+  }, [liveCamera]);
 
   /** Starting quad: inset rectangle the user drags to fit their real bed. */
   function autoCorners(w: number, h: number): Point2[] {
@@ -905,6 +951,118 @@ function ScanScreen(props: {
     setDrag(null);
   }
 
+  function clearAllFrames() {
+    for (const f of savedFrames) {
+      if (f.photoUrl.startsWith("blob:")) URL.revokeObjectURL(f.photoUrl);
+    }
+    setSavedFrames([]);
+  }
+
+  function stopLiveCamera() {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    streamRef.current = null;
+    setLiveCamera(false);
+  }
+
+  async function startLiveCamera() {
+    setCameraError(null);
+    setError(null);
+    if (!navigator.mediaDevices?.getUserMedia) {
+      cameraInputRef.current?.click();
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+        },
+        audio: false,
+      });
+      streamRef.current = stream;
+      setLiveCamera(true);
+    } catch {
+      setCameraError("Couldn’t open the live camera — using the phone camera picker instead.");
+      cameraInputRef.current?.click();
+    }
+  }
+
+  function captureFromLiveCamera() {
+    const video = videoRef.current;
+    if (!video || !video.videoWidth) {
+      setError("Camera isn’t ready yet — wait a second and try Capture again.");
+      return;
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    ctx.drawImage(video, 0, 0);
+    canvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          setError("Capture failed — try again or upload a photo.");
+          return;
+        }
+        stopLiveCamera();
+        if (props.photo?.startsWith("blob:") && !savedFrames.some((sf) => sf.photoUrl === props.photo)) {
+          URL.revokeObjectURL(props.photo);
+        }
+        props.setPhoto(URL.createObjectURL(blob));
+        resetMarks(null);
+        setImgSize({ w: canvas.width, h: canvas.height });
+        setBedCorners(autoCorners(canvas.width, canvas.height));
+        setError(null);
+      },
+      "image/jpeg",
+      0.92,
+    );
+  }
+
+  function applyPickedPhoto(f: File) {
+    if (props.photo?.startsWith("blob:") && !savedFrames.some((sf) => sf.photoUrl === props.photo)) {
+      URL.revokeObjectURL(props.photo);
+    }
+    props.setPhoto(URL.createObjectURL(f));
+    resetMarks(null);
+    setImgSize(null);
+    setError(null);
+    if (/\.heic$|\.heif$/i.test(f.name) || /heic|heif/i.test(f.type)) {
+      setError(
+        "This looks like an iPhone HEIC photo — if it doesn't appear below, open it in Photos and export as JPEG, then re-upload.",
+      );
+    }
+  }
+
+  const coinGhost = useMemo(() => {
+    if (!stitchMode || savedFrames.length === 0) return null;
+    const prev = savedFrames[savedFrames.length - 1]!;
+    const nextSize =
+      imgSize ??
+      (liveCamera
+        ? { w: prev.imageWidthPx, h: prev.imageHeightPx }
+        : null);
+    if (!nextSize) return null;
+    const prevCenter = {
+      x: (prev.referenceEdgeA.x + prev.referenceEdgeB.x) / 2,
+      y: (prev.referenceEdgeA.y + prev.referenceEdgeB.y) / 2,
+    };
+    const prevDiam = Math.hypot(
+      prev.referenceEdgeB.x - prev.referenceEdgeA.x,
+      prev.referenceEdgeB.y - prev.referenceEdgeA.y,
+    );
+    return coinGhostForNextFrame(
+      prevCenter,
+      prevDiam,
+      { w: prev.imageWidthPx, h: prev.imageHeightPx },
+      nextSize,
+      panDirection,
+      overlapFraction,
+    );
+  }, [stitchMode, imgSize, savedFrames, panDirection, overlapFraction, liveCamera]);
+
   function stagePoint(e: { clientX: number; clientY: number; currentTarget: HTMLDivElement }): Point2 | null {
     if (!imgSize) return null;
     const rect = e.currentTarget.getBoundingClientRect();
@@ -918,7 +1076,6 @@ function ScanScreen(props: {
 
   function onPhotoClick(e: MouseEvent<HTMLDivElement>) {
     if (dragMovedRef.current) {
-      // this click is the tail end of a drag — don't add a new mark
       dragMovedRef.current = false;
       return;
     }
@@ -961,25 +1118,90 @@ function ScanScreen(props: {
     setDrag(null);
   }
 
-  function measure() {
+  function currentFramePayload(): SavedScanFrame | null {
+    if (!props.photo || !imgSize || refTaps.length < 2 || bedCorners.length < 3) return null;
+    return {
+      id: `frame-${savedFrames.length + 1}`,
+      photoUrl: props.photo,
+      imageWidthPx: imgSize.w,
+      imageHeightPx: imgSize.h,
+      referenceEdgeA: refTaps[0]!,
+      referenceEdgeB: refTaps[1]!,
+      bedCorners: [...bedCorners],
+    };
+  }
+
+  function saveFrameAndAddNext() {
     setError(null);
-    if (!imgSize || refTaps.length < 2 || bedCorners.length < 3) {
-      setError("Tap both edges of your reference, then at least 3 bed corners.");
+    if (mode === "coin" && !coinKind) {
+      setError("Choose which coin you used before saving a frame.");
       return;
     }
+    const frame = currentFramePayload();
+    if (!frame) {
+      setError("Tap both coin edges and at least 3 bed corners before saving this frame.");
+      return;
+    }
+    // Tip: put the coin toward the edge you'll pan into (right edge if panning right).
+    setSavedFrames((prev) => [...prev, frame]);
+    props.setPhoto(null);
+    setImgSize(null);
+    resetMarks(null);
+    setError(null);
+    // Nudge the file picker so the same filename can be chosen again if needed.
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  }
+
+  function measure() {
+    setError(null);
+    if (mode === "coin" && !coinKind) {
+      setError("Choose which coin you used before measuring.");
+      return;
+    }
+
     try {
-      const result = measureYardFromTaps({
-        imageWidthPx: imgSize.w,
-        imageHeightPx: imgSize.h,
-        referenceEdgeA: refTaps[0]!,
-        referenceEdgeB: refTaps[1]!,
-        bedCorners,
-        mode,
-        coinKind,
-        customSizeCm,
-        customLabel,
-      });
-      props.onMeasured(result.garden, result.diagnostics);
+      const frames = [...savedFrames];
+      const current = currentFramePayload();
+      if (current) frames.push(current);
+
+      if (!frames.length) {
+        setError("Upload a photo and mark the coin + bed corners first.");
+        return;
+      }
+
+      const chosenCoin = mode === "coin" && coinKind ? coinKind : undefined;
+      const result =
+        frames.length === 1
+          ? measureYardFromTaps({
+              imageWidthPx: frames[0]!.imageWidthPx,
+              imageHeightPx: frames[0]!.imageHeightPx,
+              referenceEdgeA: frames[0]!.referenceEdgeA,
+              referenceEdgeB: frames[0]!.referenceEdgeB,
+              bedCorners: frames[0]!.bedCorners,
+              mode,
+              coinKind: chosenCoin,
+              customSizeCm,
+              customLabel,
+            })
+          : measureYardFromFrames({
+              frames: frames.map(({ photoUrl: _p, ...f }) => f),
+              mode,
+              coinKind: chosenCoin,
+              customSizeCm,
+              customLabel,
+              stitchDirection: panDirection,
+              overlapFraction,
+            });
+      const last = frames[frames.length - 1]!;
+      const overlay: ScanPhotoOverlay | null = last
+        ? {
+            photoUrl: last.photoUrl,
+            imageWidthPx: last.imageWidthPx,
+            imageHeightPx: last.imageHeightPx,
+            bedCorners: last.bedCorners,
+          }
+        : null;
+      props.onMeasured(result.garden, result.diagnostics, overlay);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -989,6 +1211,8 @@ function ScanScreen(props: {
     Exclude<ReferenceKind, "custom">,
     string,
   ][];
+  const canSaveOrMeasure =
+    !!props.photo && refTaps.length >= 2 && bedCorners.length >= 3;
 
   return (
     <div className="card">
@@ -1006,7 +1230,7 @@ function ScanScreen(props: {
             resetMarks();
           }}
         >
-          Coin (recommended)
+          Coin
         </span>
         <span
           className={`chip ${mode === "custom_object" ? "on" : ""}`}
@@ -1016,6 +1240,15 @@ function ScanScreen(props: {
           }}
         >
           Custom object
+        </span>
+        <span
+          className={`chip ${stitchMode ? "on" : ""}`}
+          onClick={() => {
+            setStitchMode((v) => !v);
+            if (stitchMode) clearAllFrames();
+          }}
+        >
+          Stitch wide yard
         </span>
       </div>
 
@@ -1027,18 +1260,23 @@ function ScanScreen(props: {
             <select
               value={coinKind}
               onChange={(e) =>
-                setCoinKind(e.target.value as Exclude<ReferenceKind, "custom">)
+                setCoinKind(
+                  e.target.value as Exclude<ReferenceKind, "custom"> | "",
+                )
               }
             >
+              <option value="" disabled>
+                Choose coin type…
+              </option>
               {coinOptions.map(([id, label]) => (
                 <option key={id} value={id}>
                   {label}
                 </option>
- ))}
+              ))}
             </select>
           </div>
         </>
- ) : (
+      ) : (
         <>
           <p className="muted">{SCAN_UX.placeCustom}</p>
           <div className="row">
@@ -1060,33 +1298,158 @@ function ScanScreen(props: {
             <span className="tiny">cm wide</span>
           </div>
         </>
- )}
+      )}
+
+      {stitchMode && (
+        <div className="stitch-panel">
+          <p className="muted">{SCAN_UX.multiFrame}</p>
+          <div className="row">
+            <label className="tiny">Pan direction</label>
+            <select
+              value={panDirection}
+              onChange={(e) => setPanDirection(e.target.value as "right" | "left")}
+            >
+              <option value="right">Left → right</option>
+              <option value="left">Right → left</option>
+            </select>
+            <label className="tiny">Overlap</label>
+            <select
+              value={String(overlapFraction)}
+              onChange={(e) => setOverlapFraction(Number(e.target.value))}
+            >
+              <option value="0.25">~25%</option>
+              <option value="0.3">~30%</option>
+              <option value="0.4">~40%</option>
+            </select>
+          </div>
+          <p className="tiny muted">
+            Tip: put the coin near the <b>{panDirection === "right" ? "right" : "left"}</b> edge
+            of frame 1 (in the overlap). Use <b>Open camera</b> for the next shot — a dashed ghost
+            shows where to put the coin. Line it up, capture, re-tap the coin edges, then mark only
+            the desk corners you can see in that frame.
+          </p>
+          {savedFrames.length > 0 && (
+            <div className="frame-strip">
+              {savedFrames.map((f, i) => (
+                <div key={f.id} className="frame-thumb">
+                  <img src={f.photoUrl} alt={`frame ${i + 1}`} />
+                  <span className="tiny">Frame {i + 1}</span>
+                </div>
+              ))}
+              <span className="tiny muted">
+                {savedFrames.length} saved · next is frame {savedFrames.length + 1}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
 
       <div className="row">
+        <button type="button" className="secondary small" onClick={() => void startLiveCamera()}>
+          Open camera
+        </button>
+        <button
+          type="button"
+          className="secondary small"
+          onClick={() => fileInputRef.current?.click()}
+        >
+          Upload photo
+        </button>
         <input
+          ref={fileInputRef}
           type="file"
-          accept="image/*"
+          accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/*"
+          hidden
           onChange={(e) => {
             const f = e.target.files?.[0];
-            props.setPhoto(f ? URL.createObjectURL(f) : null);
-            resetMarks(null);
-            setImgSize(null);
+            e.target.value = "";
+            if (!f) return;
+            applyPickedPhoto(f);
+          }}
+        />
+        <input
+          ref={cameraInputRef}
+          type="file"
+          accept="image/*"
+          capture="environment"
+          hidden
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            e.target.value = "";
+            if (!f) return;
+            applyPickedPhoto(f);
           }}
         />
       </div>
+      {cameraError && <p className="tiny" style={{ color: "#c4a35a" }}>{cameraError}</p>}
 
-      {props.photo && (
+      {liveCamera && (
+        <div className="live-camera">
+          <p className="tiny">
+            {savedFrames.length > 0
+              ? "Line the real coin up with the dashed ghost, then Capture."
+              : "Frame the bed, put the coin in view, then Capture."}
+          </p>
+          <div className="photo-stage live-stage">
+            <video
+              ref={videoRef}
+              className="photo live-video"
+              playsInline
+              muted
+              autoPlay
+              onLoadedMetadata={(e) => {
+                const v = e.currentTarget;
+                setImgSize({ w: v.videoWidth, h: v.videoHeight });
+              }}
+            />
+            {imgSize && coinGhost && (
+              <span
+                className="coin-ghost"
+                style={{
+                  left: `${(coinGhost.center.x / imgSize.w) * 100}%`,
+                  top: `${(coinGhost.center.y / imgSize.h) * 100}%`,
+                  width: `${(coinGhost.diameterPx / imgSize.w) * 100}%`,
+                  paddingBottom: `${(coinGhost.diameterPx / imgSize.w) * 100}%`,
+                }}
+                title="Line up your coin here"
+              />
+            )}
+          </div>
+          <div className="row">
+            <button type="button" onClick={captureFromLiveCamera}>
+              Capture photo
+            </button>
+            <button type="button" className="secondary small" onClick={stopLiveCamera}>
+              Close camera
+            </button>
+          </div>
+        </div>
+      )}
+
+      {props.photo && !liveCamera && (
         <>
           <p className="tiny">
             Phase:{" "}
-            <b>{tapPhase === "reference" ? "1) Tap both edges of reference" : "2) Adjust bed corners"}</b>
+            <b>
+              {tapPhase === "reference"
+                ? savedFrames.length > 0
+                  ? "1) Line up the coin with the ghost, then tap both edges"
+                  : "1) Tap both edges of the coin"
+                : "2) Adjust bed corners for this frame"}
+            </b>
             {" · "}
             ref {refTaps.length}/2 · corners {bedCorners.length}
+            {stitchMode ? ` · frames saved ${savedFrames.length}` : ""}
           </p>
           <p className="tiny muted">
             We pre-placed a garden outline — drag any numbered dot onto the real corners
             of your bed, or tap to add more corners for odd shapes.
           </p>
+          {coinGhost && (
+            <p className="tiny" style={{ color: "#c4a35a" }}>
+              {SCAN_UX.coinGhost}
+            </p>
+          )}
           <div
             className="photo-stage"
             onClick={onPhotoClick}
@@ -1104,8 +1467,27 @@ function ScanScreen(props: {
                 const size = { w: img.naturalWidth, h: img.naturalHeight };
                 setImgSize(size);
                 setBedCorners(autoCorners(size.w, size.h));
+                setError(null);
+              }}
+              onError={() => {
+                setImgSize(null);
+                setError(
+                  "Couldn't display that photo in the browser. Re-save it as JPG/PNG (iPhone HEIC often fails on Windows) and try again.",
+                );
               }}
             />
+            {imgSize && coinGhost && (
+              <span
+                className="coin-ghost"
+                style={{
+                  left: `${(coinGhost.center.x / imgSize.w) * 100}%`,
+                  top: `${(coinGhost.center.y / imgSize.h) * 100}%`,
+                  width: `${(coinGhost.diameterPx / imgSize.w) * 100}%`,
+                  paddingBottom: `${(coinGhost.diameterPx / imgSize.w) * 100}%`,
+                }}
+                title="Line up your coin here"
+              />
+            )}
             {imgSize &&
               refTaps.map((p, i) => (
                 <span
@@ -1117,8 +1499,8 @@ function ScanScreen(props: {
                     top: `${(p.y / imgSize.h) * 100}%`,
                   }}
                 />
- ))}
-            {imgSize && (refTaps.length === 2 || bedCorners.length >= 3) && (
+              ))}
+            {imgSize && (refTaps.length === 2 || bedCorners.length >= 3 || coinGhost) && (
               <svg className="mark-lines" viewBox={`0 0 ${imgSize.w} ${imgSize.h}`} preserveAspectRatio="none">
                 {bedCorners.length >= 3 && (
                   <polygon
@@ -1128,7 +1510,7 @@ function ScanScreen(props: {
                     strokeWidth={Math.max(2, imgSize.w / 400)}
                     strokeDasharray={`${Math.max(6, imgSize.w / 150)}`}
                   />
- )}
+                )}
                 {refTaps.length === 2 && (
                   <line
                     x1={refTaps[0]!.x}
@@ -1138,9 +1520,9 @@ function ScanScreen(props: {
                     stroke="#7fe89a"
                     strokeWidth={Math.max(2, imgSize.w / 400)}
                   />
- )}
+                )}
               </svg>
- )}
+            )}
             {imgSize &&
               bedCorners.map((p, i) => (
                 <span
@@ -1154,23 +1536,35 @@ function ScanScreen(props: {
                 >
                   {i + 1}
                 </span>
- ))}
+              ))}
           </div>
         </>
- )}
+      )}
 
       {error && <p className="tiny" style={{ color: "#f0b4b4" }}>{error}</p>}
 
       <div className="row">
+        {stitchMode && (
+          <button className="secondary" disabled={!canSaveOrMeasure} onClick={saveFrameAndAddNext}>
+            Save frame & add next →
+          </button>
+        )}
         <button
-          disabled={!props.photo || refTaps.length < 2 || bedCorners.length < 3}
+          disabled={!canSaveOrMeasure && savedFrames.length === 0}
           onClick={measure}
         >
-          Measure yard →
+          {stitchMode && (savedFrames.length > 0 || canSaveOrMeasure)
+            ? `Measure ${savedFrames.length + (canSaveOrMeasure ? 1 : 0)} frame(s) →`
+            : "Measure yard →"}
         </button>
         <button className="secondary small" onClick={() => resetMarks()} disabled={!props.photo}>
           Clear marks
         </button>
+        {stitchMode && savedFrames.length > 0 && (
+          <button className="secondary small" onClick={clearAllFrames}>
+            Clear saved frames
+          </button>
+        )}
       </div>
       <div className="row">
         <button className="secondary" onClick={props.onDemo}>
@@ -1180,15 +1574,14 @@ function ScanScreen(props: {
           <button className="secondary" onClick={props.onSkip}>
             Skip → keep current yard
           </button>
- )}
+        )}
       </div>
       <p className="tiny">
-        Coin path is recommended (known diameter). Custom objects work if you type the
-        real width carefully. Phone tilt correction runs in yard-scan (web demo uses a
-        mild default pitch).
+        Coin path is recommended (known diameter). Stitched multi-photo yards are approximate —
+        keep the coin in the overlap and use the ghost circle to align each shot.
       </p>
     </div>
- );
+  );
 }
 
 /* ─────────────── 2. Review detected plants ─────────────── */
@@ -1196,13 +1589,14 @@ function ScanScreen(props: {
 function ReviewScreen(props: {
   garden: GardenGrid;
   scanInfo: ScanDiagnostics | null;
+  scanOverlay: ScanPhotoOverlay | null;
   setGarden: (g: GardenGrid) => void;
   selected: Set<string>;
   setSelected: (s: Set<string>) => void;
   onNext: () => void;
   skippable?: boolean;
 }) {
-  const { garden, scanInfo } = props;
+  const { garden, scanInfo, scanOverlay } = props;
   const existing = garden.existing ?? [];
 
   function removeExisting(idx: number) {
@@ -1234,15 +1628,21 @@ function ReviewScreen(props: {
             Measured ~{scanInfo.widthCm} × {scanInfo.heightCm} cm ({scanInfo.areaM2} m²)
             using{" "}
             {scanInfo.scale.referenceMode === "coin"
- ? `coin (${scanInfo.scale.reference})`
- : scanInfo.scale.referenceLabel || "custom object"}
- . Gray path / bike / flowers only appear on the demo yard.
+              ? `coin (${scanInfo.scale.reference})`
+              : scanInfo.scale.referenceLabel || "custom object"}
+            . Gray path / bike / flowers only appear on the demo yard.
           </p>
- ) : (
+        ) : (
           <p className="muted">
             Gray = path (can't plant). B = movable obstacle. P = plants we detected.
           </p>
- )}
+        )}
+        {scanOverlay && (
+          <PhotoGridOverlay overlay={scanOverlay} garden={garden} />
+        )}
+        <p className="tiny muted" style={{ marginTop: 10 }}>
+          Abstract grid (same cells)
+        </p>
         <GridView garden={garden} />
       </div>
       <div className="card">

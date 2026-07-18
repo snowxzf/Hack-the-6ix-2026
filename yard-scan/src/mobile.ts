@@ -26,7 +26,7 @@ export function attitudeFromGravity(
 export function mockCoinFromTap(
   centerPx: Point2,
   diameterPx: number,
-  kind: ReferenceKind = "cad_quarter",
+  kind: ReferenceKind,
   confidence = 0.95,
 ): ScaleReference {
   return {
@@ -65,14 +65,16 @@ export { referenceFromEdgeTaps };
 /** UX copy for the scan screen. */
 export const SCAN_UX = {
   placeCoin:
-    "Place a coin on the soil (recommended), then tap both edges of it in the photo.",
+    "Place a coin flat on the bed, choose the coin type, then tap both edges of it in the photo.",
   placeCustom:
     "Or pick any object in the photo, type how wide it is in cm, and tap both edges.",
   holdOverhead:
     "Hold the phone more overhead (not at a steep angle) for accurate size.",
   outlineBed: "Tap the corners of your garden bed (at least 3).",
   multiFrame:
-    "Yard too big? Capture overlapping photos left→right; we'll stitch them.",
+    "Yard too big? Open the camera, keep the same coin in the overlap, and line it up with the ghost circle on the next shot. We stitch by aligning that coin.",
+  coinGhost:
+    "Line the real coin up with this dashed circle, then Capture and mark its edges again.",
   confirmDims: (wCm: number, hCm: number) =>
     `We measured about ${(wCm / 100).toFixed(1)} × ${(hCm / 100).toFixed(1)} m — look right?`,
 } as const;

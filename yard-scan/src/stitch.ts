@@ -1,4 +1,5 @@
-import { polygonImageToGroundCm } from "./attitude";
+import { groundScaleFromAttitude, polygonImageToGroundCm } from "./attitude";
+import { scaleFromReference } from "./coin";
 import { convexHull, translatePolygon } from "./geometry";
 import type { Point2, ScaleInfo, ScanFrame, WorldPolygon } from "./types";
 
@@ -9,8 +10,9 @@ export interface FrameWorld {
 
 /**
  * Project each frame's bed polygon into ground cm using coin scale + attitude.
- * Frames without a coin reuse the session scale; local origin is that frame's
- * coin center when present (AR / stitch aligns afterward).
+ * When a frame has its own coin, that coin is the origin and that frame's
+ * diameter sets the scale — so the same physical coin in two photos lands at
+ * (0,0) in both, and the outlines already share a ground frame.
  */
 export function projectFramesToGround(
   frames: ScanFrame[],
@@ -18,15 +20,33 @@ export function projectFramesToGround(
   originPx: Point2,
   rollRad: number,
 ): FrameWorld[] {
-  return frames.map((f) => ({
-    frameId: f.id,
-    polygonCm: polygonImageToGroundCm(
-      f.bedPolygonPx,
-      frameReference(f)?.centerPx ?? originPx,
-      scale.cmPerPxGround,
-      f.attitude.rollRad ?? rollRad,
-    ),
-  }));
+  return frames.map((f) => {
+    const ref = frameReference(f);
+    let ground = scale.cmPerPxGround;
+    let origin = ref?.centerPx ?? originPx;
+    if (ref && ref.diameterPx > 0) {
+      try {
+        const { cmPerPx } = scaleFromReference(
+          ref.diameterPx,
+          ref.kind,
+          ref.customDiameterCm,
+        );
+        ground = groundScaleFromAttitude(cmPerPx, f.attitude);
+        origin = ref.centerPx;
+      } catch {
+        // fall back to session scale
+      }
+    }
+    return {
+      frameId: f.id,
+      polygonCm: polygonImageToGroundCm(
+        f.bedPolygonPx,
+        origin,
+        ground,
+        f.attitude.rollRad ?? rollRad,
+      ),
+    };
+  });
 }
 
 function frameReference(f: ScanFrame) {
@@ -36,11 +56,10 @@ function frameReference(f: ScanFrame) {
 /**
  * Stitch multiple ground-plane polygons into one yard outline.
  *
- * Preferred path (production): ARKit/ARCore `worldPositionM` on each frame —
- * translate into a shared meter frame, then convex-hull.
- *
- * Hackathon fallback: `stitch.direction` + `overlapFraction` when the user
- * pans across a yard too large for one shot.
+ * Preferred paths (best → fallback):
+ *  1. ARKit/ARCore `worldPositionM` on each frame
+ *  2. Same physical coin marked in every frame → coin-centered merge (no offset)
+ *  3. `stitch.direction` + `overlapFraction` pan hint
  */
 export function stitchWorldPolygons(
   frames: ScanFrame[],
@@ -71,6 +90,14 @@ export function stitchWorldPolygons(
     }
     return {
       pointsCm: convexHull(merged),
+      sourceFrameIds: frames.map((f) => f.id),
+    };
+  }
+
+  // Same coin in every frame → already a shared ground frame (origin = coin).
+  if (frames.every((f) => frameReference(f))) {
+    return {
+      pointsCm: convexHull(projected.flatMap((p) => p.polygonCm)),
       sourceFrameIds: frames.map((f) => f.id),
     };
   }
@@ -145,6 +172,52 @@ function overlapOffsetCm(
         y: pb.minY - nb.maxY + nb.height * frac,
       };
   }
+}
+
+/**
+ * Where the previous frame's coin should appear in the *next* photo after a
+ * pan. Used as a UI ghost so the user can line the real coin up with the
+ * outline (hackathon alignment aid — not computer-vision stitch).
+ *
+ * Pan right → coin that was on the right slides toward the left of the next frame.
+ */
+export function coinGhostForNextFrame(
+  prevCoinCenter: Point2,
+  prevDiameterPx: number,
+  prevSize: { w: number; h: number },
+  nextSize: { w: number; h: number },
+  direction: "right" | "left" | "up" | "down",
+  overlapFraction: number,
+): { center: Point2; diameterPx: number } {
+  const frac = Math.min(Math.max(overlapFraction, 0.05), 0.6);
+  const sx = nextSize.w / Math.max(prevSize.w, 1);
+  const sy = nextSize.h / Math.max(prevSize.h, 1);
+  let x = prevCoinCenter.x * sx;
+  let y = prevCoinCenter.y * sy;
+  const shiftX = (1 - frac) * nextSize.w;
+  const shiftY = (1 - frac) * nextSize.h;
+  switch (direction) {
+    case "right":
+      x -= shiftX;
+      break;
+    case "left":
+      x += shiftX;
+      break;
+    case "down":
+      y -= shiftY;
+      break;
+    case "up":
+      y += shiftY;
+      break;
+  }
+  // Keep the ghost on-screen so it's usable as a guide
+  const r = (prevDiameterPx * sx) / 2;
+  x = Math.min(Math.max(x, r + 4), nextSize.w - r - 4);
+  y = Math.min(Math.max(y, r + 4), nextSize.h - r - 4);
+  return {
+    center: { x, y },
+    diameterPx: Math.max(8, prevDiameterPx * sx),
+  };
 }
 
 function aabb(pts: Point2[]) {

@@ -338,6 +338,72 @@ button:disabled:not([class*="flex"]):not([class*="bg-"]) {
   touch-action: none;
   max-width: 100%;
 }
+.coin-ghost {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  border: 2px dashed #c4a35a;
+  border-radius: 50%;
+  box-sizing: border-box;
+  pointer-events: none;
+  z-index: 3;
+  background: rgba(196, 163, 90, 0.12);
+  height: 0;
+}
+.coin-ghost::after {
+  content: "coin";
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translate(-50%, 4px);
+  font-size: 10px;
+  color: #c4a35a;
+  white-space: nowrap;
+  letter-spacing: 0.04em;
+}
+.stitch-panel {
+  margin: 8px 0 4px;
+  padding: 8px 0;
+  border-top: 1px solid hsl(var(--border));
+  border-bottom: 1px solid hsl(var(--border));
+}
+.frame-strip {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.frame-thumb {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  width: 72px;
+}
+.frame-thumb img {
+  width: 72px;
+  height: 72px;
+  object-fit: cover;
+  border: 1px solid hsl(var(--border));
+  display: block;
+}
+.live-camera {
+  margin: 8px 0;
+}
+.live-stage {
+  background: #111;
+}
+.live-video {
+  width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+  background: #000;
+}
+.photo-grid-overlay {
+  margin: 8px 0 12px;
+}
+.photo-grid-overlay .photo-stage {
+  margin-top: 4px;
+}
 img.photo {
   max-width: 100%;
   width: 100%;

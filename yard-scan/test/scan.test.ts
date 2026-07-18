@@ -73,7 +73,7 @@ describe("scanYard single frame", () => {
 });
 
 describe("scanYard multi-frame stitch", () => {
-  it("stitches two overlapping pans into a wider bed", () => {
+  it("stitches two overlapping pans into a wider bed (overlap hint, coin only on first)", () => {
     const left: ScanFrame = {
       id: "left",
       widthPx: 400,
@@ -116,5 +116,55 @@ describe("scanYard multi-frame stitch", () => {
     const both = scanYard([left, right], { cellSizeCm: 30 });
     expect(both.diagnostics.stitched).toBe(true);
     expect(both.diagnostics.widthCm).toBeGreaterThan(single.diagnostics.widthCm);
+  });
+
+  it("coin-aligns two frames that share the same physical coin", () => {
+    // 0.5 cm/px. Coin is the join point: left frame covers 150cm left of coin,
+    // right frame covers 150cm right of coin → hull width ≈ 300cm.
+    const left: ScanFrame = {
+      id: "left",
+      widthPx: 400,
+      heightPx: 300,
+      attitude: { pitchFromNadirRad: 0 },
+      bedPolygonPx: [
+        { x: 0, y: 0 },
+        { x: 300, y: 0 },
+        { x: 300, y: 200 },
+        { x: 0, y: 200 },
+      ],
+      reference: {
+        mode: "custom_object",
+        kind: "custom",
+        customDiameterCm: 10,
+        centerPx: { x: 300, y: 100 },
+        diameterPx: 20,
+        confidence: 0.99,
+      },
+    };
+    const right: ScanFrame = {
+      id: "right",
+      widthPx: 400,
+      heightPx: 300,
+      attitude: { pitchFromNadirRad: 0 },
+      bedPolygonPx: [
+        { x: 100, y: 0 },
+        { x: 400, y: 0 },
+        { x: 400, y: 200 },
+        { x: 100, y: 200 },
+      ],
+      reference: {
+        mode: "custom_object",
+        kind: "custom",
+        customDiameterCm: 10,
+        centerPx: { x: 100, y: 100 },
+        diameterPx: 20,
+        confidence: 0.99,
+      },
+    };
+
+    const both = scanYard([left, right], { cellSizeCm: 30 });
+    expect(both.diagnostics.stitched).toBe(true);
+    expect(both.diagnostics.widthCm).toBeCloseTo(300, 0);
+    expect(both.diagnostics.heightCm).toBeCloseTo(100, 0);
   });
 });

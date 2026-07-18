@@ -1,0 +1,10 @@
+
+# Local test photos / calibration artifacts
+*.jpg
+*.jpeg
+*.png
+*.webp
+*.heic
+*_coin.json
+*_marks.json
+pair_marks.json
