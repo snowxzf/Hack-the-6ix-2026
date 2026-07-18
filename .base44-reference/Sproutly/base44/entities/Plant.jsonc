@@ -1,0 +1,56 @@
+{
+    "name": "Plant",
+    "type": "object",
+    "properties": {
+        "name": {
+            "type": "string",
+            "description": "Plant or crop name"
+        },
+        "variety": {
+            "type": "string",
+            "description": "Specific variety"
+        },
+        "status": {
+            "type": "string",
+            "enum": [
+                "planning",
+                "seedling",
+                "growing",
+                "ready"
+            ],
+            "default": "planning",
+            "description": "Current growth stage"
+        },
+        "location": {
+            "type": "string",
+            "description": "Where in the garden it is planted"
+        },
+        "sunlight": {
+            "type": "string",
+            "enum": [
+                "full_sun",
+                "partial_shade",
+                "full_shade"
+            ],
+            "default": "full_sun"
+        },
+        "days_to_harvest": {
+            "type": "number",
+            "description": "Estimated days until harvest"
+        },
+        "planted_date": {
+            "type": "string",
+            "format": "date"
+        },
+        "next_watering": {
+            "type": "string",
+            "format": "date"
+        },
+        "notes": {
+            "type": "string"
+        }
+    },
+    "required": [
+        "name"
+    ]
+}

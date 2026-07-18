@@ -1,0 +1,192 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+    :root {
+        --background: 40 33% 97%;
+        --foreground: 60 6% 16%;
+        --card: 0 0% 100%;
+        --card-foreground: 60 6% 16%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 60 6% 16%;
+        --primary: 137 33% 27%;
+        --primary-foreground: 40 33% 97%;
+        --secondary: 137 26% 92%;
+        --secondary-foreground: 137 33% 20%;
+        --muted: 137 20% 94%;
+        --muted-foreground: 90 5% 40%;
+        --accent: 18 78% 55%;
+        --accent-foreground: 0 0% 100%;
+        --destructive: 0 72% 51%;
+        --destructive-foreground: 0 0% 98%;
+        --border: 137 15% 88%;
+        --input: 137 15% 88%;
+        --ring: 137 33% 27%;
+        --chart-1: 137 33% 40%;
+        --chart-2: 18 78% 55%;
+        --chart-3: 197 37% 40%;
+        --chart-4: 43 74% 60%;
+        --chart-5: 27 87% 62%;
+        --radius: 0;
+        --font-heading: 'Fraunces', Georgia, serif;
+        --font-body: 'Inter', system-ui, sans-serif;
+        --font-display: 'Fraunces', Georgia, serif;
+        --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+        --sidebar-background: 137 20% 96%;
+        --sidebar-foreground: 137 20% 26%;
+        --sidebar-primary: 137 33% 27%;
+        --sidebar-primary-foreground: 40 33% 97%;
+        --sidebar-accent: 137 20% 92%;
+        --sidebar-accent-foreground: 137 33% 20%;
+        --sidebar-border: 137 15% 88%;
+        --sidebar-ring: 137 33% 27%;
+    }
+
+    .dark {
+        --background: 150 20% 9%;
+        --foreground: 40 20% 92%;
+        --card: 150 18% 13%;
+        --card-foreground: 40 20% 92%;
+        --popover: 150 18% 13%;
+        --popover-foreground: 40 20% 92%;
+        --primary: 137 30% 45%;
+        --primary-foreground: 150 20% 9%;
+        --secondary: 150 15% 20%;
+        --secondary-foreground: 40 20% 92%;
+        --muted: 150 12% 18%;
+        --muted-foreground: 90 5% 65%;
+        --accent: 18 78% 58%;
+        --accent-foreground: 0 0% 100%;
+        --destructive: 0 62% 45%;
+        --destructive-foreground: 0 0% 98%;
+        --border: 150 12% 22%;
+        --input: 150 12% 22%;
+        --ring: 137 30% 45%;
+        --sidebar-background: 150 18% 11%;
+        --sidebar-foreground: 40 20% 92%;
+        --sidebar-primary: 137 30% 45%;
+        --sidebar-primary-foreground: 150 20% 9%;
+        --sidebar-accent: 150 15% 18%;
+        --sidebar-accent-foreground: 40 20% 92%;
+        --sidebar-border: 150 12% 20%;
+        --sidebar-ring: 137 30% 45%;
+    }
+}
+
+@layer base {
+    * {
+        @apply border-border outline-ring/50;
+    }
+
+    body {
+        @apply bg-background text-foreground font-body;
+    }
+}
+
+/* Weather background animations */
+@keyframes rain-fall {
+    0% {
+        transform: translateY(-12vh);
+        opacity: 0;
+    }
+
+    10% {
+        opacity: 0.7;
+    }
+
+    100% {
+        transform: translateY(112vh);
+        opacity: 0;
+    }
+}
+
+@keyframes snow-fall {
+    0% {
+        transform: translateY(-8vh) translateX(0);
+        opacity: 0;
+    }
+
+    10% {
+        opacity: 0.9;
+    }
+
+    100% {
+        transform: translateY(112vh) translateX(28px);
+        opacity: 0.5;
+    }
+}
+
+@keyframes sun-glow {
+
+    0%,
+    100% {
+        transform: scale(1);
+        opacity: 0.85;
+    }
+
+    50% {
+        transform: scale(1.07);
+        opacity: 1;
+    }
+}
+
+@keyframes cloud-drift {
+    0% {
+        transform: translateX(-220px);
+    }
+
+    100% {
+        transform: translateX(110vw);
+    }
+}
+
+@keyframes twinkle {
+
+    0%,
+    100% {
+        opacity: 0.15;
+    }
+
+    50% {
+        opacity: 1;
+    }
+}
+
+@keyframes fade-in-up {
+    from {
+        opacity: 0;
+        transform: translateY(14px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.animate-fade-in-up {
+    animation: fade-in-up 0.5s ease-out both;
+}
+
+@keyframes spin-slow {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+.animate-spin-slow {
+    animation: spin-slow 24s linear infinite;
+}
+
+/* Hide scrollbar but keep scroll */
+.no-scrollbar::-webkit-scrollbar {
+    display: none;
+}
+
+.no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+}
