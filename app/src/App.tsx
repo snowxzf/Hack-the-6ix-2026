@@ -8,6 +8,7 @@ import type {
   Target,
 } from "../../optimizer/src/index";
 import { GridView, cellKey, speciesColor } from "./GridView";
+import { CarbonChart } from "./CarbonChart";
 import {
   DAYS_TO_HARVEST,
   FAKE_WEATHER_ALERT,
@@ -53,6 +54,9 @@ interface PersistedState {
   banned: string[];
   swapHistory: SwapSnapshot[];
   result: OptimizerResponse | null;
+  /** Set once, the first time a garden is confirmed — never touched by later
+   *  edits, so the carbon-savings chart has a stable start date to ramp from. */
+  plantedAt: number | null;
 }
 
 // Bumped from v1: Step dropped "dashboard" and onboarded/activeTab were added
@@ -89,6 +93,7 @@ export function App() {
   const [banned, setBanned] = useState<string[]>(saved?.banned ?? []);
   const [swapHistory, setSwapHistory] = useState<SwapSnapshot[]>(saved?.swapHistory ?? []);
   const [result, setResult] = useState<OptimizerResponse | null>(saved?.result ?? null);
+  const [plantedAt, setPlantedAt] = useState<number | null>(saved?.plantedAt ?? null);
 
   useEffect(() => {
     const toSave: PersistedState = {
@@ -104,6 +109,7 @@ export function App() {
       banned,
       swapHistory,
       result,
+      plantedAt,
     };
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
@@ -123,6 +129,7 @@ export function App() {
     banned,
     swapHistory,
     result,
+    plantedAt,
   ]);
 
   const paintableKeys = useMemo(() => {
@@ -287,6 +294,7 @@ export function App() {
                       setOnboarded(true);
                       setEditingLayout(false);
                       setActiveTab("dashboard");
+                      setPlantedAt((prev) => prev ?? Date.now());
                     }
                   : undefined
               }
@@ -295,7 +303,9 @@ export function App() {
         </>
       )}
 
-      {onboarded && activeTab === "dashboard" && result && <DashboardScreen result={result} />}
+      {onboarded && activeTab === "dashboard" && result && (
+        <DashboardScreen result={result} plantedAt={plantedAt} />
+      )}
 
       {onboarded && (
         <TabBar
@@ -853,7 +863,7 @@ function ResultsScreen(props: {
 
 /* ─────────────── 6. Dashboard ─────────────── */
 
-function DashboardScreen(props: { result: OptimizerResponse }) {
+function DashboardScreen(props: { result: OptimizerResponse; plantedAt: number | null }) {
   const { result } = props;
   const planted = Object.entries(result.counts).filter(([, n]) => n > 0);
 
@@ -871,6 +881,10 @@ function DashboardScreen(props: { result: OptimizerResponse }) {
         <p className="muted">{FAKE_WEATHER_ALERT.advice}</p>
         <p className="tiny">⚠ PLACEHOLDER: live Open-Meteo forecast pending.</p>
       </div>
+
+      {props.plantedAt && (
+        <CarbonChart plantedAt={props.plantedAt} totalKgCo2eSeason={result.carbon.kgCo2eSeason} />
+      )}
 
       <div className="card">
         <h2>Watering trips 🚿</h2>
