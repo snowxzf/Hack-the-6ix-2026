@@ -1,19 +1,27 @@
 {
   "meta": {
-    "version": "0.1.0-draft",
+    "version": "0.2.0-draft",
     "cellSizeCm": 30,
     "note": "DRAFT horticultural estimates. Verify spacing/temp/pH against Perenual and carbon factors against Poore & Nemecek 2018 / Our World in Data before pitching numbers.",
-    "carbonRule": "Food plants only: seasonal_savings = yieldKgPerSeason × co2eSavedPerKg. Ornamentals/pollinators use yield=0 and co2e=0; impact case is biodiversity, not invented CO2e."
+    "carbonRule": "Food plants only: seasonal_savings = yieldKgPerSeason × co2eSavedPerKg. Ornamentals/pollinators use yield=0 and co2e=0; impact case is biodiversity, not invented CO2e.",
+    "nativeRegionNote": "Draft biogeography for suggestion ranking. Prefer plants whose continents/suitedClimates overlap the gardener's location; North American natives score highest for Toronto demos."
   },
   "plants": [
     {
       "id": "tomato_cherry",
       "name": "Cherry tomato",
       "scientificName": "Solanum lycopersicum",
-      "aliases": ["cherry tomato", "tomato", "grape tomato"],
+      "aliases": [
+        "cherry tomato",
+        "tomato",
+        "grape tomato"
+      ],
       "tier": "beginner",
       "category": "veggies",
-      "cellsPerPlant": [2, 2],
+      "cellsPerPlant": [
+        2,
+        2
+      ],
       "spacingCm": 60,
       "sun": "full",
       "waterEveryDays": 2,
@@ -24,18 +32,46 @@
       "phMax": 6.8,
       "yieldKgPerSeason": 3.0,
       "co2eSavedPerKg": 1.4,
-      "companions": ["basil", "marigold", "carrot"],
+      "companions": [
+        "basil",
+        "marigold",
+        "carrot"
+      ],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Western South America (Andes)",
+        "continents": [
+          "South America"
+        ],
+        "ecoRegions": [
+          "Andes",
+          "Neotropics"
+        ],
+        "suitedClimates": [
+          "temperate",
+          "subtropical",
+          "mediterranean"
+        ]
+      }
     },
     {
       "id": "tomato_beefsteak",
       "name": "Beefsteak tomato",
       "scientificName": "Solanum lycopersicum",
-      "aliases": ["beefsteak tomato", "tomato"],
+      "aliases": [
+        "beefsteak tomato",
+        "tomato"
+      ],
       "tier": "intermediate",
       "category": "veggies",
-      "cellsPerPlant": [2, 2],
+      "cellsPerPlant": [
+        2,
+        2
+      ],
       "spacingCm": 60,
       "sun": "full",
       "waterEveryDays": 2,
@@ -46,18 +82,46 @@
       "phMax": 6.8,
       "yieldKgPerSeason": 4.5,
       "co2eSavedPerKg": 1.4,
-      "companions": ["basil", "marigold"],
+      "companions": [
+        "basil",
+        "marigold"
+      ],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Western South America (Andes)",
+        "continents": [
+          "South America"
+        ],
+        "ecoRegions": [
+          "Andes",
+          "Neotropics"
+        ],
+        "suitedClimates": [
+          "temperate",
+          "subtropical",
+          "mediterranean"
+        ]
+      }
     },
     {
       "id": "lettuce",
       "name": "Lettuce",
       "scientificName": "Lactuca sativa",
-      "aliases": ["lettuce", "leaf lettuce", "romaine"],
+      "aliases": [
+        "lettuce",
+        "leaf lettuce",
+        "romaine"
+      ],
       "tier": "beginner",
       "category": "veggies",
-      "cellsPerPlant": [1, 1],
+      "cellsPerPlant": [
+        1,
+        1
+      ],
       "spacingCm": 20,
       "sun": "partial",
       "waterEveryDays": 2,
@@ -68,18 +132,46 @@
       "phMax": 7.0,
       "yieldKgPerSeason": 0.8,
       "co2eSavedPerKg": 0.9,
-      "companions": ["carrot", "radish"],
+      "companions": [
+        "carrot",
+        "radish"
+      ],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Mediterranean / Near East",
+        "continents": [
+          "Europe",
+          "Asia",
+          "Africa"
+        ],
+        "ecoRegions": [
+          "Mediterranean Basin"
+        ],
+        "suitedClimates": [
+          "temperate",
+          "mediterranean",
+          "cool"
+        ]
+      }
     },
     {
       "id": "carrot",
       "name": "Carrot",
       "scientificName": "Daucus carota",
-      "aliases": ["carrot", "carrots"],
+      "aliases": [
+        "carrot",
+        "carrots"
+      ],
       "tier": "beginner",
       "category": "veggies",
-      "cellsPerPlant": [1, 1],
+      "cellsPerPlant": [
+        1,
+        1
+      ],
       "spacingCm": 8,
       "sun": "full",
       "waterEveryDays": 3,
@@ -90,18 +182,48 @@
       "phMax": 6.8,
       "yieldKgPerSeason": 1.6,
       "co2eSavedPerKg": 0.4,
-      "companions": ["tomato_cherry", "lettuce", "onion"],
+      "companions": [
+        "tomato_cherry",
+        "lettuce",
+        "onion"
+      ],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Central Asia (Afghanistan region) → Europe",
+        "continents": [
+          "Asia",
+          "Europe"
+        ],
+        "ecoRegions": [
+          "Central Asia",
+          "Temperate Eurasia"
+        ],
+        "suitedClimates": [
+          "temperate",
+          "cool",
+          "mediterranean"
+        ]
+      }
     },
     {
       "id": "zucchini",
       "name": "Zucchini",
       "scientificName": "Cucurbita pepo",
-      "aliases": ["zucchini", "courgette", "summer squash"],
+      "aliases": [
+        "zucchini",
+        "courgette",
+        "summer squash"
+      ],
       "tier": "intermediate",
       "category": "veggies",
-      "cellsPerPlant": [3, 3],
+      "cellsPerPlant": [
+        3,
+        3
+      ],
       "spacingCm": 90,
       "sun": "full",
       "waterEveryDays": 2,
@@ -112,18 +234,43 @@
       "phMax": 7.5,
       "yieldKgPerSeason": 4.5,
       "co2eSavedPerKg": 0.9,
-      "companions": ["nasturtium", "marigold"],
+      "companions": [
+        "nasturtium",
+        "marigold"
+      ],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Mesoamerica (Cucurbita pepo)",
+        "continents": [
+          "North America"
+        ],
+        "ecoRegions": [
+          "Mesoamerica"
+        ],
+        "suitedClimates": [
+          "temperate",
+          "subtropical",
+          "mediterranean"
+        ]
+      }
     },
     {
       "id": "cucumber",
       "name": "Cucumber",
       "scientificName": "Cucumis sativus",
-      "aliases": ["cucumber"],
+      "aliases": [
+        "cucumber"
+      ],
       "tier": "beginner",
       "category": "veggies",
-      "cellsPerPlant": [2, 2],
+      "cellsPerPlant": [
+        2,
+        2
+      ],
       "spacingCm": 60,
       "sun": "full",
       "waterEveryDays": 2,
@@ -134,18 +281,45 @@
       "phMax": 7.0,
       "yieldKgPerSeason": 3.5,
       "co2eSavedPerKg": 0.9,
-      "companions": ["bean_bush", "nasturtium"],
+      "companions": [
+        "bean_bush",
+        "nasturtium"
+      ],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "South Asia (Himalayan foothills / India)",
+        "continents": [
+          "Asia"
+        ],
+        "ecoRegions": [
+          "South Asia"
+        ],
+        "suitedClimates": [
+          "temperate",
+          "subtropical",
+          "tropical"
+        ]
+      }
     },
     {
       "id": "bell_pepper",
       "name": "Bell pepper",
       "scientificName": "Capsicum annuum",
-      "aliases": ["bell pepper", "sweet pepper", "pepper"],
+      "aliases": [
+        "bell pepper",
+        "sweet pepper",
+        "pepper"
+      ],
       "tier": "intermediate",
       "category": "veggies",
-      "cellsPerPlant": [2, 2],
+      "cellsPerPlant": [
+        2,
+        2
+      ],
       "spacingCm": 45,
       "sun": "full",
       "waterEveryDays": 2,
@@ -156,18 +330,44 @@
       "phMax": 6.8,
       "yieldKgPerSeason": 2.0,
       "co2eSavedPerKg": 1.3,
-      "companions": ["basil", "onion"],
+      "companions": [
+        "basil",
+        "onion"
+      ],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Central America / Mexico",
+        "continents": [
+          "North America"
+        ],
+        "ecoRegions": [
+          "Mesoamerica"
+        ],
+        "suitedClimates": [
+          "subtropical",
+          "tropical",
+          "temperate"
+        ]
+      }
     },
     {
       "id": "kale",
       "name": "Kale",
       "scientificName": "Brassica oleracea",
-      "aliases": ["kale", "leaf cabbage"],
+      "aliases": [
+        "kale",
+        "leaf cabbage"
+      ],
       "tier": "beginner",
       "category": "veggies",
-      "cellsPerPlant": [1, 1],
+      "cellsPerPlant": [
+        1,
+        1
+      ],
       "spacingCm": 35,
       "sun": "full",
       "waterEveryDays": 3,
@@ -178,18 +378,44 @@
       "phMax": 7.5,
       "yieldKgPerSeason": 1.2,
       "co2eSavedPerKg": 0.5,
-      "companions": ["onion", "garlic"],
+      "companions": [
+        "onion",
+        "garlic"
+      ],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Mediterranean Europe",
+        "continents": [
+          "Europe"
+        ],
+        "ecoRegions": [
+          "Mediterranean Basin",
+          "Temperate Europe"
+        ],
+        "suitedClimates": [
+          "temperate",
+          "cool",
+          "mediterranean"
+        ]
+      }
     },
     {
       "id": "spinach",
       "name": "Spinach",
       "scientificName": "Spinacia oleracea",
-      "aliases": ["spinach"],
+      "aliases": [
+        "spinach"
+      ],
       "tier": "beginner",
       "category": "veggies",
-      "cellsPerPlant": [1, 1],
+      "cellsPerPlant": [
+        1,
+        1
+      ],
       "spacingCm": 15,
       "sun": "partial",
       "waterEveryDays": 2,
@@ -200,18 +426,43 @@
       "phMax": 7.5,
       "yieldKgPerSeason": 0.7,
       "co2eSavedPerKg": 0.5,
-      "companions": ["strawberry", "radish"],
+      "companions": [
+        "strawberry",
+        "radish"
+      ],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Central / Western Asia",
+        "continents": [
+          "Asia"
+        ],
+        "ecoRegions": [
+          "Central Asia",
+          "Persia"
+        ],
+        "suitedClimates": [
+          "temperate",
+          "cool"
+        ]
+      }
     },
     {
       "id": "radish",
       "name": "Radish",
       "scientificName": "Raphanus sativus",
-      "aliases": ["radish"],
+      "aliases": [
+        "radish"
+      ],
       "tier": "beginner",
       "category": "veggies",
-      "cellsPerPlant": [1, 1],
+      "cellsPerPlant": [
+        1,
+        1
+      ],
       "spacingCm": 8,
       "sun": "full",
       "waterEveryDays": 2,
@@ -222,18 +473,46 @@
       "phMax": 7.0,
       "yieldKgPerSeason": 0.6,
       "co2eSavedPerKg": 0.4,
-      "companions": ["lettuce", "carrot"],
+      "companions": [
+        "lettuce",
+        "carrot"
+      ],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Southeast Asia → Mediterranean cultivation",
+        "continents": [
+          "Asia",
+          "Europe"
+        ],
+        "ecoRegions": [
+          "East Asia",
+          "Mediterranean Basin"
+        ],
+        "suitedClimates": [
+          "temperate",
+          "cool"
+        ]
+      }
     },
     {
       "id": "bean_bush",
       "name": "Bush bean",
       "scientificName": "Phaseolus vulgaris",
-      "aliases": ["bush bean", "green bean", "snap bean"],
+      "aliases": [
+        "bush bean",
+        "green bean",
+        "snap bean"
+      ],
       "tier": "beginner",
       "category": "veggies",
-      "cellsPerPlant": [1, 1],
+      "cellsPerPlant": [
+        1,
+        1
+      ],
       "spacingCm": 15,
       "sun": "full",
       "waterEveryDays": 3,
@@ -244,18 +523,45 @@
       "phMax": 7.0,
       "yieldKgPerSeason": 1.5,
       "co2eSavedPerKg": 0.8,
-      "companions": ["carrot", "cucumber"],
+      "companions": [
+        "carrot",
+        "cucumber"
+      ],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Central / South America",
+        "continents": [
+          "North America",
+          "South America"
+        ],
+        "ecoRegions": [
+          "Mesoamerica",
+          "Andes"
+        ],
+        "suitedClimates": [
+          "temperate",
+          "subtropical",
+          "tropical"
+        ]
+      }
     },
     {
       "id": "broccoli",
       "name": "Broccoli",
       "scientificName": "Brassica oleracea",
-      "aliases": ["broccoli"],
+      "aliases": [
+        "broccoli"
+      ],
       "tier": "intermediate",
       "category": "veggies",
-      "cellsPerPlant": [2, 2],
+      "cellsPerPlant": [
+        2,
+        2
+      ],
       "spacingCm": 45,
       "sun": "full",
       "waterEveryDays": 3,
@@ -266,18 +572,43 @@
       "phMax": 7.0,
       "yieldKgPerSeason": 1.0,
       "co2eSavedPerKg": 0.5,
-      "companions": ["onion", "marigold"],
+      "companions": [
+        "onion",
+        "marigold"
+      ],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Mediterranean Europe",
+        "continents": [
+          "Europe"
+        ],
+        "ecoRegions": [
+          "Mediterranean Basin"
+        ],
+        "suitedClimates": [
+          "temperate",
+          "cool",
+          "mediterranean"
+        ]
+      }
     },
     {
       "id": "cabbage",
       "name": "Cabbage",
       "scientificName": "Brassica oleracea",
-      "aliases": ["cabbage"],
+      "aliases": [
+        "cabbage"
+      ],
       "tier": "intermediate",
       "category": "veggies",
-      "cellsPerPlant": [2, 2],
+      "cellsPerPlant": [
+        2,
+        2
+      ],
       "spacingCm": 45,
       "sun": "full",
       "waterEveryDays": 3,
@@ -288,18 +619,44 @@
       "phMax": 7.0,
       "yieldKgPerSeason": 2.0,
       "co2eSavedPerKg": 0.5,
-      "companions": ["onion", "marigold"],
+      "companions": [
+        "onion",
+        "marigold"
+      ],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Coastal Europe / Mediterranean",
+        "continents": [
+          "Europe"
+        ],
+        "ecoRegions": [
+          "Atlantic Europe",
+          "Mediterranean Basin"
+        ],
+        "suitedClimates": [
+          "temperate",
+          "cool"
+        ]
+      }
     },
     {
       "id": "beet",
       "name": "Beet",
       "scientificName": "Beta vulgaris",
-      "aliases": ["beet", "beetroot"],
+      "aliases": [
+        "beet",
+        "beetroot"
+      ],
       "tier": "beginner",
       "category": "veggies",
-      "cellsPerPlant": [1, 1],
+      "cellsPerPlant": [
+        1,
+        1
+      ],
       "spacingCm": 10,
       "sun": "full",
       "waterEveryDays": 3,
@@ -310,18 +667,46 @@
       "phMax": 7.5,
       "yieldKgPerSeason": 1.2,
       "co2eSavedPerKg": 0.4,
-      "companions": ["onion", "lettuce"],
+      "companions": [
+        "onion",
+        "lettuce"
+      ],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Mediterranean / Atlantic Europe coasts",
+        "continents": [
+          "Europe",
+          "Africa"
+        ],
+        "ecoRegions": [
+          "Mediterranean Basin",
+          "Atlantic Europe"
+        ],
+        "suitedClimates": [
+          "temperate",
+          "cool",
+          "mediterranean"
+        ]
+      }
     },
     {
       "id": "potato",
       "name": "Potato",
       "scientificName": "Solanum tuberosum",
-      "aliases": ["potato", "potatoes"],
+      "aliases": [
+        "potato",
+        "potatoes"
+      ],
       "tier": "beginner",
       "category": "veggies",
-      "cellsPerPlant": [2, 2],
+      "cellsPerPlant": [
+        2,
+        2
+      ],
       "spacingCm": 35,
       "sun": "full",
       "waterEveryDays": 4,
@@ -332,18 +717,43 @@
       "phMax": 6.5,
       "yieldKgPerSeason": 3.0,
       "co2eSavedPerKg": 0.5,
-      "companions": ["bean_bush"],
+      "companions": [
+        "bean_bush"
+      ],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Andes (Peru / Bolivia)",
+        "continents": [
+          "South America"
+        ],
+        "ecoRegions": [
+          "Andes"
+        ],
+        "suitedClimates": [
+          "temperate",
+          "cool",
+          "highland"
+        ]
+      }
     },
     {
       "id": "onion",
       "name": "Onion",
       "scientificName": "Allium cepa",
-      "aliases": ["onion", "bulb onion"],
+      "aliases": [
+        "onion",
+        "bulb onion"
+      ],
       "tier": "beginner",
       "category": "veggies",
-      "cellsPerPlant": [1, 1],
+      "cellsPerPlant": [
+        1,
+        1
+      ],
       "spacingCm": 10,
       "sun": "full",
       "waterEveryDays": 4,
@@ -354,18 +764,44 @@
       "phMax": 7.0,
       "yieldKgPerSeason": 1.0,
       "co2eSavedPerKg": 0.5,
-      "companions": ["carrot", "lettuce", "tomato_cherry"],
+      "companions": [
+        "carrot",
+        "lettuce",
+        "tomato_cherry"
+      ],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Central Asia",
+        "continents": [
+          "Asia"
+        ],
+        "ecoRegions": [
+          "Central Asia"
+        ],
+        "suitedClimates": [
+          "temperate",
+          "mediterranean",
+          "arid"
+        ]
+      }
     },
     {
       "id": "garlic",
       "name": "Garlic",
       "scientificName": "Allium sativum",
-      "aliases": ["garlic"],
+      "aliases": [
+        "garlic"
+      ],
       "tier": "beginner",
       "category": "veggies",
-      "cellsPerPlant": [1, 1],
+      "cellsPerPlant": [
+        1,
+        1
+      ],
       "spacingCm": 15,
       "sun": "full",
       "waterEveryDays": 5,
@@ -376,18 +812,45 @@
       "phMax": 7.0,
       "yieldKgPerSeason": 0.4,
       "co2eSavedPerKg": 0.5,
-      "companions": ["carrot", "tomato_cherry"],
+      "companions": [
+        "carrot",
+        "tomato_cherry"
+      ],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Central Asia",
+        "continents": [
+          "Asia"
+        ],
+        "ecoRegions": [
+          "Central Asia"
+        ],
+        "suitedClimates": [
+          "temperate",
+          "mediterranean",
+          "cool"
+        ]
+      }
     },
     {
       "id": "pea",
       "name": "Garden pea",
       "scientificName": "Pisum sativum",
-      "aliases": ["pea", "garden pea", "snap pea"],
+      "aliases": [
+        "pea",
+        "garden pea",
+        "snap pea"
+      ],
       "tier": "beginner",
       "category": "veggies",
-      "cellsPerPlant": [1, 1],
+      "cellsPerPlant": [
+        1,
+        1
+      ],
       "spacingCm": 8,
       "sun": "full",
       "waterEveryDays": 3,
@@ -398,18 +861,47 @@
       "phMax": 7.5,
       "yieldKgPerSeason": 1.0,
       "co2eSavedPerKg": 0.8,
-      "companions": ["carrot", "radish"],
+      "companions": [
+        "carrot",
+        "radish"
+      ],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Near East / Mediterranean",
+        "continents": [
+          "Asia",
+          "Europe",
+          "Africa"
+        ],
+        "ecoRegions": [
+          "Near East",
+          "Mediterranean Basin"
+        ],
+        "suitedClimates": [
+          "temperate",
+          "cool",
+          "mediterranean"
+        ]
+      }
     },
     {
       "id": "eggplant",
       "name": "Eggplant",
       "scientificName": "Solanum melongena",
-      "aliases": ["eggplant", "aubergine"],
+      "aliases": [
+        "eggplant",
+        "aubergine"
+      ],
       "tier": "intermediate",
       "category": "veggies",
-      "cellsPerPlant": [2, 2],
+      "cellsPerPlant": [
+        2,
+        2
+      ],
       "spacingCm": 60,
       "sun": "full",
       "waterEveryDays": 2,
@@ -420,18 +912,46 @@
       "phMax": 6.5,
       "yieldKgPerSeason": 2.5,
       "co2eSavedPerKg": 1.4,
-      "companions": ["basil", "marigold"],
+      "companions": [
+        "basil",
+        "marigold"
+      ],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "South / East Asia (India–China)",
+        "continents": [
+          "Asia"
+        ],
+        "ecoRegions": [
+          "South Asia",
+          "East Asia"
+        ],
+        "suitedClimates": [
+          "subtropical",
+          "tropical",
+          "temperate"
+        ]
+      }
     },
     {
       "id": "sweet_corn",
       "name": "Sweet corn",
       "scientificName": "Zea mays",
-      "aliases": ["corn", "sweet corn", "maize"],
+      "aliases": [
+        "corn",
+        "sweet corn",
+        "maize"
+      ],
       "tier": "intermediate",
       "category": "veggies",
-      "cellsPerPlant": [2, 2],
+      "cellsPerPlant": [
+        2,
+        2
+      ],
       "spacingCm": 30,
       "sun": "full",
       "waterEveryDays": 3,
@@ -442,18 +962,44 @@
       "phMax": 7.0,
       "yieldKgPerSeason": 1.5,
       "co2eSavedPerKg": 0.6,
-      "companions": ["bean_bush", "pumpkin"],
+      "companions": [
+        "bean_bush",
+        "pumpkin"
+      ],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Mesoamerica",
+        "continents": [
+          "North America"
+        ],
+        "ecoRegions": [
+          "Mesoamerica"
+        ],
+        "suitedClimates": [
+          "temperate",
+          "subtropical",
+          "tropical"
+        ]
+      }
     },
     {
       "id": "swiss_chard",
       "name": "Swiss chard",
       "scientificName": "Beta vulgaris",
-      "aliases": ["swiss chard", "chard"],
+      "aliases": [
+        "swiss chard",
+        "chard"
+      ],
       "tier": "beginner",
       "category": "veggies",
-      "cellsPerPlant": [1, 1],
+      "cellsPerPlant": [
+        1,
+        1
+      ],
       "spacingCm": 30,
       "sun": "partial",
       "waterEveryDays": 3,
@@ -464,18 +1010,46 @@
       "phMax": 7.5,
       "yieldKgPerSeason": 1.5,
       "co2eSavedPerKg": 0.5,
-      "companions": ["onion", "bean_bush"],
+      "companions": [
+        "onion",
+        "bean_bush"
+      ],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Mediterranean Basin",
+        "continents": [
+          "Europe",
+          "Africa",
+          "Asia"
+        ],
+        "ecoRegions": [
+          "Mediterranean Basin"
+        ],
+        "suitedClimates": [
+          "temperate",
+          "mediterranean",
+          "cool"
+        ]
+      }
     },
     {
       "id": "basil",
       "name": "Basil",
       "scientificName": "Ocimum basilicum",
-      "aliases": ["basil", "sweet basil"],
+      "aliases": [
+        "basil",
+        "sweet basil"
+      ],
       "tier": "beginner",
       "category": "herbs",
-      "cellsPerPlant": [1, 1],
+      "cellsPerPlant": [
+        1,
+        1
+      ],
       "spacingCm": 25,
       "sun": "full",
       "waterEveryDays": 2,
@@ -486,18 +1060,46 @@
       "phMax": 7.5,
       "yieldKgPerSeason": 0.5,
       "co2eSavedPerKg": 1.0,
-      "companions": ["tomato_cherry", "tomato_beefsteak"],
+      "companions": [
+        "tomato_cherry",
+        "tomato_beefsteak"
+      ],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Tropical Africa / South Asia",
+        "continents": [
+          "Africa",
+          "Asia"
+        ],
+        "ecoRegions": [
+          "Tropical Africa",
+          "South Asia"
+        ],
+        "suitedClimates": [
+          "tropical",
+          "subtropical",
+          "mediterranean"
+        ]
+      }
     },
     {
       "id": "mint",
       "name": "Mint",
       "scientificName": "Mentha spicata",
-      "aliases": ["mint", "spearmint"],
+      "aliases": [
+        "mint",
+        "spearmint"
+      ],
       "tier": "beginner",
       "category": "herbs",
-      "cellsPerPlant": [1, 1],
+      "cellsPerPlant": [
+        1,
+        1
+      ],
       "spacingCm": 30,
       "sun": "partial",
       "waterEveryDays": 2,
@@ -510,16 +1112,40 @@
       "co2eSavedPerKg": 1.0,
       "companions": [],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Temperate Europe / Asia",
+        "continents": [
+          "Europe",
+          "Asia"
+        ],
+        "ecoRegions": [
+          "Temperate Eurasia",
+          "Mediterranean Basin"
+        ],
+        "suitedClimates": [
+          "temperate",
+          "cool",
+          "mediterranean"
+        ]
+      }
     },
     {
       "id": "parsley",
       "name": "Parsley",
       "scientificName": "Petroselinum crispum",
-      "aliases": ["parsley"],
+      "aliases": [
+        "parsley"
+      ],
       "tier": "beginner",
       "category": "herbs",
-      "cellsPerPlant": [1, 1],
+      "cellsPerPlant": [
+        1,
+        1
+      ],
       "spacingCm": 20,
       "sun": "partial",
       "waterEveryDays": 3,
@@ -530,18 +1156,45 @@
       "phMax": 7.0,
       "yieldKgPerSeason": 0.3,
       "co2eSavedPerKg": 1.0,
-      "companions": ["tomato_cherry", "carrot"],
+      "companions": [
+        "tomato_cherry",
+        "carrot"
+      ],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Mediterranean Basin",
+        "continents": [
+          "Europe",
+          "Africa",
+          "Asia"
+        ],
+        "ecoRegions": [
+          "Mediterranean Basin"
+        ],
+        "suitedClimates": [
+          "temperate",
+          "mediterranean"
+        ]
+      }
     },
     {
       "id": "cilantro",
       "name": "Cilantro",
       "scientificName": "Coriandrum sativum",
-      "aliases": ["cilantro", "coriander"],
+      "aliases": [
+        "cilantro",
+        "coriander"
+      ],
       "tier": "beginner",
       "category": "herbs",
-      "cellsPerPlant": [1, 1],
+      "cellsPerPlant": [
+        1,
+        1
+      ],
       "spacingCm": 15,
       "sun": "partial",
       "waterEveryDays": 2,
@@ -554,16 +1207,42 @@
       "co2eSavedPerKg": 1.0,
       "companions": [],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Mediterranean / Near East / Southern Europe",
+        "continents": [
+          "Europe",
+          "Asia",
+          "Africa"
+        ],
+        "ecoRegions": [
+          "Mediterranean Basin",
+          "Near East"
+        ],
+        "suitedClimates": [
+          "temperate",
+          "mediterranean",
+          "cool"
+        ]
+      }
     },
     {
       "id": "rosemary",
       "name": "Rosemary",
       "scientificName": "Salvia rosmarinus",
-      "aliases": ["rosemary", "Rosmarinus officinalis"],
+      "aliases": [
+        "rosemary",
+        "Rosmarinus officinalis"
+      ],
       "tier": "beginner",
       "category": "herbs",
-      "cellsPerPlant": [2, 2],
+      "cellsPerPlant": [
+        2,
+        2
+      ],
       "spacingCm": 60,
       "sun": "full",
       "waterEveryDays": 7,
@@ -574,18 +1253,44 @@
       "phMax": 7.5,
       "yieldKgPerSeason": 0.2,
       "co2eSavedPerKg": 1.0,
-      "companions": ["thyme", "oregano"],
+      "companions": [
+        "thyme",
+        "oregano"
+      ],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Mediterranean Basin",
+        "continents": [
+          "Europe",
+          "Africa"
+        ],
+        "ecoRegions": [
+          "Mediterranean Basin"
+        ],
+        "suitedClimates": [
+          "mediterranean",
+          "temperate",
+          "arid"
+        ]
+      }
     },
     {
       "id": "thyme",
       "name": "Thyme",
       "scientificName": "Thymus vulgaris",
-      "aliases": ["thyme"],
+      "aliases": [
+        "thyme"
+      ],
       "tier": "beginner",
       "category": "herbs",
-      "cellsPerPlant": [1, 1],
+      "cellsPerPlant": [
+        1,
+        1
+      ],
       "spacingCm": 25,
       "sun": "full",
       "waterEveryDays": 7,
@@ -596,18 +1301,45 @@
       "phMax": 8.0,
       "yieldKgPerSeason": 0.15,
       "co2eSavedPerKg": 1.0,
-      "companions": ["rosemary", "strawberry"],
+      "companions": [
+        "rosemary",
+        "strawberry"
+      ],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Mediterranean Basin",
+        "continents": [
+          "Europe",
+          "Africa",
+          "Asia"
+        ],
+        "ecoRegions": [
+          "Mediterranean Basin"
+        ],
+        "suitedClimates": [
+          "mediterranean",
+          "temperate",
+          "arid"
+        ]
+      }
     },
     {
       "id": "oregano",
       "name": "Oregano",
       "scientificName": "Origanum vulgare",
-      "aliases": ["oregano"],
+      "aliases": [
+        "oregano"
+      ],
       "tier": "beginner",
       "category": "herbs",
-      "cellsPerPlant": [1, 1],
+      "cellsPerPlant": [
+        1,
+        1
+      ],
       "spacingCm": 30,
       "sun": "full",
       "waterEveryDays": 5,
@@ -618,18 +1350,43 @@
       "phMax": 8.0,
       "yieldKgPerSeason": 0.2,
       "co2eSavedPerKg": 1.0,
-      "companions": ["basil", "tomato_cherry"],
+      "companions": [
+        "basil",
+        "tomato_cherry"
+      ],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Mediterranean Basin",
+        "continents": [
+          "Europe",
+          "Asia"
+        ],
+        "ecoRegions": [
+          "Mediterranean Basin"
+        ],
+        "suitedClimates": [
+          "mediterranean",
+          "temperate"
+        ]
+      }
     },
     {
       "id": "chives",
       "name": "Chives",
       "scientificName": "Allium schoenoprasum",
-      "aliases": ["chives"],
+      "aliases": [
+        "chives"
+      ],
       "tier": "beginner",
       "category": "herbs",
-      "cellsPerPlant": [1, 1],
+      "cellsPerPlant": [
+        1,
+        1
+      ],
       "spacingCm": 20,
       "sun": "full",
       "waterEveryDays": 3,
@@ -640,18 +1397,46 @@
       "phMax": 7.0,
       "yieldKgPerSeason": 0.2,
       "co2eSavedPerKg": 0.5,
-      "companions": ["carrot", "tomato_cherry"],
+      "companions": [
+        "carrot",
+        "tomato_cherry"
+      ],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Circumboreal Europe / Asia",
+        "continents": [
+          "Europe",
+          "Asia"
+        ],
+        "ecoRegions": [
+          "Temperate Eurasia",
+          "Boreal"
+        ],
+        "suitedClimates": [
+          "temperate",
+          "cool",
+          "cold"
+        ]
+      }
     },
     {
       "id": "strawberry",
       "name": "Strawberry",
       "scientificName": "Fragaria × ananassa",
-      "aliases": ["strawberry", "strawberries"],
+      "aliases": [
+        "strawberry",
+        "strawberries"
+      ],
       "tier": "beginner",
       "category": "fruit",
-      "cellsPerPlant": [1, 1],
+      "cellsPerPlant": [
+        1,
+        1
+      ],
       "spacingCm": 30,
       "sun": "full",
       "waterEveryDays": 2,
@@ -662,18 +1447,44 @@
       "phMax": 6.5,
       "yieldKgPerSeason": 0.7,
       "co2eSavedPerKg": 1.2,
-      "companions": ["spinach", "thyme"],
+      "companions": [
+        "spinach",
+        "thyme"
+      ],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Americas hybrid (Fragaria × ananassa)",
+        "continents": [
+          "North America",
+          "South America"
+        ],
+        "ecoRegions": [
+          "Temperate Americas"
+        ],
+        "suitedClimates": [
+          "temperate",
+          "cool"
+        ]
+      }
     },
     {
       "id": "blueberry",
       "name": "Blueberry",
       "scientificName": "Vaccinium corymbosum",
-      "aliases": ["blueberry", "highbush blueberry"],
+      "aliases": [
+        "blueberry",
+        "highbush blueberry"
+      ],
       "tier": "intermediate",
       "category": "fruit",
-      "cellsPerPlant": [3, 3],
+      "cellsPerPlant": [
+        3,
+        3
+      ],
       "spacingCm": 90,
       "sun": "full",
       "waterEveryDays": 3,
@@ -686,16 +1497,37 @@
       "co2eSavedPerKg": 1.2,
       "companions": [],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Eastern North America",
+        "continents": [
+          "North America"
+        ],
+        "ecoRegions": [
+          "Eastern Temperate Forests"
+        ],
+        "suitedClimates": [
+          "temperate",
+          "cool"
+        ]
+      }
     },
     {
       "id": "watermelon",
       "name": "Watermelon",
       "scientificName": "Citrullus lanatus",
-      "aliases": ["watermelon"],
+      "aliases": [
+        "watermelon"
+      ],
       "tier": "intermediate",
       "category": "fruit",
-      "cellsPerPlant": [6, 6],
+      "cellsPerPlant": [
+        6,
+        6
+      ],
       "spacingCm": 180,
       "sun": "full",
       "waterEveryDays": 2,
@@ -706,18 +1538,43 @@
       "phMax": 7.0,
       "yieldKgPerSeason": 9.0,
       "co2eSavedPerKg": 0.9,
-      "companions": ["nasturtium"],
+      "companions": [
+        "nasturtium"
+      ],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Southern Africa",
+        "continents": [
+          "Africa"
+        ],
+        "ecoRegions": [
+          "Southern Africa",
+          "Kalahari region"
+        ],
+        "suitedClimates": [
+          "subtropical",
+          "tropical",
+          "arid"
+        ]
+      }
     },
     {
       "id": "pumpkin",
       "name": "Pumpkin",
       "scientificName": "Cucurbita pepo",
-      "aliases": ["pumpkin"],
+      "aliases": [
+        "pumpkin"
+      ],
       "tier": "advanced",
       "category": "fruit",
-      "cellsPerPlant": [4, 2],
+      "cellsPerPlant": [
+        4,
+        2
+      ],
       "spacingCm": 120,
       "sun": "full",
       "waterEveryDays": 3,
@@ -728,18 +1585,44 @@
       "phMax": 7.5,
       "yieldKgPerSeason": 6.0,
       "co2eSavedPerKg": 0.9,
-      "companions": ["nasturtium", "marigold"],
+      "companions": [
+        "nasturtium",
+        "marigold"
+      ],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Mesoamerica / North America",
+        "continents": [
+          "North America"
+        ],
+        "ecoRegions": [
+          "Mesoamerica",
+          "Eastern North America"
+        ],
+        "suitedClimates": [
+          "temperate",
+          "subtropical"
+        ]
+      }
     },
     {
       "id": "raspberry",
       "name": "Raspberry",
       "scientificName": "Rubus idaeus",
-      "aliases": ["raspberry", "red raspberry"],
+      "aliases": [
+        "raspberry",
+        "red raspberry"
+      ],
       "tier": "intermediate",
       "category": "fruit",
-      "cellsPerPlant": [2, 2],
+      "cellsPerPlant": [
+        2,
+        2
+      ],
       "spacingCm": 60,
       "sun": "full",
       "waterEveryDays": 3,
@@ -752,16 +1635,40 @@
       "co2eSavedPerKg": 1.2,
       "companions": [],
       "impactCase": "food_carbon",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Northern Europe / Asia (Rubus idaeus)",
+        "continents": [
+          "Europe",
+          "Asia"
+        ],
+        "ecoRegions": [
+          "Temperate Eurasia",
+          "Boreal"
+        ],
+        "suitedClimates": [
+          "temperate",
+          "cool",
+          "cold"
+        ]
+      }
     },
     {
       "id": "sunflower",
       "name": "Sunflower",
       "scientificName": "Helianthus annuus",
-      "aliases": ["sunflower"],
+      "aliases": [
+        "sunflower"
+      ],
       "tier": "beginner",
       "category": "flowers",
-      "cellsPerPlant": [1, 1],
+      "cellsPerPlant": [
+        1,
+        1
+      ],
       "spacingCm": 30,
       "sun": "full",
       "waterEveryDays": 3,
@@ -774,16 +1681,39 @@
       "co2eSavedPerKg": 0,
       "companions": [],
       "impactCase": "pollinator_biodiversity",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "North America (Great Plains)",
+        "continents": [
+          "North America"
+        ],
+        "ecoRegions": [
+          "Great Plains",
+          "Prairies"
+        ],
+        "suitedClimates": [
+          "temperate",
+          "continental"
+        ]
+      }
     },
     {
       "id": "marigold",
       "name": "Marigold",
       "scientificName": "Tagetes erecta",
-      "aliases": ["marigold", "African marigold"],
+      "aliases": [
+        "marigold",
+        "African marigold"
+      ],
       "tier": "beginner",
       "category": "flowers",
-      "cellsPerPlant": [1, 1],
+      "cellsPerPlant": [
+        1,
+        1
+      ],
       "spacingCm": 25,
       "sun": "full",
       "waterEveryDays": 3,
@@ -794,18 +1724,43 @@
       "phMax": 7.5,
       "yieldKgPerSeason": 0,
       "co2eSavedPerKg": 0,
-      "companions": ["tomato_cherry", "tomato_beefsteak"],
+      "companions": [
+        "tomato_cherry",
+        "tomato_beefsteak"
+      ],
       "impactCase": "pollinator_biodiversity",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Mexico / Central America",
+        "continents": [
+          "North America"
+        ],
+        "ecoRegions": [
+          "Mesoamerica"
+        ],
+        "suitedClimates": [
+          "subtropical",
+          "temperate",
+          "tropical"
+        ]
+      }
     },
     {
       "id": "zinnia",
       "name": "Zinnia",
       "scientificName": "Zinnia elegans",
-      "aliases": ["zinnia"],
+      "aliases": [
+        "zinnia"
+      ],
       "tier": "beginner",
       "category": "flowers",
-      "cellsPerPlant": [1, 1],
+      "cellsPerPlant": [
+        1,
+        1
+      ],
       "spacingCm": 25,
       "sun": "full",
       "waterEveryDays": 3,
@@ -818,16 +1773,39 @@
       "co2eSavedPerKg": 0,
       "companions": [],
       "impactCase": "pollinator_biodiversity",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Mexico / Southwest United States",
+        "continents": [
+          "North America"
+        ],
+        "ecoRegions": [
+          "Mesoamerica",
+          "Southwest US"
+        ],
+        "suitedClimates": [
+          "subtropical",
+          "temperate",
+          "arid"
+        ]
+      }
     },
     {
       "id": "nasturtium",
       "name": "Nasturtium",
       "scientificName": "Tropaeolum majus",
-      "aliases": ["nasturtium"],
+      "aliases": [
+        "nasturtium"
+      ],
       "tier": "beginner",
       "category": "flowers",
-      "cellsPerPlant": [1, 1],
+      "cellsPerPlant": [
+        1,
+        1
+      ],
       "spacingCm": 30,
       "sun": "full",
       "waterEveryDays": 3,
@@ -838,18 +1816,45 @@
       "phMax": 8.0,
       "yieldKgPerSeason": 0,
       "co2eSavedPerKg": 0,
-      "companions": ["zucchini", "cucumber", "pumpkin"],
+      "companions": [
+        "zucchini",
+        "cucumber",
+        "pumpkin"
+      ],
       "impactCase": "pollinator_biodiversity",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Andes (South America)",
+        "continents": [
+          "South America"
+        ],
+        "ecoRegions": [
+          "Andes"
+        ],
+        "suitedClimates": [
+          "temperate",
+          "subtropical",
+          "cool"
+        ]
+      }
     },
     {
       "id": "lavender",
       "name": "Lavender",
       "scientificName": "Lavandula angustifolia",
-      "aliases": ["lavender", "English lavender"],
+      "aliases": [
+        "lavender",
+        "English lavender"
+      ],
       "tier": "beginner",
       "category": "pollinator",
-      "cellsPerPlant": [2, 2],
+      "cellsPerPlant": [
+        2,
+        2
+      ],
       "spacingCm": 45,
       "sun": "full",
       "waterEveryDays": 7,
@@ -862,16 +1867,41 @@
       "co2eSavedPerKg": 0,
       "companions": [],
       "impactCase": "pollinator_biodiversity",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Mediterranean Basin",
+        "continents": [
+          "Europe",
+          "Africa"
+        ],
+        "ecoRegions": [
+          "Mediterranean Basin"
+        ],
+        "suitedClimates": [
+          "mediterranean",
+          "temperate",
+          "arid"
+        ]
+      }
     },
     {
       "id": "coneflower",
       "name": "Coneflower",
       "scientificName": "Echinacea purpurea",
-      "aliases": ["coneflower", "echinacea", "purple coneflower"],
+      "aliases": [
+        "coneflower",
+        "echinacea",
+        "purple coneflower"
+      ],
       "tier": "intermediate",
       "category": "pollinator",
-      "cellsPerPlant": [2, 2],
+      "cellsPerPlant": [
+        2,
+        2
+      ],
       "spacingCm": 45,
       "sun": "full",
       "waterEveryDays": 5,
@@ -882,18 +1912,45 @@
       "phMax": 7.0,
       "yieldKgPerSeason": 0,
       "co2eSavedPerKg": 0,
-      "companions": ["lavender", "bee_balm"],
+      "companions": [
+        "lavender",
+        "bee_balm"
+      ],
       "impactCase": "pollinator_biodiversity",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Eastern / Central North America",
+        "continents": [
+          "North America"
+        ],
+        "ecoRegions": [
+          "Prairies",
+          "Eastern Temperate Forests"
+        ],
+        "suitedClimates": [
+          "temperate",
+          "continental"
+        ]
+      }
     },
     {
       "id": "bee_balm",
       "name": "Bee balm",
       "scientificName": "Monarda didyma",
-      "aliases": ["bee balm", "bergamot", "monarda"],
+      "aliases": [
+        "bee balm",
+        "bergamot",
+        "monarda"
+      ],
       "tier": "beginner",
       "category": "pollinator",
-      "cellsPerPlant": [2, 2],
+      "cellsPerPlant": [
+        2,
+        2
+      ],
       "spacingCm": 45,
       "sun": "full",
       "waterEveryDays": 3,
@@ -904,18 +1961,42 @@
       "phMax": 7.0,
       "yieldKgPerSeason": 0,
       "co2eSavedPerKg": 0,
-      "companions": ["coneflower"],
+      "companions": [
+        "coneflower"
+      ],
       "impactCase": "pollinator_biodiversity",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Eastern North America",
+        "continents": [
+          "North America"
+        ],
+        "ecoRegions": [
+          "Eastern Temperate Forests"
+        ],
+        "suitedClimates": [
+          "temperate",
+          "cool"
+        ]
+      }
     },
     {
       "id": "lily",
       "name": "Lily",
       "scientificName": "Lilium",
-      "aliases": ["lily", "asiatic lily"],
+      "aliases": [
+        "lily",
+        "asiatic lily"
+      ],
       "tier": "beginner",
       "category": "flowers",
-      "cellsPerPlant": [1, 1],
+      "cellsPerPlant": [
+        1,
+        1
+      ],
       "spacingCm": 30,
       "sun": "partial",
       "waterEveryDays": 4,
@@ -928,7 +2009,26 @@
       "co2eSavedPerKg": 0,
       "companions": [],
       "impactCase": "pollinator_biodiversity",
-      "verified": { "perenual": false, "carbon": false }
+      "verified": {
+        "perenual": false,
+        "carbon": false
+      },
+      "nativeRegion": {
+        "label": "Temperate Northern Hemisphere (esp. Asia)",
+        "continents": [
+          "Asia",
+          "Europe",
+          "North America"
+        ],
+        "ecoRegions": [
+          "Temperate Eurasia",
+          "Temperate North America"
+        ],
+        "suitedClimates": [
+          "temperate",
+          "cool"
+        ]
+      }
     }
   ]
 }

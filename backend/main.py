@@ -444,6 +444,204 @@ def list_plants(optimizer: bool = False) -> dict[str, Any]:
     return {"count": len(docs), "plants": docs}
 
 
+# Country code → continent for native-region suggestion scoring
+COUNTRY_CONTINENT: dict[str, str] = {
+    "CA": "North America",
+    "US": "North America",
+    "MX": "North America",
+    "GT": "North America",
+    "CR": "North America",
+    "BR": "South America",
+    "AR": "South America",
+    "PE": "South America",
+    "CL": "South America",
+    "CO": "South America",
+    "EC": "South America",
+    "BO": "South America",
+    "GB": "Europe",
+    "FR": "Europe",
+    "DE": "Europe",
+    "IT": "Europe",
+    "ES": "Europe",
+    "PT": "Europe",
+    "GR": "Europe",
+    "NL": "Europe",
+    "PL": "Europe",
+    "SE": "Europe",
+    "NO": "Europe",
+    "FI": "Europe",
+    "IE": "Europe",
+    "CH": "Europe",
+    "AT": "Europe",
+    "BE": "Europe",
+    "DK": "Europe",
+    "CN": "Asia",
+    "JP": "Asia",
+    "KR": "Asia",
+    "IN": "Asia",
+    "TH": "Asia",
+    "VN": "Asia",
+    "ID": "Asia",
+    "PH": "Asia",
+    "TR": "Asia",
+    "IL": "Asia",
+    "AU": "Australia",
+    "NZ": "Australia",
+    "ZA": "Africa",
+    "EG": "Africa",
+    "MA": "Africa",
+    "NG": "Africa",
+    "KE": "Africa",
+    "ET": "Africa",
+}
+
+MEDITERRANEAN_COUNTRIES = {"ES", "PT", "IT", "GR", "FR", "HR", "AL", "TR", "MA", "TN", "DZ", "CY", "IL", "LB"}
+
+
+def climates_for_place(lat: float, country_code: str | None) -> list[str]:
+    """Rough climate tags from latitude + country (for nativeRegion.suitedClimates overlap)."""
+    abs_lat = abs(lat)
+    climates: list[str] = []
+    if abs_lat >= 55:
+        climates.extend(["cold", "cool", "temperate"])
+    elif abs_lat >= 40:
+        climates.extend(["temperate", "cool", "continental"])
+    elif abs_lat >= 30:
+        climates.extend(["temperate", "subtropical", "mediterranean"])
+    elif abs_lat >= 23.5:
+        climates.extend(["subtropical", "temperate", "mediterranean"])
+    else:
+        climates.extend(["tropical", "subtropical"])
+    if (country_code or "").upper() in MEDITERRANEAN_COUNTRIES:
+        climates.append("mediterranean")
+    # unique preserve order
+    seen: set[str] = set()
+    out: list[str] = []
+    for c in climates:
+        if c not in seen:
+            seen.add(c)
+            out.append(c)
+    return out
+
+
+def score_native_fit(
+    plant: dict[str, Any],
+    garden_continent: str | None,
+    garden_climates: list[str],
+) -> tuple[int, list[str]]:
+    """Higher score = better native/climate fit for suggestions."""
+    nr = plant.get("nativeRegion") or {}
+    continents = nr.get("continents") or []
+    suited = nr.get("suitedClimates") or []
+    reasons: list[str] = []
+    score = 0
+
+    if garden_continent and garden_continent in continents:
+        score += 3
+        reasons.append(f"native to {garden_continent}")
+    elif garden_continent:
+        # still growable if climate overlaps
+        pass
+
+    overlap = [c for c in suited if c in garden_climates]
+    if overlap:
+        score += 2 if garden_continent and garden_continent in continents else 1
+        reasons.append(f"climate fit ({', '.join(overlap[:2])})")
+
+    if not reasons:
+        reasons.append("widely cultivated; weaker local-native match")
+
+    return score, reasons
+
+
+@app.get("/plants/suggest")
+async def suggest_plants(
+    location: str | None = None,
+    lat: float | None = None,
+    lon: float | None = None,
+    confirm: bool = False,
+    resultIndex: int = 0,
+    tier: str | None = None,
+    category: str | None = None,
+    limit: int = 12,
+) -> dict[str, Any]:
+    """
+    Rank catalog plants for a garden location using nativeRegion overlap.
+
+    Prefer species native to the same continent and suited to local climate
+    (e.g. Eastern North America natives rise for Toronto).
+    """
+    resolved: dict[str, Any] | None = None
+    if location and (lat is None or lon is None):
+        places = await geocode_search(location.strip(), count=5)
+        if not places:
+            raise HTTPException(status_code=404, detail=f"No location found for '{location}'")
+        if len(places) > 1 and not confirm:
+            return {
+                "needsConfirmation": True,
+                "query": location,
+                "confirmPrompt": f"{places[0]['label']} — is this right?",
+                "results": places,
+                "hint": "Re-call /plants/suggest with confirm=true&resultIndex=N",
+            }
+        idx = resultIndex if 0 <= resultIndex < len(places) else 0
+        resolved = places[idx]
+        lat = float(resolved["latitude"])
+        lon = float(resolved["longitude"])
+    elif lat is None or lon is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Provide location= or lat & lon",
+        )
+
+    country_code = (resolved or {}).get("countryCode")
+    continent = COUNTRY_CONTINENT.get((country_code or "").upper()) if country_code else None
+    # Heuristic if geocode skipped: Canada/US-ish latitudes without country
+    if continent is None and lat is not None:
+        if 15 <= lat <= 72 and -170 <= (lon or 0) <= -50:
+            continent = "North America"
+        elif -55 <= lat <= 15 and -90 <= (lon or 0) <= -30:
+            continent = "South America"
+
+    climates = climates_for_place(float(lat), country_code)
+
+    plants = list(plants_coll().find({}, {"_id": 0}))
+    if tier:
+        plants = [p for p in plants if p.get("tier") == tier]
+    if category:
+        plants = [p for p in plants if p.get("category") == category]
+
+    ranked: list[dict[str, Any]] = []
+    for p in plants:
+        score, reasons = score_native_fit(p, continent, climates)
+        ranked.append(
+            {
+                "score": score,
+                "reasons": reasons,
+                "plant": p,
+                "species": to_species(p),
+            }
+        )
+    ranked.sort(key=lambda x: (-x["score"], x["plant"].get("name", "")))
+    top = ranked[: max(1, min(limit, 40))]
+
+    return {
+        "location": {
+            "lat": lat,
+            "lon": lon,
+            "resolved": resolved,
+            "continent": continent,
+            "climates": climates,
+        },
+        "count": len(top),
+        "suggestions": top,
+        "note": (
+            "Ranked by nativeRegion continent + climate overlap. "
+            "Draft biogeography — verify before pitching hard claims."
+        ),
+    }
+
+
 @app.get("/plants/search/by-name")
 def search_plants(q: str, limit: int = 10) -> dict[str, Any]:
     qn = norm(q)
