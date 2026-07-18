@@ -53,9 +53,10 @@ let CATALOG = getCatalog();
 let byId = new Map(CATALOG.map((s) => [s.id, s]));
 const nameOf = (id: string) => byId.get(id)?.name ?? id;
 
-/** Everything needed to resume mid-flow after a refresh. `photo` is
- *  deliberately excluded — it's a blob: URL that's invalidated once the
- *  page unloads, so persisting it would just point at a dead image. */
+/** Everything needed to resume mid-flow after a refresh. `photo` and
+ *  `scanInfo` are deliberately excluded — `photo` is a blob: URL that's
+ *  invalidated once the page unloads, and `scanInfo` is diagnostics tied to
+ *  that same ephemeral photo, so persisting either would be meaningless. */
 interface SwapSnapshot {
   targets: Target[];
   banned: string[];
@@ -103,8 +104,8 @@ export function App() {
   // clicked Edit and walked back through prefs/space (Tweak/Confirm apply).
   const [editingLayout, setEditingLayout] = useState(saved?.editingLayout ?? false);
   const [photo, setPhoto] = useState<string | null>(null);
-  const [scanInfo, setScanInfo] = useState<ScanDiagnostics | null>(null);
   const [garden, setGarden] = useState<GardenGrid | null>(saved?.garden ?? null);
+  const [scanInfo, setScanInfo] = useState<ScanDiagnostics | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set(saved?.selected ?? []));
   const [prefs, setPrefs] = useState<Preferences>(
     saved?.prefs ?? { tier: "beginner", categories: [] },
@@ -247,7 +248,8 @@ export function App() {
     run(prev.banned, prev.targets);
   }
 
-  /** Demo escape hatch: wipe persistence and every piece of state. */
+  /** Full reset back to the pre-onboarding scan step — used by the
+   *  dashboard's "Start over" action. */
   function resetAll() {
     try {
       localStorage.removeItem(STORAGE_KEY);
@@ -256,8 +258,8 @@ export function App() {
     }
     setStep("scan");
     setOnboarded(false);
-    setActiveTab("dashboard");
     setEditingLayout(false);
+    setActiveTab("dashboard");
     setPhoto(null);
     setGarden(null);
     setScanInfo(null);
@@ -297,7 +299,7 @@ export function App() {
             <ScanScreen
               photo={photo}
               setPhoto={setPhoto}
-              onMeasured={(g, d) => applyGarden(g, d)}
+              onMeasured={applyGarden}
               onDemo={doDemoScan}
               onSkip={editingLayout && garden ? () => setStep("review") : undefined}
             />
@@ -387,12 +389,7 @@ export function App() {
         />
       )}
 
-      {onboarded && (
-        <TabBar
-          active={activeTab}
-          onSelect={setActiveTab}
-        />
-      )}
+      {onboarded && <TabBar active={activeTab} onSelect={setActiveTab} />}
     </div>
   );
 }
@@ -1274,11 +1271,124 @@ function ResultsScreen(props: {
   );
 }
 
+/** Live Open-Meteo forecast + per-plant tolerance checks via backend /weather.
+ *  Falls back to the canned storm alert when offline — the demo never breaks. */
+function WeatherCard(props: { plantIds: string[] }) {
+  const idsKey = props.plantIds.join(",");
+  const [data, setData] = useState<WeatherData | null | undefined>(undefined);
+
+  useEffect(() => {
+    let alive = true;
+    setData(undefined);
+    fetchWeather(props.plantIds).then((d) => {
+      if (alive) setData(d);
+    });
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [idsKey]);
+
+  if (data === undefined) {
+    return (
+      <div className="card">
+        <p className="tiny">🌤 Checking the sky over Toronto…</p>
+      </div>
+    );
+  }
+
+  if (data === null) {
+    return (
+      <div className="card warn">
+        <h2>{FAKE_WEATHER_ALERT.title}</h2>
+        <p className="muted">{FAKE_WEATHER_ALERT.advice}</p>
+        <p className="tiny">⚡ offline — demo forecast (live Open-Meteo unavailable)</p>
+      </div>
+    );
+  }
+
+  const notes = data.notifications ?? [];
+  const week = (data.week ?? []).slice(0, 4);
+  const warnings = (data.plantChecks ?? []).filter((c) => !c.ok && c.type !== "unknown_plant");
+  const dayName = (iso: string) =>
+    new Date(`${iso}T12:00:00`).toLocaleDateString(undefined, { weekday: "short" });
+
+  return (
+    <div className={`card ${notes.length > 0 ? "warn" : ""}`}>
+      <h2>{notes.length > 0 ? "Weather guard ⛈" : "Weather guard ☀"}</h2>
+      {notes.length === 0 && (
+        <p className="muted">All clear in Toronto for the next few days.</p>
+      )}
+      {notes.map((n, i) => (
+        <p className="muted" key={i}>
+          {n.type === "frost_warning" ? "🥶 " : n.type === "skip_watering" ? "💧 " : "⛈ "}
+          {n.message}
+        </p>
+      ))}
+      {warnings.map((w, i) => (
+        <p className="muted" key={`p${i}`}>
+          🪴 {w.message}
+        </p>
+      ))}
+      {week.length > 0 && (
+        <p className="tiny">
+          {week
+            .map(
+              (d) =>
+                `${dayName(d.date)} ${Math.round(d.tempMinC ?? 0)}–${Math.round(d.tempMaxC ?? 0)}°${
+                  d.storm ? " ⛈" : (d.precipMm ?? 0) >= 2 ? " 🌧" : ""
+                }`,
+            )
+            .join(" · ")}
+          {" · live Open-Meteo"}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** Optimizer yield vs City of Toronto household food-waste audits. Numbers are
+ *  computed locally (same constants as backend/food_waste_stats.py); the
+ *  backend /impact/food-waste call just verifies parity when reachable. */
+function FoodWasteCard(props: { foodKg: number; kgCo2e: number }) {
+  const [liveChecked, setLiveChecked] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    fetchFoodWasteImpact(props.foodKg, props.kgCo2e).then((d) => {
+      if (alive && d) setLiveChecked(true);
+    });
+    return () => {
+      alive = false;
+    };
+  }, [props.foodKg, props.kgCo2e]);
+
+  if (props.foodKg <= 0) return null;
+  const local = localFoodWasteImpact(props.foodKg);
+
+  return (
+    <div className="card info">
+      <h2>Toronto impact 🥕</h2>
+      <p className="muted">
+        Growing <b>{props.foodKg.toFixed(1)} kg</b> of food covers{" "}
+        <b>{local.percentOfFruitVegWaste}%</b> of the average Toronto household's yearly
+        fruit &amp; veg waste (45 kg) — roughly <b>${local.dollarsSaved}</b> of groceries
+        and <b>{local.greenBinKgAvoided} kg</b> kept out of the Green Bin.
+      </p>
+      <p className="tiny">
+        City of Toronto single-family waste audits, 2017–2018
+        {liveChecked ? " · ✓ verified against backend /impact/food-waste" : " · computed locally"}
+      </p>
+    </div>
+  );
+}
+
 /* ─────────────── 6. Dashboard ─────────────── */
 
 function DashboardScreen(props: {
   result: OptimizerResponse;
   plantedAt: number | null;
+  cloudId?: string | null;
   onReset?: () => void;
 }) {
   const { result } = props;
@@ -1302,6 +1412,10 @@ function DashboardScreen(props: {
 
       {props.cloudId && (
         <p className="tiny">☁ layout saved to cloud · id {props.cloudId}</p>
+      )}
+
+      {props.plantedAt && (
+        <CarbonChart plantedAt={props.plantedAt} totalKgCo2eSeason={result.carbon.kgCo2eSeason} />
       )}
 
       {props.plantedAt && (
