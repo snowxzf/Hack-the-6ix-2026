@@ -9,7 +9,7 @@ included. When your dreams don't fit your yard, we negotiate. That's the plot tw
 | Package | What | Owner |
 |---|---|---|
 | `optimizer/` | Layout + carbon optimization engine (pure TS, tested, on-device) | Sara |
-| `app/` | Mobile app (scan → preferences → layout → dashboard) | UI team |
+| `app/` | Mobile app (scan → preferences → layout → dashboard) | Selina |
 | API / catalog | Plant catalog, PlantNet ID, Open-Meteo weather | Jessica |
 
 ## Quickstart
