@@ -1308,8 +1308,13 @@ function WeatherCard(props: { plantIds: string[] }) {
   }
 
   const notes = data.notifications ?? [];
-  const week = (data.week ?? []).slice(0, 4);
-  const warnings = (data.plantChecks ?? []).filter((c) => !c.ok && c.type !== "unknown_plant");
+  const week = (data.sky?.week ?? []).slice(0, 4);
+  // Tolerance problems arrive nested under issues[]; flatten to messages.
+  const warnings = (data.plantChecks ?? [])
+    .filter((c) => !c.ok && c.type !== "unknown_plant")
+    .flatMap((c) => (c.issues ?? []).map((i) => i.message))
+    .filter(Boolean)
+    .slice(0, 4);
   const dayName = (iso: string) =>
     new Date(`${iso}T12:00:00`).toLocaleDateString(undefined, { weekday: "short" });
 
@@ -1325,9 +1330,9 @@ function WeatherCard(props: { plantIds: string[] }) {
           {n.message}
         </p>
       ))}
-      {warnings.map((w, i) => (
+      {warnings.map((msg, i) => (
         <p className="muted" key={`p${i}`}>
-          🪴 {w.message}
+          🪴 {msg}
         </p>
       ))}
       {week.length > 0 && (
@@ -1412,10 +1417,6 @@ function DashboardScreen(props: {
 
       {props.cloudId && (
         <p className="tiny">☁ layout saved to cloud · id {props.cloudId}</p>
-      )}
-
-      {props.plantedAt && (
-        <CarbonChart plantedAt={props.plantedAt} totalKgCo2eSeason={result.carbon.kgCo2eSeason} />
       )}
 
       {props.plantedAt && (

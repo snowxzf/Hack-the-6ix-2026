@@ -56,12 +56,19 @@ export interface WeatherNotification {
 }
 export interface PlantCheck {
   plantId: string;
+  name?: string;
   ok: boolean;
-  type: string;
-  message: string;
+  /** Present on unknown-plant entries only. */
+  type?: string;
+  message?: string;
+  /** Tolerance problems live here: [{type, message, ...}]. */
+  issues?: { type: string; message: string }[];
 }
 export interface WeatherData {
-  week?: WeatherDay[];
+  sky?: {
+    now?: { tempC: number | null; weather: string | null };
+    week?: WeatherDay[];
+  };
   notifications?: WeatherNotification[];
   plantChecks?: PlantCheck[];
 }
