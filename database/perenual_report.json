@@ -2,28 +2,687 @@
   {
     "id": "tomato_cherry",
     "matched": false,
-    "error": "rate_limited",
+    "error": "HTTP 429: Please Upgrade Plan - https://perenual.com/subscription-api-pricing. Sorry\ud83d\ude2c",
     "changes": {},
-    "notes": [
-      "Skipped due to Perenual free-tier rate limit"
-    ]
+    "notes": []
   },
   {
     "id": "tomato_beefsteak",
     "matched": false,
-    "error": "rate_limited",
+    "error": "HTTP 429: Please Upgrade Plan - https://perenual.com/subscription-api-pricing. Sorry\ud83d\ude2c",
     "changes": {},
-    "notes": [
-      "Skipped due to Perenual free-tier rate limit"
-    ]
+    "notes": []
   },
   {
     "id": "lettuce",
     "matched": false,
-    "error": "rate_limited",
+    "error": "HTTP 429: Please Upgrade Plan - https://perenual.com/subscription-api-pricing. Sorry\ud83d\ude2c",
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "carrot",
+    "query": "Daucus carota",
+    "perenualId": 2320,
+    "matched": true,
+    "changes": {
+      "waterEveryDays": {
+        "from": 3,
+        "to": 4
+      },
+      "heightCm": {
+        "from": 30,
+        "to": 91
+      }
+    },
+    "notes": [
+      "USDA hardiness 2\u201311"
+    ],
+    "perenual": {
+      "common_name": "carrot",
+      "scientific_name": [
+        "Daucus carota var. sativus"
+      ],
+      "sunlight": [
+        "full sun"
+      ],
+      "watering": "Average",
+      "watering_general_benchmark": {
+        "value": "\"3-4\"",
+        "unit": "days"
+      },
+      "dimensions": [
+        {
+          "type": null,
+          "min_value": 0.25,
+          "max_value": 3,
+          "unit": "feet"
+        }
+      ],
+      "hardiness": {
+        "min": "2",
+        "max": "11"
+      },
+      "origin": [
+        "Afghanistan"
+      ]
+    }
+  },
+  {
+    "id": "zucchini",
+    "query": "Cucurbita pepo",
+    "perenualId": 2255,
+    "matched": true,
+    "changes": {
+      "waterEveryDays": {
+        "from": 2,
+        "to": 4
+      }
+    },
+    "notes": [
+      "USDA hardiness 2\u201311"
+    ],
+    "perenual": {
+      "common_name": "summer squash",
+      "scientific_name": [
+        "Cucurbita pepo"
+      ],
+      "sunlight": [
+        "full sun"
+      ],
+      "watering": "Average",
+      "watering_general_benchmark": {
+        "value": "\"3-4\"",
+        "unit": "days"
+      },
+      "dimensions": [
+        {
+          "type": null,
+          "min_value": 1,
+          "max_value": 2.5,
+          "unit": "feet"
+        }
+      ],
+      "hardiness": {
+        "min": "2",
+        "max": "11"
+      },
+      "origin": [
+        "Mexico"
+      ]
+    }
+  },
+  {
+    "id": "cucumber",
+    "query": "Cucumis sativus",
+    "perenualId": 2251,
+    "matched": true,
+    "changes": {
+      "waterEveryDays": {
+        "from": 2,
+        "to": 4
+      },
+      "heightCm": {
+        "from": 150,
+        "to": 46
+      }
+    },
+    "notes": [
+      "USDA hardiness 2\u201311"
+    ],
+    "perenual": {
+      "common_name": "cucumber",
+      "scientific_name": [
+        "Cucumis sativus"
+      ],
+      "sunlight": [
+        "full sun"
+      ],
+      "watering": "Average",
+      "watering_general_benchmark": {
+        "value": "\"3-4\"",
+        "unit": "days"
+      },
+      "dimensions": [
+        {
+          "type": null,
+          "min_value": 0.75,
+          "max_value": 1.5,
+          "unit": "feet"
+        }
+      ],
+      "hardiness": {
+        "min": "2",
+        "max": "11"
+      },
+      "origin": [
+        "East Indies"
+      ]
+    }
+  },
+  {
+    "id": "bell_pepper",
+    "query": "Capsicum annuum",
+    "perenualId": 1600,
+    "matched": true,
+    "changes": {
+      "waterEveryDays": {
+        "from": 2,
+        "to": 4
+      }
+    },
+    "notes": [
+      "USDA hardiness 9\u201311"
+    ],
+    "perenual": {
+      "common_name": "pepper",
+      "scientific_name": [
+        "Capsicum annuum (Hot Pepper Group)"
+      ],
+      "sunlight": [
+        "full sun"
+      ],
+      "watering": "Average",
+      "watering_general_benchmark": {
+        "value": "\"3-4\"",
+        "unit": "days"
+      },
+      "dimensions": [
+        {
+          "type": null,
+          "min_value": 1,
+          "max_value": 2.5,
+          "unit": "feet"
+        }
+      ],
+      "hardiness": {
+        "min": "9",
+        "max": "11"
+      },
+      "origin": [
+        "Mexico",
+        "Central America",
+        "South America",
+        "Caribbean"
+      ]
+    }
+  },
+  {
+    "id": "kale",
+    "query": "Brassica oleracea",
+    "perenualId": 1320,
+    "matched": true,
+    "changes": {
+      "waterEveryDays": {
+        "from": 3,
+        "to": 4
+      }
+    },
+    "notes": [
+      "USDA hardiness 2\u201311"
+    ],
+    "perenual": {
+      "common_name": "kale",
+      "scientific_name": [
+        "Brassica oleracea (Acephala Group) 'Redbor'"
+      ],
+      "sunlight": [
+        "full sun",
+        "part shade"
+      ],
+      "watering": "Average",
+      "watering_general_benchmark": {
+        "value": "\"3-4\"",
+        "unit": "days"
+      },
+      "dimensions": [
+        {
+          "type": null,
+          "min_value": 1,
+          "max_value": 1.5,
+          "unit": "feet"
+        }
+      ],
+      "hardiness": {
+        "min": "2",
+        "max": "11"
+      },
+      "origin": [
+        "United Kingdom"
+      ]
+    }
+  },
+  {
+    "id": "spinach",
+    "matched": false,
+    "error": "HTTP 429: Please Upgrade Plan - https://perenual.com/subscription-api-pricing. Sorry\ud83d\ude2c",
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "radish",
+    "matched": false,
+    "error": "HTTP 429: Please Upgrade Plan - https://perenual.com/subscription-api-pricing. Sorry\ud83d\ude2c",
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "bean_bush",
+    "matched": false,
+    "error": "HTTP 429: Please Upgrade Plan - https://perenual.com/subscription-api-pricing. Sorry\ud83d\ude2c",
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "broccoli",
+    "query": "Brassica oleracea",
+    "perenualId": 1321,
+    "matched": true,
+    "changes": {
+      "waterEveryDays": {
+        "from": 3,
+        "to": 2
+      },
+      "heightCm": {
+        "from": 75,
+        "to": 46
+      }
+    },
+    "notes": [
+      "USDA hardiness 2\u201311"
+    ],
+    "perenual": {
+      "common_name": "Romanesco broccoli",
+      "scientific_name": [
+        "Brassica oleracea (Botrytis Group)"
+      ],
+      "sunlight": [
+        "full sun"
+      ],
+      "watering": "Frequent",
+      "watering_general_benchmark": {
+        "value": "\"2-3\"",
+        "unit": "days"
+      },
+      "dimensions": [
+        {
+          "type": null,
+          "min_value": 1,
+          "max_value": 1.5,
+          "unit": "feet"
+        }
+      ],
+      "hardiness": {
+        "min": "2",
+        "max": "11"
+      },
+      "origin": [
+        "Italy",
+        "France",
+        "Spain",
+        "Portugal",
+        "Germany",
+        "Netherlands",
+        "Belgium",
+        "United Kingdom",
+        "Ireland"
+      ]
+    }
+  },
+  {
+    "id": "cabbage",
+    "query": "Brassica oleracea",
+    "perenualId": 1322,
+    "matched": true,
+    "changes": {
+      "waterEveryDays": {
+        "from": 3,
+        "to": 4
+      }
+    },
+    "notes": [
+      "USDA hardiness 2\u201311"
+    ],
+    "perenual": {
+      "common_name": "cabbage",
+      "scientific_name": [
+        "Brassica oleracea (Capitata Group)"
+      ],
+      "sunlight": [
+        "full sun"
+      ],
+      "watering": "Average",
+      "watering_general_benchmark": {
+        "value": null,
+        "unit": "days"
+      },
+      "dimensions": [
+        {
+          "type": null,
+          "min_value": 1,
+          "max_value": 1.5,
+          "unit": "feet"
+        }
+      ],
+      "hardiness": {
+        "min": "2",
+        "max": "11"
+      },
+      "origin": [
+        "Europe",
+        "Asia Minor",
+        "Mediterranean region"
+      ]
+    }
+  },
+  {
+    "id": "beet",
+    "query": "Beta vulgaris",
+    "perenualId": 1273,
+    "matched": true,
+    "changes": {
+      "waterEveryDays": {
+        "from": 3,
+        "to": 2
+      }
+    },
+    "notes": [
+      "USDA hardiness 2\u201311"
+    ],
+    "perenual": {
+      "common_name": "beet",
+      "scientific_name": [
+        "Beta vulgaris"
+      ],
+      "sunlight": [
+        "Full sun",
+        "part shade"
+      ],
+      "watering": "Average",
+      "watering_general_benchmark": {
+        "value": "\"1-2\"",
+        "unit": "days"
+      },
+      "dimensions": [
+        {
+          "type": null,
+          "min_value": 1,
+          "max_value": 1.5,
+          "unit": "feet"
+        }
+      ],
+      "hardiness": {
+        "min": "2",
+        "max": "11"
+      },
+      "origin": [
+        "Europe"
+      ]
+    }
+  },
+  {
+    "id": "potato",
+    "matched": false,
+    "error": "HTTP 429: {\"X-RateLimit-Limit\":100,\"X-RateLimit-Remaining\":0,\"Retry-After\":84929,\"X-RateLimit-Reset\":1784470645,\"X-RateLimit-Exceeded\":\"You have surpassed your API rate limit.\"}",
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "onion",
+    "query": "Allium cepa",
+    "perenualId": 667,
+    "matched": true,
     "changes": {},
     "notes": [
-      "Skipped due to Perenual free-tier rate limit"
-    ]
+      "USDA hardiness 5\u201310"
+    ],
+    "perenual": {
+      "common_name": "onion",
+      "scientific_name": [
+        "Allium cepa"
+      ],
+      "sunlight": [
+        "full sun"
+      ],
+      "watering": "Average",
+      "watering_general_benchmark": {
+        "value": "\"3-5\"",
+        "unit": "days"
+      },
+      "dimensions": [
+        {
+          "type": null,
+          "min_value": 1,
+          "max_value": 1.5,
+          "unit": "feet"
+        }
+      ],
+      "hardiness": {
+        "min": "5",
+        "max": "10"
+      },
+      "origin": [
+        "Not known in wild"
+      ]
+    }
+  },
+  {
+    "id": "garlic",
+    "query": "Allium sativum",
+    "perenualId": 682,
+    "matched": true,
+    "changes": {
+      "waterEveryDays": {
+        "from": 5,
+        "to": 4
+      }
+    },
+    "notes": [
+      "USDA hardiness 4\u20139"
+    ],
+    "perenual": {
+      "common_name": "garlic",
+      "scientific_name": [
+        "Allium sativum 'Inchelium Red'"
+      ],
+      "sunlight": [
+        "full sun"
+      ],
+      "watering": "Average",
+      "watering_general_benchmark": {
+        "value": "\"3-4\"",
+        "unit": "days"
+      },
+      "dimensions": [
+        {
+          "type": null,
+          "min_value": 1,
+          "max_value": 1.5,
+          "unit": "feet"
+        }
+      ],
+      "hardiness": {
+        "min": "4",
+        "max": "9"
+      },
+      "origin": [
+        "United States"
+      ]
+    }
+  },
+  {
+    "id": "pea",
+    "matched": false,
+    "error": "HTTP 429: {\"X-RateLimit-Limit\":100,\"X-RateLimit-Remaining\":0,\"Retry-After\":84792,\"X-RateLimit-Reset\":1784470645,\"X-RateLimit-Exceeded\":\"You have surpassed your API rate limit.\"}",
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "eggplant",
+    "matched": false,
+    "error": "HTTP 429: {\"X-RateLimit-Limit\":100,\"X-RateLimit-Remaining\":0,\"Retry-After\":84655,\"X-RateLimit-Reset\":1784470645,\"X-RateLimit-Exceeded\":\"You have surpassed your API rate limit.\"}",
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "sweet_corn",
+    "matched": false,
+    "error": "HTTP 429: {\"X-RateLimit-Limit\":100,\"X-RateLimit-Remaining\":0,\"Retry-After\":84518,\"X-RateLimit-Reset\":1784470645,\"X-RateLimit-Exceeded\":\"You have surpassed your API rate limit.\"}",
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "swiss_chard",
+    "matched": false,
+    "error": "HTTP 429: {\"X-RateLimit-Limit\":100,\"X-RateLimit-Remaining\":0,\"Retry-After\":84380,\"X-RateLimit-Reset\":1784470645,\"X-RateLimit-Exceeded\":\"You have surpassed your API rate limit.\"}",
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "basil",
+    "matched": false,
+    "error": "HTTP 429: {\"X-RateLimit-Limit\":100,\"X-RateLimit-Remaining\":0,\"Retry-After\":84243,\"X-RateLimit-Reset\":1784470645,\"X-RateLimit-Exceeded\":\"You have surpassed your API rate limit.\"}",
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "mint",
+    "matched": false,
+    "error": "HTTP 429: {\"X-RateLimit-Limit\":100,\"X-RateLimit-Remaining\":0,\"Retry-After\":84106,\"X-RateLimit-Reset\":1784470645,\"X-RateLimit-Exceeded\":\"You have surpassed your API rate limit.\"}",
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "parsley",
+    "matched": false,
+    "error": "HTTP 429: {\"X-RateLimit-Limit\":100,\"X-RateLimit-Remaining\":0,\"Retry-After\":83969,\"X-RateLimit-Reset\":1784470645,\"X-RateLimit-Exceeded\":\"You have surpassed your API rate limit.\"}",
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "cilantro",
+    "matched": false,
+    "error": "HTTP 429: {\"X-RateLimit-Limit\":100,\"X-RateLimit-Remaining\":0,\"Retry-After\":83832,\"X-RateLimit-Reset\":1784470645,\"X-RateLimit-Exceeded\":\"You have surpassed your API rate limit.\"}",
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "rosemary",
+    "matched": false,
+    "error": "HTTP 429: {\"X-RateLimit-Limit\":100,\"X-RateLimit-Remaining\":0,\"Retry-After\":83695,\"X-RateLimit-Reset\":1784470645,\"X-RateLimit-Exceeded\":\"You have surpassed your API rate limit.\"}",
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "thyme",
+    "matched": false,
+    "error": "HTTP 429: {\"X-RateLimit-Limit\":100,\"X-RateLimit-Remaining\":0,\"Retry-After\":83557,\"X-RateLimit-Reset\":1784470645,\"X-RateLimit-Exceeded\":\"You have surpassed your API rate limit.\"}",
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "oregano",
+    "matched": false,
+    "error": "HTTP 429: {\"X-RateLimit-Limit\":100,\"X-RateLimit-Remaining\":0,\"Retry-After\":83420,\"X-RateLimit-Reset\":1784470645,\"X-RateLimit-Exceeded\":\"You have surpassed your API rate limit.\"}",
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "chives",
+    "matched": false,
+    "error": "HTTP 429: {\"X-RateLimit-Limit\":100,\"X-RateLimit-Remaining\":0,\"Retry-After\":83282,\"X-RateLimit-Reset\":1784470645,\"X-RateLimit-Exceeded\":\"You have surpassed your API rate limit.\"}",
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "strawberry",
+    "matched": false,
+    "error": "HTTP 429: {\"X-RateLimit-Limit\":100,\"X-RateLimit-Remaining\":0,\"Retry-After\":83145,\"X-RateLimit-Reset\":1784470645,\"X-RateLimit-Exceeded\":\"You have surpassed your API rate limit.\"}",
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "blueberry",
+    "matched": false,
+    "error": "HTTP 429: {\"X-RateLimit-Limit\":100,\"X-RateLimit-Remaining\":0,\"Retry-After\":83008,\"X-RateLimit-Reset\":1784470645,\"X-RateLimit-Exceeded\":\"You have surpassed your API rate limit.\"}",
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "watermelon",
+    "matched": false,
+    "error": "HTTP 429: {\"X-RateLimit-Limit\":100,\"X-RateLimit-Remaining\":0,\"Retry-After\":82799,\"X-RateLimit-Reset\":1784470645,\"X-RateLimit-Exceeded\":\"You have surpassed your API rate limit.\"}",
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "pumpkin",
+    "matched": false,
+    "error": "HTTP 429: {\"X-RateLimit-Limit\":100,\"X-RateLimit-Remaining\":0,\"Retry-After\":82662,\"X-RateLimit-Reset\":1784470645,\"X-RateLimit-Exceeded\":\"You have surpassed your API rate limit.\"}",
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "raspberry",
+    "matched": false,
+    "error": "HTTP 429: {\"X-RateLimit-Limit\":100,\"X-RateLimit-Remaining\":0,\"Retry-After\":82525,\"X-RateLimit-Reset\":1784470645,\"X-RateLimit-Exceeded\":\"You have surpassed your API rate limit.\"}",
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "sunflower",
+    "matched": false,
+    "error": "HTTP 404: {\"message\":\"Missing\\/Issue with API Key. Contact info@perenual.com\"}",
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "marigold",
+    "matched": false,
+    "error": "HTTP 404: {\"message\":\"Missing\\/Issue with API Key. Contact info@perenual.com\"}",
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "zinnia",
+    "matched": false,
+    "error": "HTTP 404: {\"message\":\"Missing\\/Issue with API Key. Contact info@perenual.com\"}",
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "nasturtium",
+    "matched": false,
+    "error": "HTTP 404: {\"message\":\"Missing\\/Issue with API Key. Contact info@perenual.com\"}",
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "lavender",
+    "matched": false,
+    "error": "HTTP 404: {\"message\":\"Missing\\/Issue with API Key. Contact info@perenual.com\"}",
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "coneflower",
+    "matched": false,
+    "error": "HTTP 404: {\"message\":\"Missing\\/Issue with API Key. Contact info@perenual.com\"}",
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "bee_balm",
+    "matched": false,
+    "error": "HTTP 404: {\"message\":\"Missing\\/Issue with API Key. Contact info@perenual.com\"}",
+    "changes": {},
+    "notes": []
+  },
+  {
+    "id": "lily",
+    "matched": false,
+    "error": "HTTP 404: {\"message\":\"Missing\\/Issue with API Key. Contact info@perenual.com\"}",
+    "changes": {},
+    "notes": []
   }
 ]

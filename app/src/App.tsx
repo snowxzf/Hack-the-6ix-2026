@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent } from "react";
 import { optimizeGarden } from "../../optimizer/src/index";
 import type {
   GardenGrid,
@@ -722,20 +722,50 @@ function ScanScreen(props: {
   const [bedCorners, setBedCorners] = useState<Point2[]>([]);
   const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [drag, setDrag] = useState<{ kind: "ref" | "bed"; index: number } | null>(null);
+  const dragMovedRef = useRef(false);
 
-  function resetMarks() {
-    setRefTaps([]);
-    setBedCorners([]);
-    setTapPhase("reference");
-    setError(null);
+  /** Starting quad: inset rectangle the user drags to fit their real bed. */
+  function autoCorners(w: number, h: number): Point2[] {
+    const ix = w * 0.18;
+    const iy = h * 0.22;
+    return [
+      { x: ix, y: iy },
+      { x: w - ix, y: iy },
+      { x: w - ix, y: h - iy },
+      { x: ix, y: h - iy },
+    ];
   }
 
-  function onPhotoClick(e: MouseEvent<HTMLDivElement>) {
-    if (!props.photo || !imgSize) return;
+  function resetMarks(size = imgSize) {
+    setRefTaps([]);
+    setBedCorners(size ? autoCorners(size.w, size.h) : []);
+    setTapPhase("reference");
+    setError(null);
+    setDrag(null);
+  }
+
+  function stagePoint(e: { clientX: number; clientY: number; currentTarget: HTMLDivElement }): Point2 | null {
+    if (!imgSize) return null;
     const rect = e.currentTarget.getBoundingClientRect();
     const x = ((e.clientX - rect.left) / rect.width) * imgSize.w;
     const y = ((e.clientY - rect.top) / rect.height) * imgSize.h;
-    const pt = { x, y };
+    return {
+      x: Math.min(Math.max(x, 0), imgSize.w),
+      y: Math.min(Math.max(y, 0), imgSize.h),
+    };
+  }
+
+  function onPhotoClick(e: MouseEvent<HTMLDivElement>) {
+    if (dragMovedRef.current) {
+      // this click is the tail end of a drag — don't add a new mark
+      dragMovedRef.current = false;
+      return;
+    }
+    if ((e.target as HTMLElement).closest?.(".mark")) return;
+    if (!props.photo || !imgSize) return;
+    const pt = stagePoint(e);
+    if (!pt) return;
 
     if (tapPhase === "reference") {
       const next = [...refTaps, pt].slice(0, 2);
@@ -744,6 +774,31 @@ function ScanScreen(props: {
     } else {
       setBedCorners((c) => [...c, pt]);
     }
+  }
+
+  function onStagePointerMove(e: PointerEvent<HTMLDivElement>) {
+    if (!drag) return;
+    const pt = stagePoint(e);
+    if (!pt) return;
+    dragMovedRef.current = true;
+    if (drag.kind === "ref") {
+      setRefTaps((taps) => taps.map((p, i) => (i === drag.index ? pt : p)));
+    } else {
+      setBedCorners((c) => c.map((p, i) => (i === drag.index ? pt : p)));
+    }
+  }
+
+  function startDrag(kind: "ref" | "bed", index: number) {
+    return (e: PointerEvent<HTMLSpanElement>) => {
+      e.stopPropagation();
+      e.currentTarget.setPointerCapture?.(e.pointerId);
+      dragMovedRef.current = false;
+      setDrag({ kind, index });
+    };
+  }
+
+  function endDrag() {
+    setDrag(null);
   }
 
   function measure() {
@@ -854,7 +909,7 @@ function ScanScreen(props: {
           onChange={(e) => {
             const f = e.target.files?.[0];
             props.setPhoto(f ? URL.createObjectURL(f) : null);
-            resetMarks();
+            resetMarks(null);
             setImgSize(null);
           }}
         />
@@ -864,11 +919,21 @@ function ScanScreen(props: {
         <>
           <p className="tiny">
             Phase:{" "}
-            <b>{tapPhase === "reference" ? "1) Tap both edges of reference" : "2) Tap bed corners"}</b>
+            <b>{tapPhase === "reference" ? "1) Tap both edges of reference" : "2) Adjust bed corners"}</b>
             {" · "}
             ref {refTaps.length}/2 · corners {bedCorners.length}
           </p>
-          <div className="photo-stage" onClick={onPhotoClick}>
+          <p className="tiny muted">
+            We pre-placed a garden outline — drag any numbered dot onto the real corners
+            of your bed, or tap to add more corners for odd shapes.
+          </p>
+          <div
+            className="photo-stage"
+            onClick={onPhotoClick}
+            onPointerMove={onStagePointerMove}
+            onPointerUp={endDrag}
+            onPointerLeave={endDrag}
+          >
             <img
               className="photo"
               src={props.photo}
@@ -876,37 +941,52 @@ function ScanScreen(props: {
               draggable={false}
               onLoad={(e) => {
                 const img = e.currentTarget;
-                setImgSize({ w: img.naturalWidth, h: img.naturalHeight });
+                const size = { w: img.naturalWidth, h: img.naturalHeight };
+                setImgSize(size);
+                setBedCorners(autoCorners(size.w, size.h));
               }}
             />
             {imgSize &&
               refTaps.map((p, i) => (
                 <span
                   key={`r${i}`}
-                  className="mark ref"
+                  className="mark ref draggable"
+                  onPointerDown={startDrag("ref", i)}
                   style={{
                     left: `${(p.x / imgSize.w) * 100}%`,
                     top: `${(p.y / imgSize.h) * 100}%`,
                   }}
                 />
               ))}
-            {imgSize && refTaps.length === 2 && (
+            {imgSize && (refTaps.length === 2 || bedCorners.length >= 3) && (
               <svg className="mark-lines" viewBox={`0 0 ${imgSize.w} ${imgSize.h}`} preserveAspectRatio="none">
-                <line
-                  x1={refTaps[0]!.x}
-                  y1={refTaps[0]!.y}
-                  x2={refTaps[1]!.x}
-                  y2={refTaps[1]!.y}
-                  stroke="#7fe89a"
-                  strokeWidth={Math.max(2, imgSize.w / 400)}
-                />
+                {bedCorners.length >= 3 && (
+                  <polygon
+                    points={bedCorners.map((p) => `${p.x},${p.y}`).join(" ")}
+                    fill="rgba(110, 168, 254, 0.15)"
+                    stroke="#6ea8fe"
+                    strokeWidth={Math.max(2, imgSize.w / 400)}
+                    strokeDasharray={`${Math.max(6, imgSize.w / 150)}`}
+                  />
+                )}
+                {refTaps.length === 2 && (
+                  <line
+                    x1={refTaps[0]!.x}
+                    y1={refTaps[0]!.y}
+                    x2={refTaps[1]!.x}
+                    y2={refTaps[1]!.y}
+                    stroke="#7fe89a"
+                    strokeWidth={Math.max(2, imgSize.w / 400)}
+                  />
+                )}
               </svg>
             )}
             {imgSize &&
               bedCorners.map((p, i) => (
                 <span
                   key={`b${i}`}
-                  className="mark bed"
+                  className="mark bed draggable"
+                  onPointerDown={startDrag("bed", i)}
                   style={{
                     left: `${(p.x / imgSize.w) * 100}%`,
                     top: `${(p.y / imgSize.h) * 100}%`,
@@ -928,7 +1008,7 @@ function ScanScreen(props: {
         >
           Measure yard →
         </button>
-        <button className="secondary small" onClick={resetMarks} disabled={!props.photo}>
+        <button className="secondary small" onClick={() => resetMarks()} disabled={!props.photo}>
           Clear marks
         </button>
       </div>
