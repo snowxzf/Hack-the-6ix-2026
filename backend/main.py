@@ -514,7 +514,6 @@ def climates_for_place(lat: float, country_code: str | None) -> list[str]:
         climates.extend(["tropical", "subtropical"])
     if (country_code or "").upper() in MEDITERRANEAN_COUNTRIES:
         climates.append("mediterranean")
-    # unique preserve order
     seen: set[str] = set()
     out: list[str] = []
     for c in climates:
@@ -524,34 +523,205 @@ def climates_for_place(lat: float, country_code: str | None) -> list[str]:
     return out
 
 
-def score_native_fit(
+def plant_season_class(plant: dict[str, Any]) -> str:
+    """cool / warm / flexible from temp tolerance (draft heuristic)."""
+    tmin = plant.get("tempMinC")
+    tmax = plant.get("tempMaxC")
+    if tmin is None or tmax is None:
+        return "flexible"
+    if tmax <= 26 and tmin <= 8:
+        return "cool"
+    if tmin >= 12:
+        return "warm"
+    return "flexible"
+
+
+def local_season_context(lat: float, month: int) -> dict[str, Any]:
+    """What kind of planting season it is right now at this latitude."""
+    # Flip seasons in the southern hemisphere
+    m = month if lat >= 0 else ((month + 5) % 12) + 1
+    if m in (12, 1, 2):
+        return {
+            "name": "winter",
+            "prefer": ["cool"],
+            "discourage": ["warm"],
+            "note": "Cold / dormant stretch — favor hardy cool crops or wait.",
+        }
+    if m in (3, 4, 5):
+        return {
+            "name": "spring",
+            "prefer": ["cool", "flexible"],
+            "discourage": [],
+            "note": "Shoulder season — cool crops excel; warm crops after frost risk drops.",
+        }
+    if m in (6, 7, 8):
+        return {
+            "name": "summer",
+            "prefer": ["warm", "flexible"],
+            "discourage": ["cool"],
+            "note": "Peak heat — warm-season crops thrive; cool greens may bolt.",
+        }
+    return {
+        "name": "fall",
+        "prefer": ["cool", "flexible"],
+        "discourage": ["warm"],
+        "note": "Cooling down — great for fall greens; heat lovers fade.",
+    }
+
+
+def carbon_kg_per_unit(plant: dict[str, Any]) -> float:
+    """Food plants only — ornamentals stay 0 (honesty rule)."""
+    if plant.get("impactCase") == "pollinator_biodiversity":
+        return 0.0
+    return float(plant.get("yieldKgPerSeason") or 0) * float(plant.get("co2eSavedPerKg") or 0)
+
+
+async def fetch_sky_snapshot(lat: float, lon: float) -> dict[str, Any]:
+    """Lightweight Open-Meteo pull for suggestion scoring (not full /weather)."""
+    url = "https://api.open-meteo.com/v1/forecast"
+    params = {
+        "latitude": lat,
+        "longitude": lon,
+        "current": "temperature_2m,precipitation,weather_code",
+        "daily": "temperature_2m_min,temperature_2m_max,precipitation_sum,weathercode",
+        "timezone": "auto",
+        "forecast_days": 3,
+    }
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.get(url, params=params)
+    if resp.status_code != 200:
+        return {}
+    raw = resp.json()
+    daily = raw.get("daily") or {}
+    current = raw.get("current") or {}
+    return {
+        "nowC": current.get("temperature_2m"),
+        "tonightMinC": (daily.get("temperature_2m_min") or [None])[0],
+        "todayMaxC": (daily.get("temperature_2m_max") or [None])[0],
+        "precipMm": (daily.get("precipitation_sum") or [None])[0],
+        "weatherCode": (daily.get("weathercode") or [None])[0],
+        "timezone": raw.get("timezone"),
+    }
+
+
+def score_plant_multi(
     plant: dict[str, Any],
+    *,
     garden_continent: str | None,
     garden_climates: list[str],
-) -> tuple[int, list[str]]:
-    """Higher score = better native/climate fit for suggestions."""
+    season_ctx: dict[str, Any],
+    sky: dict[str, Any],
+    carbon_weight: float,
+    max_carbon: float,
+) -> dict[str, Any]:
+    """
+    Multi-factor suitability score for suggestions.
+
+    Factors: season, live weather vs temp tolerance, carbon savings,
+    native-region fit, beginner friendliness.
+    """
+    factors: dict[str, float] = {}
+    reasons: list[str] = []
+
+    # --- Season ---
+    season_class = plant_season_class(plant)
+    prefer = set(season_ctx.get("prefer") or [])
+    discourage = set(season_ctx.get("discourage") or [])
+    if season_class in prefer:
+        factors["season"] = 3.0
+        reasons.append(f"good for {season_ctx['name']} ({season_class}-season crop)")
+    elif season_class in discourage:
+        factors["season"] = 0.0
+        reasons.append(f"poor {season_ctx['name']} fit ({season_class}-season crop)")
+    else:
+        factors["season"] = 1.5
+        reasons.append(f"flexible across seasons ({season_class})")
+
+    # --- Weather (live Open-Meteo vs plant tempMin/tempMax) ---
+    tmin = plant.get("tempMinC")
+    tmax = plant.get("tempMaxC")
+    tonight = sky.get("tonightMinC")
+    today_high = sky.get("todayMaxC")
+    precip = sky.get("precipMm")
+    weather_score = 2.0
+    if tmin is not None and tonight is not None:
+        if tonight < tmin:
+            weather_score -= 2.0
+            reasons.append(
+                f"too cold tonight ({tonight}°C < plant floor {tmin}°C)"
+            )
+        elif tonight < tmin + 3:
+            weather_score -= 0.5
+            reasons.append("nights near plant's cold limit")
+        else:
+            weather_score += 0.5
+    if tmax is not None and today_high is not None:
+        if today_high > tmax:
+            weather_score -= 1.5
+            reasons.append(
+                f"too hot today ({today_high}°C > plant ceiling {tmax}°C)"
+            )
+        elif today_high > tmax - 2:
+            weather_score -= 0.5
+            reasons.append("days near plant's heat limit")
+        else:
+            weather_score += 0.5
+    # Rain vs watering cadence: thirsty plants benefit from rain; skip-water day is fine
+    water_days = plant.get("waterEveryDays") or 3
+    if precip is not None and precip >= 2:
+        if water_days <= 3:
+            weather_score += 0.5
+            reasons.append("rain covers watering needs")
+        else:
+            weather_score += 0.2
+    factors["weather"] = max(0.0, min(4.0, weather_score))
+
+    # --- Carbon (food plants); ornamentals get small biodiversity credit ---
+    carbon = carbon_kg_per_unit(plant)
+    if plant.get("impactCase") == "pollinator_biodiversity":
+        factors["carbon"] = 1.0 * carbon_weight  # not fake CO2e — pollinator bonus
+        if carbon_weight > 0:
+            reasons.append("pollinator / biodiversity support (no CO₂e claimed)")
+    elif max_carbon > 0:
+        factors["carbon"] = (carbon / max_carbon) * 3.0 * carbon_weight
+        if carbon > 0 and carbon_weight > 0:
+            reasons.append(f"~{carbon:.1f} kg CO₂e saved / planting unit / season")
+    else:
+        factors["carbon"] = 0.0
+
+    # --- Native region ---
     nr = plant.get("nativeRegion") or {}
     continents = nr.get("continents") or []
     suited = nr.get("suitedClimates") or []
-    reasons: list[str] = []
-    score = 0
-
+    native_score = 0.0
     if garden_continent and garden_continent in continents:
-        score += 3
+        native_score += 2.0
         reasons.append(f"native to {garden_continent}")
-    elif garden_continent:
-        # still growable if climate overlaps
-        pass
-
     overlap = [c for c in suited if c in garden_climates]
     if overlap:
-        score += 2 if garden_continent and garden_continent in continents else 1
+        native_score += 1.0
         reasons.append(f"climate fit ({', '.join(overlap[:2])})")
+    if native_score == 0:
+        reasons.append("weaker local-native match (still widely grown)")
+    factors["native"] = native_score
 
-    if not reasons:
-        reasons.append("widely cultivated; weaker local-native match")
+    # --- Beginner friendliness ---
+    tier = plant.get("tier")
+    if tier == "beginner":
+        factors["beginner"] = 1.0
+    elif tier == "intermediate":
+        factors["beginner"] = 0.4
+    else:
+        factors["beginner"] = 0.0
 
-    return score, reasons
+    total = sum(factors.values())
+    return {
+        "score": round(total, 2),
+        "factors": {k: round(v, 2) for k, v in factors.items()},
+        "seasonClass": season_class,
+        "carbonKgCo2ePerUnit": round(carbon, 2),
+        "reasons": reasons,
+    }
 
 
 @app.get("/plants/suggest")
@@ -563,13 +733,14 @@ async def suggest_plants(
     resultIndex: int = 0,
     tier: str | None = None,
     category: str | None = None,
+    carbonWeight: float = 0.5,
     limit: int = 12,
 ) -> dict[str, Any]:
     """
-    Rank catalog plants for a garden location using nativeRegion overlap.
+    Multi-factor planting suggestions for a garden location.
 
-    Prefer species native to the same continent and suited to local climate
-    (e.g. Eastern North America natives rise for Toronto).
+    Ranks by: current season fit, live Open-Meteo weather vs temp tolerance,
+    carbon savings (food plants only), native-region overlap, and skill tier.
     """
     resolved: dict[str, Any] | None = None
     if location and (lat is None or lon is None):
@@ -596,7 +767,6 @@ async def suggest_plants(
 
     country_code = (resolved or {}).get("countryCode")
     continent = COUNTRY_CONTINENT.get((country_code or "").upper()) if country_code else None
-    # Heuristic if geocode skipped: Canada/US-ish latitudes without country
     if continent is None and lat is not None:
         if 15 <= lat <= 72 and -170 <= (lon or 0) <= -50:
             continent = "North America"
@@ -604,6 +774,10 @@ async def suggest_plants(
             continent = "South America"
 
     climates = climates_for_place(float(lat), country_code)
+    month = datetime.now(timezone.utc).month
+    season_ctx = local_season_context(float(lat), month)
+    sky = await fetch_sky_snapshot(float(lat), float(lon))
+    cw = max(0.0, min(1.0, carbonWeight))
 
     plants = list(plants_coll().find({}, {"_id": 0}))
     if tier:
@@ -611,13 +785,22 @@ async def suggest_plants(
     if category:
         plants = [p for p in plants if p.get("category") == category]
 
+    max_carbon = max((carbon_kg_per_unit(p) for p in plants), default=0.0) or 1.0
+
     ranked: list[dict[str, Any]] = []
     for p in plants:
-        score, reasons = score_native_fit(p, continent, climates)
+        scored = score_plant_multi(
+            p,
+            garden_continent=continent,
+            garden_climates=climates,
+            season_ctx=season_ctx,
+            sky=sky,
+            carbon_weight=cw,
+            max_carbon=max_carbon,
+        )
         ranked.append(
             {
-                "score": score,
-                "reasons": reasons,
+                **scored,
                 "plant": p,
                 "species": to_species(p),
             }
@@ -633,11 +816,24 @@ async def suggest_plants(
             "continent": continent,
             "climates": climates,
         },
+        "context": {
+            "season": season_ctx,
+            "sky": sky,
+            "carbonWeight": cw,
+            "monthUtc": month,
+        },
+        "weights": {
+            "season": "up to 3",
+            "weather": "up to 4 (live Open-Meteo vs tempMinC/tempMaxC)",
+            "carbon": f"up to 3 × carbonWeight={cw} (food yield×factor only)",
+            "native": "up to 3",
+            "beginner": "up to 1",
+        },
         "count": len(top),
         "suggestions": top,
         "note": (
-            "Ranked by nativeRegion continent + climate overlap. "
-            "Draft biogeography — verify before pitching hard claims."
+            "Multi-factor rank: season + live weather + carbon + native region + skill. "
+            "Ornamentals never get invented CO₂e — biodiversity credit only."
         ),
     }
 
