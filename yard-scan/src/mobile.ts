@@ -72,7 +72,7 @@ export const SCAN_UX = {
     "Hold the phone more overhead (not at a steep angle) for accurate size.",
   outlineBed: "Tap the corners of your garden bed (at least 3).",
   multiFrame:
-    "Yard too big? Open the camera, keep the same coin in the overlap, and line it up with the ghost circle on the next shot. We stitch by aligning that coin.",
+    "Too wide for one shot? Turn on Stitch, then for each photo: upload/capture → mark coin + corners → Save frame & add next. Repeat for 2 or more overlapping shots, then Measure. Keep the same coin in each overlap — we stitch by lining that coin up. You can also multi-select several photos at once in the file picker.",
   coinGhost:
     "Line the real coin up with this dashed circle, then Capture and mark its edges again.",
   confirmDims: (wCm: number, hCm: number) =>

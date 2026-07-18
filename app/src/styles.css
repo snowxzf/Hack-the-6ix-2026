@@ -252,6 +252,105 @@ body {
   opacity: 0.9;
 }
 
+.scan-phase {
+  margin: 10px 0 4px;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.35;
+  color: hsl(var(--foreground));
+}
+.scan-phase-meta {
+  margin: 0 0 6px;
+  font-size: 13px;
+  color: hsl(var(--muted-foreground));
+}
+.scan-phase-hint {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: hsl(var(--muted-foreground));
+}
+
+.stitch-steps {
+  margin: 8px 0 12px;
+  padding-left: 1.25rem;
+  font-size: 13px;
+  line-height: 1.5;
+  color: hsl(var(--foreground));
+}
+.stitch-steps li {
+  margin-bottom: 4px;
+}
+.stitch-awaiting {
+  margin: 12px 0;
+  padding: 14px 16px;
+  border: 1px dashed hsl(var(--border));
+  background: hsl(var(--muted) / 0.35);
+}
+
+.manual-rect-panel {
+  margin: 10px 0 4px;
+  padding: 12px 14px;
+  border: 1px solid hsl(var(--border));
+  background: hsl(var(--muted) / 0.25);
+}
+.manual-rect-panel .row {
+  margin-top: 10px;
+}
+
+.stitch-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 12px 0 4px;
+  cursor: pointer;
+}
+.stitch-toggle-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.stitch-toggle-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: hsl(var(--foreground));
+}
+.toggle-switch {
+  position: relative;
+  flex: 0 0 auto;
+  width: 48px;
+  height: 28px;
+  padding: 0;
+  border: none;
+  border-radius: 999px !important;
+  background: #c8cdc6;
+  color: transparent;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, 0.08);
+}
+.toggle-switch.on {
+  background: hsl(var(--primary));
+  box-shadow: none;
+}
+.toggle-knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50% !important;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.22);
+  transition: transform 0.15s ease;
+  pointer-events: none;
+}
+.toggle-switch.on .toggle-knob {
+  transform: translateX(20px);
+}
+
 .steps {
   display: flex;
   gap: 4px;
@@ -291,7 +390,7 @@ body {
   background: hsl(var(--palette-seafoam) / 0.22);
 }
 
-button:not([class*="flex"]):not([class*="bg-"]):not([class*="text-"]) {
+button:not([class*="flex"]):not([class*="bg-"]):not([class*="text-"]):not(.toggle-switch) {
   font: inherit;
   font-weight: 600;
   border: 0;
@@ -651,6 +750,12 @@ ul.clean li {
   pointer-events: auto;
   cursor: grab;
   touch-action: none;
+  /* Larger invisible hit target so fingers/cursors catch the handle */
+}
+.mark.draggable::before {
+  content: "";
+  position: absolute;
+  inset: -14px;
 }
 .mark.draggable:active {
   cursor: grabbing;
@@ -658,18 +763,20 @@ ul.clean li {
 .mark.ref {
   background: hsl(var(--primary));
   box-shadow: 0 0 0 2px #fff;
+  z-index: 3;
 }
 .mark.bed {
   background: #3b82f6;
   color: #fff;
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   box-shadow: 0 0 0 2px #fff;
+  z-index: 4;
 }
 .mark-lines {
   position: absolute;
@@ -811,7 +918,7 @@ h6,
 .card,
 .chip,
 .steps span,
-button:not(.rounded-full),
+button:not(.rounded-full):not(.toggle-switch),
 input,
 select,
 textarea {

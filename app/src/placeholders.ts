@@ -26,6 +26,65 @@ export function scanPhotoToGarden(_photoUrl: string | null): GardenGrid {
   return structuredClone(SUBURBAN);
 }
 
+/**
+ * Build a garden from typed width × length (cm). Assumes an axis-aligned rectangle.
+ */
+export function gardenFromRectangleCm(
+  widthCm: number,
+  lengthCm: number,
+  cellSizeCm = 30,
+): YardScanResult {
+  const w = Number(widthCm);
+  const h = Number(lengthCm);
+  if (!Number.isFinite(w) || !Number.isFinite(h) || w < 5 || h < 5) {
+    throw new Error("Enter width and length of at least 5 cm each.");
+  }
+  if (w > 5000 || h > 5000) {
+    throw new Error("Dimensions look too large — use centimeters (e.g. 150 × 60 for a desk).");
+  }
+  const cell = Number(cellSizeCm);
+  if (!Number.isFinite(cell) || cell < 5 || cell > 120) {
+    throw new Error("Grid cell size must be between 5 and 120 cm.");
+  }
+
+  const pointsCm: Point2[] = [
+    { x: 0, y: 0 },
+    { x: w, y: 0 },
+    { x: w, y: h },
+    { x: 0, y: h },
+  ];
+  const worldBed = { pointsCm, sourceFrameIds: ["manual-rect"] };
+  const garden = worldPolygonToGardenGrid(worldBed, cell);
+  const areaCm2 = polygonAreaCm2(pointsCm);
+  const warnings = ["Manual size — assumed a flat rectangle (no photo measure)."];
+  if (cell !== 30) {
+    warnings.push(
+      `Grid cells are ${cell} cm (plant footprints in the catalog are sized for 30 cm cells).`,
+    );
+  }
+
+  return {
+    garden,
+    worldBed,
+    diagnostics: {
+      scale: {
+        cmPerPx: 1,
+        reference: "custom",
+        referenceMode: "custom_object",
+        referenceLabel: "manual rectangle",
+        referenceDiameterCm: 0,
+        cmPerPxGround: { x: 1, y: 1 },
+      },
+      frameCount: 0,
+      stitched: false,
+      widthCm: Math.round(w * 10) / 10,
+      heightCm: Math.round(h * 10) / 10,
+      areaM2: Math.round((areaCm2 / 10_000) * 100) / 100,
+      warnings,
+    },
+  };
+}
+
 export interface MeasureYardInput {
   imageWidthPx: number;
   imageHeightPx: number;
@@ -40,11 +99,14 @@ export interface MeasureYardInput {
   customLabel?: string;
   /** Pitch from nadir; 0 = overhead. Web demo defaults to a mild tilt. */
   pitchFromNadirRad?: number;
+  /** Planting grid cell edge length in cm (default 30). */
+  cellSizeCm?: number;
 }
 
 /** Live yard-scan: coin or any known-size object → GardenGrid. */
 export function measureYardFromTaps(input: MeasureYardInput): YardScanResult {
   const mode = input.mode;
+  const cellSizeCm = input.cellSizeCm ?? 30;
 
   if (mode === "coin" && !input.coinKind) {
     throw new Error("Choose which coin you used.");
@@ -86,9 +148,17 @@ export function measureYardFromTaps(input: MeasureYardInput): YardScanResult {
         pointsCm: rect.bedCm,
         sourceFrameIds: ["web-frame"],
       };
-      const garden = worldPolygonToGardenGrid(worldBed, 30);
+      const garden = worldPolygonToGardenGrid(worldBed, cellSizeCm);
       const b = boundsOf(rect.bedCm);
       const areaCm2 = polygonAreaCm2(rect.bedCm);
+      const warnings = [
+        "Perspective-corrected assuming a rectangular bed (desk / raised bed / patio).",
+      ];
+      if (cellSizeCm !== 30) {
+        warnings.push(
+          `Grid cells are ${cellSizeCm} cm (plant footprints in the catalog are sized for 30 cm cells).`,
+        );
+      }
       return {
         garden,
         worldBed,
@@ -106,9 +176,7 @@ export function measureYardFromTaps(input: MeasureYardInput): YardScanResult {
           widthCm: Math.round(b.widthCm * 10) / 10,
           heightCm: Math.round(b.heightCm * 10) / 10,
           areaM2: Math.round((areaCm2 / 10_000) * 100) / 100,
-          warnings: [
-            "Perspective-corrected assuming a rectangular bed (desk / raised bed / patio).",
-          ],
+          warnings,
         },
       };
     }
@@ -137,7 +205,7 @@ export function measureYardFromTaps(input: MeasureYardInput): YardScanResult {
         reference,
       },
     ],
-    { cellSizeCm: 30 },
+    { cellSizeCm },
   );
 }
 
@@ -161,6 +229,7 @@ export interface MeasureYardFramesInput {
   /** Overlap between consecutive frames, 0.1–0.5 typical. */
   overlapFraction?: number;
   pitchFromNadirRad?: number;
+  cellSizeCm?: number;
 }
 
 /**
@@ -171,6 +240,7 @@ export function measureYardFromFrames(input: MeasureYardFramesInput): YardScanRe
   if (!input.frames.length) {
     throw new Error("Add at least one photo frame before measuring.");
   }
+  const cellSizeCm = input.cellSizeCm ?? 30;
   if (input.frames.length === 1) {
     const f = input.frames[0]!;
     return measureYardFromTaps({
@@ -184,6 +254,7 @@ export function measureYardFromFrames(input: MeasureYardFramesInput): YardScanRe
       customSizeCm: input.customSizeCm,
       customLabel: input.customLabel,
       pitchFromNadirRad: input.pitchFromNadirRad,
+      cellSizeCm,
     });
   }
 
@@ -231,7 +302,7 @@ export function measureYardFromFrames(input: MeasureYardFramesInput): YardScanRe
     return frame;
   });
 
-  const result = scanYard(frames, { cellSizeCm: 30 });
+  const result = scanYard(frames, { cellSizeCm });
   const allHaveCoin = frames.every((f) => f.reference ?? f.coin);
   result.diagnostics.warnings = [
     ...result.diagnostics.warnings,
@@ -239,6 +310,11 @@ export function measureYardFromFrames(input: MeasureYardFramesInput): YardScanRe
       ? "Stitched by aligning the same coin across photos (keep the coin in the overlap)."
       : "Stitched with pan-overlap hints — mark the coin in every frame for better accuracy.",
   ];
+  if (cellSizeCm !== 30) {
+    result.diagnostics.warnings.push(
+      `Grid cells are ${cellSizeCm} cm (plant footprints in the catalog are sized for 30 cm cells).`,
+    );
+  }
   return result;
 }
 

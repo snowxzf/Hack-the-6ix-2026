@@ -13,6 +13,7 @@ import { CarbonChart } from "./CarbonChart";
 import { advanceDevClock, devNow, resetDevClock, useDevClock } from "./devClock";
 import {
   FAKE_WEATHER_ALERT,
+  gardenFromRectangleCm,
   getCatalog,
   harvestDaysFor,
   harvestRangeLabel,
@@ -677,15 +678,17 @@ export function App() {
 
         {showPlanner && (
           <>
-            {step === "scan" && (
+            {/* Keep Scan mounted when leaving the step so dragged corners aren't wiped. */}
+            <div style={{ display: step === "scan" ? undefined : "none" }}>
               <ScanScreen
+                active={step === "scan"}
                 photo={photo}
                 setPhoto={setPhoto}
                 onMeasured={applyGarden}
                 onDemo={doDemoScan}
                 onSkip={editingLayout && garden ? () => setStep("review") : undefined}
               />
- )}
+            </div>
             {step === "review" && garden && (
               <ReviewScreen
                 garden={garden}
@@ -956,6 +959,8 @@ type SavedScanFrame = {
 };
 
 function ScanScreen(props: {
+  /** False when another step is showing — keep marks, stop the camera. */
+  active?: boolean;
   photo: string | null;
   setPhoto: (p: string | null) => void;
   onMeasured: (
@@ -967,6 +972,12 @@ function ScanScreen(props: {
   onSkip?: () => void;
 }) {
   const [mode, setMode] = useState<ScaleReferenceMode>("coin");
+  /** Typed width×length instead of photo measure (always a rectangle). */
+  const [manualRect, setManualRect] = useState(false);
+  const [manualWidthCm, setManualWidthCm] = useState(150);
+  const [manualLengthCm, setManualLengthCm] = useState(60);
+  /** Edge length of each planting cell (cm). Catalog spacing assumes 30. */
+  const [cellSizeCm, setCellSizeCm] = useState(30);
   const [coinKind, setCoinKind] = useState<Exclude<ReferenceKind, "custom"> | "">("");
   const [customSizeCm, setCustomSizeCm] = useState(8.56); // credit-card width default
   const [customLabel, setCustomLabel] = useState("credit card");
@@ -975,12 +986,18 @@ function ScanScreen(props: {
   const [bedCorners, setBedCorners] = useState<Point2[]>([]);
   const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [drag, setDrag] = useState<{ kind: "ref" | "bed"; index: number } | null>(null);
   const dragMovedRef = useRef(false);
+  const dragRef = useRef<{ kind: "ref" | "bed"; index: number } | null>(null);
+  const bedCornersRef = useRef<Point2[]>([]);
+  const refTapsRef = useRef<Point2[]>([]);
+  bedCornersRef.current = bedCorners;
+  refTapsRef.current = refTaps;
   const [stitchMode, setStitchMode] = useState(false);
   const [panDirection, setPanDirection] = useState<"right" | "left">("right");
   const [overlapFraction, setOverlapFraction] = useState(0.3);
   const [savedFrames, setSavedFrames] = useState<SavedScanFrame[]>([]);
+  /** Extra photos picked via multi-select, loaded after each "Save frame". */
+  const [pendingPhotos, setPendingPhotos] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -1001,6 +1018,12 @@ function ScanScreen(props: {
     void videoRef.current.play().catch(() => undefined);
   }, [liveCamera]);
 
+  useEffect(() => {
+    if (props.active === false && liveCamera) stopLiveCamera();
+    // stopLiveCamera is stable enough for this screen-local helper
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.active, liveCamera]);
+
   /** Starting quad: inset rectangle the user drags to fit their real bed. */
   function autoCorners(w: number, h: number): Point2[] {
     const ix = w * 0.18;
@@ -1018,14 +1041,34 @@ function ScanScreen(props: {
     setBedCorners(size ? autoCorners(size.w, size.h) : []);
     setTapPhase("reference");
     setError(null);
-    setDrag(null);
+    dragRef.current = null;
+  }
+
+  function clearPendingPhotos() {
+    for (const url of pendingPhotos) {
+      if (url.startsWith("blob:")) URL.revokeObjectURL(url);
+    }
+    setPendingPhotos([]);
   }
 
   function clearAllFrames() {
     for (const f of savedFrames) {
-      if (f.photoUrl.startsWith("blob:")) URL.revokeObjectURL(f.photoUrl);
+      if (f.photoUrl.startsWith("blob:") && f.photoUrl !== props.photo) {
+        URL.revokeObjectURL(f.photoUrl);
+      }
     }
     setSavedFrames([]);
+    clearPendingPhotos();
+  }
+
+  function loadPhotoUrl(url: string) {
+    if (props.photo?.startsWith("blob:") && !savedFrames.some((sf) => sf.photoUrl === props.photo)) {
+      URL.revokeObjectURL(props.photo);
+    }
+    props.setPhoto(url);
+    resetMarks(null);
+    setImgSize(null);
+    setError(null);
   }
 
   function stopLiveCamera() {
@@ -1092,17 +1135,28 @@ function ScanScreen(props: {
   }
 
   function applyPickedPhoto(f: File) {
-    if (props.photo?.startsWith("blob:") && !savedFrames.some((sf) => sf.photoUrl === props.photo)) {
-      URL.revokeObjectURL(props.photo);
+    applyPickedPhotos([f]);
+  }
+
+  /** One photo now; if stitch is on and several were chosen, queue the rest. */
+  function applyPickedPhotos(files: File[]) {
+    const images = files.filter((f) => f.type.startsWith("image/") || /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name));
+    if (!images.length) {
+      setError("Pick an image file (JPG/PNG/WebP).");
+      return;
     }
-    props.setPhoto(URL.createObjectURL(f));
-    resetMarks(null);
-    setImgSize(null);
-    setError(null);
-    if (/\.heic$|\.heif$/i.test(f.name) || /heic|heif/i.test(f.type)) {
+    const [first, ...rest] = images;
+    loadPhotoUrl(URL.createObjectURL(first!));
+    if (/\.heic$|\.heif$/i.test(first!.name) || /heic|heif/i.test(first!.type)) {
       setError(
         "This looks like an iPhone HEIC photo — if it doesn't appear below, open it in Photos and export as JPEG, then re-upload.",
       );
+    }
+    if (stitchMode && rest.length) {
+      clearPendingPhotos();
+      setPendingPhotos(rest.map((f) => URL.createObjectURL(f)));
+    } else if (!stitchMode && rest.length) {
+      setError("Turn on Stitch wide yard first if you want to use more than one photo.");
     }
   }
 
@@ -1155,24 +1209,58 @@ function ScanScreen(props: {
     const pt = stagePoint(e);
     if (!pt) return;
 
+    // Only coin-edge taps use empty clicks. Bed corners are drag-only —
+    // use the "Add point" button so misses don't spawn random corners.
     if (tapPhase === "reference") {
       const next = [...refTaps, pt].slice(0, 2);
       setRefTaps(next);
       if (next.length === 2) setTapPhase("bed");
-    } else {
-      setBedCorners((c) => [...c, pt]);
     }
   }
 
+  /** Insert a new bed corner at the midpoint of the longest edge. */
+  function addBedPoint() {
+    if (!imgSize) return;
+    setBedCorners((corners) => {
+      if (corners.length < 2) {
+        return [...corners, { x: imgSize.w * 0.5, y: imgSize.h * 0.5 }];
+      }
+      let bestI = 0;
+      let bestLen = -1;
+      for (let i = 0; i < corners.length; i++) {
+        const a = corners[i]!;
+        const b = corners[(i + 1) % corners.length]!;
+        const len = Math.hypot(b.x - a.x, b.y - a.y);
+        if (len > bestLen) {
+          bestLen = len;
+          bestI = i;
+        }
+      }
+      const a = corners[bestI]!;
+      const b = corners[(bestI + 1) % corners.length]!;
+      const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
+      const next = [...corners];
+      next.splice(bestI + 1, 0, mid);
+      return next;
+    });
+    setTapPhase("bed");
+    setError(null);
+  }
+
+  function removeLastBedPoint() {
+    setBedCorners((corners) => (corners.length > 3 ? corners.slice(0, -1) : corners));
+  }
+
   function onStagePointerMove(e: PointerEvent<HTMLDivElement>) {
-    if (!drag) return;
+    const active = dragRef.current;
+    if (!active) return;
     const pt = stagePoint(e);
     if (!pt) return;
     dragMovedRef.current = true;
-    if (drag.kind === "ref") {
-      setRefTaps((taps) => taps.map((p, i) => (i === drag.index ? pt : p)));
+    if (active.kind === "ref") {
+      setRefTaps((taps) => taps.map((p, i) => (i === active.index ? pt : p)));
     } else {
-      setBedCorners((c) => c.map((p, i) => (i === drag.index ? pt : p)));
+      setBedCorners((c) => c.map((p, i) => (i === active.index ? pt : p)));
     }
   }
 
@@ -1181,24 +1269,26 @@ function ScanScreen(props: {
       e.stopPropagation();
       e.currentTarget.setPointerCapture?.(e.pointerId);
       dragMovedRef.current = false;
-      setDrag({ kind, index });
+      dragRef.current = { kind, index };
     };
   }
 
   function endDrag() {
-    setDrag(null);
+    dragRef.current = null;
   }
 
   function currentFramePayload(): SavedScanFrame | null {
-    if (!props.photo || !imgSize || refTaps.length < 2 || bedCorners.length < 3) return null;
+    const taps = refTapsRef.current;
+    const corners = bedCornersRef.current;
+    if (!props.photo || !imgSize || taps.length < 2 || corners.length < 3) return null;
     return {
       id: `frame-${savedFrames.length + 1}`,
       photoUrl: props.photo,
       imageWidthPx: imgSize.w,
       imageHeightPx: imgSize.h,
-      referenceEdgeA: refTaps[0]!,
-      referenceEdgeB: refTaps[1]!,
-      bedCorners: [...bedCorners],
+      referenceEdgeA: taps[0]!,
+      referenceEdgeB: taps[1]!,
+      bedCorners: corners.map((p) => ({ ...p })),
     };
   }
 
@@ -1215,12 +1305,31 @@ function ScanScreen(props: {
     }
     // Tip: put the coin toward the edge you'll pan into (right edge if panning right).
     setSavedFrames((prev) => [...prev, frame]);
-    props.setPhoto(null);
-    setImgSize(null);
     resetMarks(null);
-    setError(null);
+    setImgSize(null);
     // Nudge the file picker so the same filename can be chosen again if needed.
     if (fileInputRef.current) fileInputRef.current.value = "";
+
+    // Auto-advance into the next queued photo (from multi-select), else clear for upload.
+    if (pendingPhotos.length > 0) {
+      const [next, ...rest] = pendingPhotos;
+      setPendingPhotos(rest);
+      props.setPhoto(next!);
+      setError(null);
+    } else {
+      props.setPhoto(null);
+      setError(null);
+    }
+  }
+
+  function measureManualRect() {
+    setError(null);
+    try {
+      const result = gardenFromRectangleCm(manualWidthCm, manualLengthCm, cellSizeCm);
+      props.onMeasured(result.garden, result.diagnostics, null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
   }
 
   function measure() {
@@ -1253,6 +1362,7 @@ function ScanScreen(props: {
               coinKind: chosenCoin,
               customSizeCm,
               customLabel,
+              cellSizeCm,
             })
           : measureYardFromFrames({
               frames: frames.map(({ photoUrl: _p, ...f }) => f),
@@ -1262,6 +1372,7 @@ function ScanScreen(props: {
               customLabel,
               stitchDirection: panDirection,
               overlapFraction,
+              cellSizeCm,
             });
       const last = frames[frames.length - 1]!;
       const overlay: ScanPhotoOverlay | null = last
@@ -1290,13 +1401,34 @@ function ScanScreen(props: {
       <h2>Scan your garden</h2>
       <p className="muted">
         Upload a photo, mark a scale reference, then tap the corners of your bed.
-        We convert pixels → real size → a 30 cm planting grid.
+        We convert pixels → real size → a planting grid you choose below.
       </p>
 
       <div className="row">
+        <label className="tiny" htmlFor="cell-size">
+          Grid cell size
+        </label>
+        <select
+          id="cell-size"
+          value={cellSizeCm}
+          onChange={(e) => setCellSizeCm(Number(e.target.value))}
+        >
+          <option value={15}>15 cm</option>
+          <option value={20}>20 cm</option>
+          <option value={30}>30 cm (recommended)</option>
+          <option value={45}>45 cm</option>
+          <option value={60}>60 cm</option>
+        </select>
+        <span className="tiny muted">
+          How fine to split the bed · plant spacing is calibrated for 30 cm
+        </span>
+      </div>
+
+      <div className="row">
         <span
-          className={`chip ${mode === "coin" ? "on" : ""}`}
+          className={`chip ${!manualRect && mode === "coin" ? "on" : ""}`}
           onClick={() => {
+            setManualRect(false);
             setMode("coin");
             resetMarks();
           }}
@@ -1304,26 +1436,83 @@ function ScanScreen(props: {
           Coin
         </span>
         <span
-          className={`chip ${mode === "custom_object" ? "on" : ""}`}
+          className={`chip ${!manualRect && mode === "custom_object" ? "on" : ""}`}
           onClick={() => {
+            setManualRect(false);
             setMode("custom_object");
+            if (stitchMode) {
+              setStitchMode(false);
+              clearAllFrames();
+            }
             resetMarks();
           }}
         >
           Custom object
         </span>
         <span
-          className={`chip ${stitchMode ? "on" : ""}`}
+          className={`chip ${manualRect ? "on" : ""}`}
           onClick={() => {
-            setStitchMode((v) => !v);
-            if (stitchMode) clearAllFrames();
+            setManualRect(true);
+            if (stitchMode) {
+              setStitchMode(false);
+              clearAllFrames();
+            }
+            setError(null);
           }}
         >
-          Stitch wide yard
+          Enter dimensions
         </span>
       </div>
 
-      {mode === "coin" ? (
+      {manualRect ? (
+        <div className="manual-rect-panel">
+          <p className="muted">
+            Skip the photo — type your bed size. This assumes a flat <b>rectangle</b> (raised bed,
+            patio slab, desk, etc.).
+          </p>
+          <div className="row">
+            <label className="tiny" htmlFor="manual-width">
+              Width (cm)
+            </label>
+            <input
+              id="manual-width"
+              type="number"
+              min={5}
+              step={1}
+              value={manualWidthCm}
+              onChange={(e) => setManualWidthCm(Number(e.target.value))}
+              style={{ width: 100 }}
+            />
+            <label className="tiny" htmlFor="manual-length">
+              Length (cm)
+            </label>
+            <input
+              id="manual-length"
+              type="number"
+              min={5}
+              step={1}
+              value={manualLengthCm}
+              onChange={(e) => setManualLengthCm(Number(e.target.value))}
+              style={{ width: 100 }}
+            />
+          </div>
+          <p className="tiny muted">
+            Preview: ~{(manualWidthCm / 100).toFixed(2)} × {(manualLengthCm / 100).toFixed(2)} m
+            {" · "}
+            {(Math.max(0, manualWidthCm) * Math.max(0, manualLengthCm) / 10_000).toFixed(2)} m²
+            {" · "}
+            ~{Math.max(1, Math.ceil(Math.max(0, manualWidthCm) / cellSizeCm))} ×{" "}
+            {Math.max(1, Math.ceil(Math.max(0, manualLengthCm) / cellSizeCm))} cells
+            {" @ "}
+            {cellSizeCm} cm
+          </p>
+          <div className="row">
+            <button type="button" onClick={measureManualRect}>
+              Use these dimensions →
+            </button>
+          </div>
+        </div>
+      ) : mode === "coin" ? (
         <>
           <p className="muted">{SCAN_UX.placeCoin}</p>
           <div className="row">
@@ -1346,6 +1535,28 @@ function ScanScreen(props: {
               ))}
             </select>
           </div>
+          <label className="stitch-toggle">
+            <span className="stitch-toggle-text">
+              <span className="stitch-toggle-title">Stitch wide yard</span>
+              <span className="tiny muted">Combine two or more overlapping photos</span>
+            </span>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={stitchMode}
+              className={`toggle-switch rounded-full ${stitchMode ? "on" : ""}`}
+              onClick={() => {
+                if (stitchMode) {
+                  setStitchMode(false);
+                  clearAllFrames();
+                } else {
+                  setStitchMode(true);
+                }
+              }}
+            >
+              <span className="toggle-knob" />
+            </button>
+          </label>
         </>
       ) : (
         <>
@@ -1371,9 +1582,23 @@ function ScanScreen(props: {
         </>
       )}
 
-      {stitchMode && (
+      {!manualRect && stitchMode && (
         <div className="stitch-panel">
           <p className="muted">{SCAN_UX.multiFrame}</p>
+          <ol className="stitch-steps">
+            <li>
+              Upload or capture a photo → mark green coin + blue corners
+            </li>
+            <li>
+              Tap <b>Save frame &amp; add next</b>
+            </li>
+            <li>
+              Repeat for each overlapping photo (2 or more total) — keep the same coin in the overlap
+            </li>
+            <li>
+              When you’re done, tap <b>Measure … frame(s)</b>
+            </li>
+          </ol>
           <div className="row">
             <label className="tiny">Pan direction</label>
             <select
@@ -1395,11 +1620,10 @@ function ScanScreen(props: {
           </div>
           <p className="tiny muted">
             Tip: put the coin near the <b>{panDirection === "right" ? "right" : "left"}</b> edge
-            of frame 1 (in the overlap). Use <b>Open camera</b> for the next shot — a dashed ghost
-            shows where to put the coin. Line it up, capture, re-tap the coin edges, then mark only
-            the desk corners you can see in that frame.
+            of each frame (in the overlap). On the next photo, a dashed ghost shows where to line
+            the coin up.
           </p>
-          {savedFrames.length > 0 && (
+          {(savedFrames.length > 0 || pendingPhotos.length > 0) && (
             <div className="frame-strip">
               {savedFrames.map((f, i) => (
                 <div key={f.id} className="frame-thumb">
@@ -1408,13 +1632,20 @@ function ScanScreen(props: {
                 </div>
               ))}
               <span className="tiny muted">
-                {savedFrames.length} saved · next is frame {savedFrames.length + 1}
+                {savedFrames.length} saved
+                {pendingPhotos.length > 0
+                  ? ` · ${pendingPhotos.length} queued`
+                  : ""}
+                {" · "}
+                next is frame {savedFrames.length + 1}
               </span>
             </div>
           )}
         </div>
       )}
 
+      {!manualRect && (
+      <>
       <div className="row">
         <button type="button" className="secondary small" onClick={() => void startLiveCamera()}>
           Open camera
@@ -1424,18 +1655,23 @@ function ScanScreen(props: {
           className="secondary small"
           onClick={() => fileInputRef.current?.click()}
         >
-          Upload photo
+          {stitchMode
+            ? savedFrames.length > 0
+              ? `Upload photo ${savedFrames.length + 1}`
+              : "Upload photo(s)"
+            : "Upload photo"}
         </button>
         <input
           ref={fileInputRef}
           type="file"
           accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/*"
+          multiple={stitchMode}
           hidden
           onChange={(e) => {
-            const f = e.target.files?.[0];
+            const list = e.target.files;
             e.target.value = "";
-            if (!f) return;
-            applyPickedPhoto(f);
+            if (!list?.length) return;
+            applyPickedPhotos(Array.from(list));
           }}
         />
         <input
@@ -1453,6 +1689,33 @@ function ScanScreen(props: {
         />
       </div>
       {cameraError && <p className="tiny" style={{ color: "#c4a35a" }}>{cameraError}</p>}
+
+      {stitchMode && !props.photo && !liveCamera && (
+        <div className="stitch-awaiting">
+          <p className="scan-phase">
+            {savedFrames.length === 0
+              ? "Stitch mode on — upload photo 1 (or pick several at once)"
+              : `Frame ${savedFrames.length} saved — upload photo ${savedFrames.length + 1} (or Measure when you have 2+)`}
+          </p>
+          <p className="scan-phase-hint">
+            Same coin must appear in each overlap. Mark coin edges + bed corners on every photo.
+            Keep saving frames until you’ve added all shots (2 or more), then Measure.
+          </p>
+          <div className="row">
+            <button type="button" onClick={() => fileInputRef.current?.click()}>
+              {savedFrames.length === 0 ? "Upload photo(s)" : `Upload photo ${savedFrames.length + 1}`}
+            </button>
+            <button type="button" className="secondary" onClick={() => void startLiveCamera()}>
+              Open camera
+            </button>
+            {savedFrames.length >= 2 && (
+              <button type="button" className="secondary" onClick={measure}>
+                Measure {savedFrames.length} frames →
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {liveCamera && (
         <div className="live-camera">
@@ -1499,23 +1762,42 @@ function ScanScreen(props: {
 
       {props.photo && !liveCamera && (
         <>
-          <p className="tiny">
-            Phase:{" "}
-            <b>
-              {tapPhase === "reference"
-                ? savedFrames.length > 0
-                  ? "1) Line up the coin with the ghost, then tap both edges"
-                  : "1) Tap both edges of the coin"
-                : "2) Adjust bed corners for this frame"}
-            </b>
-            {" · "}
-            ref {refTaps.length}/2 · corners {bedCorners.length}
+          <p className="scan-phase">
+            {tapPhase === "reference"
+              ? savedFrames.length > 0
+                ? "Phase 1 — Line up the coin with the ghost, then tap both edges"
+                : "Phase 1 — Tap both edges of the coin"
+              : "Phase 2 — Drag the blue numbered corners onto your bed"}
+          </p>
+          <p className="scan-phase-meta">
+            Green coin taps {refTaps.length}/2 · blue corners {bedCorners.length}
             {stitchMode ? ` · frames saved ${savedFrames.length}` : ""}
           </p>
-          <p className="tiny muted">
-            We pre-placed a garden outline: drag any numbered dot onto the real corners
-            of your bed, or tap to add more corners for odd shapes.
+          <p className="scan-phase-hint">
+            <b>Green</b> = coin edges (scale). <b>Blue</b> = bed outline corners — drag them to
+            fit. Misses won’t add points; use <b>Add point</b> only if you need an extra corner.
           </p>
+          {tapPhase === "bed" && (
+            <div className="row">
+              <button
+                type="button"
+                className="secondary small"
+                disabled={!imgSize}
+                onClick={addBedPoint}
+              >
+                Add point
+              </button>
+              <button
+                type="button"
+                className="secondary small"
+                disabled={bedCorners.length <= 3}
+                onClick={removeLastBedPoint}
+                title="Need at least 3 corners"
+              >
+                Remove last point
+              </button>
+            </div>
+          )}
           {coinGhost && (
             <p className="tiny" style={{ color: "#c4a35a" }}>
               {SCAN_UX.coinGhost}
@@ -1537,7 +1819,10 @@ function ScanScreen(props: {
                 const img = e.currentTarget;
                 const size = { w: img.naturalWidth, h: img.naturalHeight };
                 setImgSize(size);
-                setBedCorners(autoCorners(size.w, size.h));
+                // Only seed the default quad once — never wipe corners the user already dragged.
+                setBedCorners((prev) =>
+                  prev.length >= 3 ? prev : autoCorners(size.w, size.h),
+                );
                 setError(null);
               }}
               onError={() => {
@@ -1612,15 +1897,14 @@ function ScanScreen(props: {
         </>
       )}
 
-      {error && <p className="tiny" style={{ color: "#f0b4b4" }}>{error}</p>}
-
       <div className="row">
         {stitchMode && (
-          <button className="secondary" disabled={!canSaveOrMeasure} onClick={saveFrameAndAddNext}>
+          <button type="button" className="secondary" disabled={!canSaveOrMeasure} onClick={saveFrameAndAddNext}>
             Save frame & add next →
           </button>
         )}
         <button
+          type="button"
           disabled={!canSaveOrMeasure && savedFrames.length === 0}
           onClick={measure}
         >
@@ -1628,28 +1912,39 @@ function ScanScreen(props: {
             ? `Measure ${savedFrames.length + (canSaveOrMeasure ? 1 : 0)} frame(s) →`
             : "Measure yard →"}
         </button>
-        <button className="secondary small" onClick={() => resetMarks()} disabled={!props.photo}>
+        <button
+          type="button"
+          className="secondary small"
+          onClick={() => resetMarks()}
+          disabled={!props.photo}
+        >
           Clear marks
         </button>
         {stitchMode && savedFrames.length > 0 && (
-          <button className="secondary small" onClick={clearAllFrames}>
+          <button type="button" className="secondary small" onClick={clearAllFrames}>
             Clear saved frames
           </button>
         )}
       </div>
+      </>
+      )}
+
+      {error && <p className="tiny" style={{ color: "#f0b4b4" }}>{error}</p>}
+
       <div className="row">
-        <button className="secondary" onClick={props.onDemo}>
+        <button type="button" className="secondary" onClick={props.onDemo}>
           Skip: use demo yard →
         </button>
         {props.onSkip && (
-          <button className="secondary" onClick={props.onSkip}>
+          <button type="button" className="secondary" onClick={props.onSkip}>
             Skip → keep current yard
           </button>
         )}
       </div>
       <p className="tiny">
-        Coin path is recommended (known diameter). Stitched multi-photo yards are approximate —
-        keep the coin in the overlap and use the ghost circle to align each shot.
+        {manualRect
+          ? "Manual size assumes a rectangle. Switch to Coin if you want to measure from a photo."
+          : "Coin path is recommended (known diameter). Stitched multi-photo yards are approximate — keep the coin in the overlap and use the ghost circle to align each shot."}
       </p>
     </div>
   );
