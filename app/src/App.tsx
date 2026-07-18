@@ -54,20 +54,47 @@ let CATALOG = getCatalog();
 let byId = new Map(CATALOG.map((s) => [s.id, s]));
 const nameOf = (id: string) => byId.get(id)?.name ?? id;
 
-/** Everything needed to resume mid-flow after a refresh. `photo` and
- *  `scanInfo` are deliberately excluded — `photo` is a blob: URL that's
- *  invalidated once the page unloads, and `scanInfo` is diagnostics tied to
- *  that same ephemeral photo, so persisting either would be meaningless. */
 interface SwapSnapshot {
   targets: Target[];
   banned: string[];
 }
 
+/** One user-owned garden, fully self-contained: its own layout, preferences,
+ *  optimizer result, and planted date. The working copy (App's garden/prefs/
+ *  targets/... state) always mirrors whichever SavedGarden is active — think
+ *  of `gardens` as commits and the working copy as the checked-out one. */
+interface SavedGarden {
+  id: string;
+  name: string;
+  createdAt: number;
+  garden: GardenGrid;
+  selected: string[];
+  prefs: Preferences;
+  targets: Target[];
+  carbonWeight: number;
+  banned: string[];
+  swapHistory: SwapSnapshot[];
+  result: OptimizerResponse | null;
+  /** Set once, the first time this garden is confirmed — never touched by
+   *  later edits, so the carbon-savings chart has a stable start date to
+   *  ramp from. */
+  plantedAt: number | null;
+  cloudId: string | null;
+}
+
+/** Everything needed to resume mid-flow after a refresh. `photo` and
+ *  `scanInfo` are deliberately excluded — `photo` is a blob: URL that's
+ *  invalidated once the page unloads, and `scanInfo` is diagnostics tied to
+ *  that same ephemeral photo, so persisting either would be meaningless. */
 interface PersistedState {
-  step: Step;
-  onboarded: boolean;
+  gardens: SavedGarden[];
+  /** null while the working copy is a brand-new, not-yet-confirmed garden
+   *  (nothing to write back to) — matches a SavedGarden.id once confirmed. */
+  activeGardenId: string | null;
   activeTab: Tab;
+  step: Step;
   editingLayout: boolean;
+  draftName: string;
   garden: GardenGrid | null;
   selected: string[];
   prefs: Preferences;
@@ -76,14 +103,14 @@ interface PersistedState {
   banned: string[];
   swapHistory: SwapSnapshot[];
   result: OptimizerResponse | null;
-  /** Set once, the first time a garden is confirmed — never touched by later
-   *  edits, so the carbon-savings chart has a stable start date to ramp from. */
   plantedAt: number | null;
+  cloudId: string | null;
 }
 
-// Bumped from v1: Step dropped "dashboard" and onboarded/activeTab were added
-// when the app moved from a single linear flow to a post-onboarding tab shell.
-const STORAGE_KEY = "plottwist:v2";
+// Bumped from v2: single-garden fields (onboarded, the working state) split
+// into a `gardens[]` library + one working copy that mirrors whichever
+// garden is active, so a user can create and switch between multiple gardens.
+const STORAGE_KEY = "plottwist:v3";
 
 function loadPersisted(): PersistedState | null {
   try {
@@ -97,13 +124,22 @@ function loadPersisted(): PersistedState | null {
 export function App() {
   const saved = useRef(loadPersisted()).current;
 
+  const [gardens, setGardens] = useState<SavedGarden[]>(saved?.gardens ?? []);
+  const [activeGardenId, setActiveGardenId] = useState<string | null>(
+    saved?.activeGardenId ?? null,
+  );
+  // "Onboarded" now just means at least one garden has ever been confirmed —
+  // no separate flag to drift out of sync with the gardens list.
+  const onboarded = gardens.length > 0;
+
   const [step, setStep] = useState<Step>(saved?.step ?? "scan");
-  const [onboarded, setOnboarded] = useState(saved?.onboarded ?? false);
   const [activeTab, setActiveTab] = useState<Tab>(saved?.activeTab ?? "dashboard");
-  // Only meaningful once onboarded: false = just viewing the confirmed layout
-  // in the Planner tab (only "Edit" makes sense); true = mid-edit, having
-  // clicked Edit and walked back through prefs/space (Tweak/Confirm apply).
+  // Only meaningful once onboarded: false = just viewing the active garden's
+  // confirmed layout (only "Edit" makes sense); true = mid-flow, either
+  // creating a brand-new garden or walking an existing one back through
+  // prefs/space (Tweak/Confirm apply).
   const [editingLayout, setEditingLayout] = useState(saved?.editingLayout ?? false);
+  const [draftName, setDraftName] = useState(saved?.draftName ?? "My Garden");
   const [photo, setPhoto] = useState<string | null>(null);
   const [garden, setGarden] = useState<GardenGrid | null>(saved?.garden ?? null);
   const [scanInfo, setScanInfo] = useState<ScanDiagnostics | null>(null);
@@ -117,9 +153,9 @@ export function App() {
   const [swapHistory, setSwapHistory] = useState<SwapSnapshot[]>(saved?.swapHistory ?? []);
   const [result, setResult] = useState<OptimizerResponse | null>(saved?.result ?? null);
   const [plantedAt, setPlantedAt] = useState<number | null>(saved?.plantedAt ?? null);
+  const [cloudId, setCloudId] = useState<string | null>(saved?.cloudId ?? null);
   const [catalogSource, setCatalogSource] = useState<"demo" | "live">("demo");
   const [catalogCount, setCatalogCount] = useState(CATALOG.length);
-  const [cloudId, setCloudId] = useState<string | null>(null);
 
   // Upgrade the bundled catalog to the backend's curated one when reachable.
   useEffect(() => {
@@ -132,32 +168,36 @@ export function App() {
     });
   }, []);
 
+  /** Keeps gardens[activeGardenId] mirroring the working copy live — the app
+   *  has never had an explicit "save" step (everything just persists as you
+   *  go), so a swap applied in plain view mode or a mid-edit change should
+   *  land in the saved library the same way it always landed in localStorage.
+   *  Skipped while activeGardenId is null: a brand-new garden only joins the
+   *  library at "Confirm my garden", same as onboarding always worked. */
   useEffect(() => {
-    const toSave: PersistedState = {
-      step,
-      onboarded,
-      activeTab,
-      editingLayout,
-      garden,
-      selected: [...selected],
-      prefs,
-      targets,
-      carbonWeight,
-      banned,
-      swapHistory,
-      result,
-      plantedAt,
-    };
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
-    } catch {
-      // best-effort — quota errors or disabled storage shouldn't break the app
-    }
+    if (!activeGardenId || !garden) return;
+    setGardens((gs) =>
+      gs.map((g) =>
+        g.id === activeGardenId
+          ? {
+              ...g,
+              garden,
+              selected: [...selected],
+              prefs,
+              targets,
+              carbonWeight,
+              banned,
+              swapHistory,
+              result,
+              plantedAt,
+              cloudId,
+            }
+          : g,
+      ),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    step,
-    onboarded,
-    activeTab,
-    editingLayout,
+    activeGardenId,
     garden,
     selected,
     prefs,
@@ -167,6 +207,50 @@ export function App() {
     swapHistory,
     result,
     plantedAt,
+    cloudId,
+  ]);
+
+  useEffect(() => {
+    const toSave: PersistedState = {
+      gardens,
+      activeGardenId,
+      activeTab,
+      step,
+      editingLayout,
+      draftName,
+      garden,
+      selected: [...selected],
+      prefs,
+      targets,
+      carbonWeight,
+      banned,
+      swapHistory,
+      result,
+      plantedAt,
+      cloudId,
+    };
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+    } catch {
+      // best-effort — quota errors or disabled storage shouldn't break the app
+    }
+  }, [
+    gardens,
+    activeGardenId,
+    activeTab,
+    step,
+    editingLayout,
+    draftName,
+    garden,
+    selected,
+    prefs,
+    targets,
+    carbonWeight,
+    banned,
+    swapHistory,
+    result,
+    plantedAt,
+    cloudId,
   ]);
 
   const paintableKeys = useMemo(() => {
@@ -249,6 +333,93 @@ export function App() {
     run(prev.banned, prev.targets);
   }
 
+  /** Load a saved garden into the working copy — the Dashboard's garden
+   *  dropdown only ever appears in plain view mode (never mid-edit, since
+   *  editing keeps activeTab pinned to "planner"), so there's never an
+   *  in-progress draft to lose here. */
+  /** Loads a saved garden's data into the working copy — the shared core of
+   *  switchGarden() and "delete the active garden, fall back to another". */
+  function loadGarden(g: SavedGarden) {
+    setActiveGardenId(g.id);
+    setGarden(g.garden);
+    setSelected(new Set(g.selected));
+    setPrefs(g.prefs);
+    setTargets(g.targets);
+    setCarbonWeight(g.carbonWeight);
+    setBanned(g.banned);
+    setSwapHistory(g.swapHistory);
+    setResult(g.result);
+    setPlantedAt(g.plantedAt);
+    setCloudId(g.cloudId);
+    setPhoto(null);
+    setScanInfo(null);
+    setStep("results");
+    setEditingLayout(false);
+  }
+
+  /** Blanks the working copy with activeGardenId = null — the shared core of
+   *  startNewGarden() and "delete the last remaining garden". */
+  function resetWorkingCopy() {
+    setActiveGardenId(null);
+    setGarden(null);
+    setSelected(new Set());
+    setPrefs({ tier: "beginner", categories: [] });
+    setTargets([]);
+    setCarbonWeight(0.5);
+    setBanned([]);
+    setSwapHistory([]);
+    setResult(null);
+    setPlantedAt(null);
+    setCloudId(null);
+    setPhoto(null);
+    setScanInfo(null);
+  }
+
+  /** The Dashboard's garden dropdown only ever appears in plain view mode
+   *  (never mid-edit, since editing keeps activeTab pinned to "planner"), so
+   *  there's never an in-progress draft to lose here. */
+  function switchGarden(id: string) {
+    const g = gardens.find((x) => x.id === id);
+    if (g) loadGarden(g);
+  }
+
+  /** Starts a fresh onboarding flow for an additional garden, without
+   *  touching any already-saved one. It only joins `gardens` at Confirm —
+   *  same rule as the very first garden ever onboarded. */
+  function startNewGarden() {
+    // No window.prompt() here on purpose — it's a blocking synchronous
+    // dialog that embedded webviews (VS Code preview, some in-app browsers)
+    // silently suppress, which made this button look broken. Auto-name
+    // instead; the name is editable via the "Garden name" field on screen.
+    resetWorkingCopy();
+    setDraftName(`Garden ${gardens.length + 1}`);
+    setStep("scan");
+    setEditingLayout(true);
+    setActiveTab("planner");
+  }
+
+  function renameGarden(id: string, name: string) {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setGardens((gs) => gs.map((g) => (g.id === id ? { ...g, name: trimmed } : g)));
+  }
+
+  /** Deleting the active garden falls back to another saved one, or — if it
+   *  was the last one — drops back to the pre-onboarding first-run flow. */
+  function deleteGarden(id: string) {
+    const remaining = gardens.filter((g) => g.id !== id);
+    setGardens(remaining);
+    if (id !== activeGardenId) return;
+    if (remaining.length > 0) {
+      loadGarden(remaining[0]);
+    } else {
+      resetWorkingCopy();
+      setStep("scan");
+      setEditingLayout(false);
+      setActiveTab("dashboard");
+    }
+  }
+
   /** Hard reset for testing: wipes persisted state and reloads, so the app
    *  comes up exactly as it would for a brand-new user. Restarting the
    *  garden itself is handled by "Edit my garden" in the Planner tab, which
@@ -265,12 +436,22 @@ export function App() {
   }
 
   const showPlanner = !onboarded || activeTab === "planner";
+  // Whichever garden the working copy currently reflects — an existing
+  // one's saved name, or the in-progress name for a not-yet-confirmed one.
+  // Shown on every screen (Dashboard + all Planner steps) so it's always
+  // clear which garden is on screen.
+  const currentGardenName = activeGardenId
+    ? (gardens.find((g) => g.id === activeGardenId)?.name ?? draftName)
+    : draftName;
 
   return (
     <div style={{ paddingBottom: onboarded ? 56 : 0 }}>
       <DevTools onRestart={hardResetApp} />
       <h1>PlotTwist 🌱</h1>
       <p className="muted">Your garden, optimized — with a twist.</p>
+      {(onboarded || editingLayout) && (
+        <p className="tiny">🌱 Garden: <b>{currentGardenName}</b></p>
+      )}
       <p className="tiny">
         {catalogSource === "live"
           ? `☁ live catalog — ${catalogCount} plants · ${API_URL}`
@@ -284,6 +465,18 @@ export function App() {
               {label}
             </span>
           ))}
+        </div>
+      )}
+
+      {editingLayout && !activeGardenId && (
+        <div className="row">
+          <label className="tiny">Garden name</label>
+          <input
+            type="text"
+            value={draftName}
+            onChange={(e) => setDraftName(e.target.value)}
+            style={{ flex: 1, minWidth: 120 }}
+          />
         </div>
       )}
 
@@ -337,6 +530,16 @@ export function App() {
               skippable={editingLayout}
             />
           )}
+          {step === "results" && garden && result && onboarded && !editingLayout && (
+            <GardenSwitcher
+              gardens={gardens}
+              activeGardenId={activeGardenId}
+              onSwitchGarden={switchGarden}
+              onNewGarden={startNewGarden}
+              onRenameGarden={renameGarden}
+              onDeleteGarden={deleteGarden}
+            />
+          )}
           {step === "results" && garden && result && (
             <ResultsScreen
               garden={requestGarden()}
@@ -355,10 +558,33 @@ export function App() {
               onConfirm={
                 !onboarded || editingLayout
                   ? () => {
-                      setOnboarded(true);
+                      const effectivePlantedAt = plantedAt ?? Date.now();
+                      if (!activeGardenId) {
+                        // Brand-new garden — joins the library now, not before.
+                        const id = crypto.randomUUID();
+                        setGardens((gs) => [
+                          ...gs,
+                          {
+                            id,
+                            name: draftName.trim() || `Garden ${gs.length + 1}`,
+                            createdAt: Date.now(),
+                            garden: garden!,
+                            selected: [...selected],
+                            prefs,
+                            targets,
+                            carbonWeight,
+                            banned,
+                            swapHistory,
+                            result,
+                            plantedAt: effectivePlantedAt,
+                            cloudId: null,
+                          },
+                        ]);
+                        setActiveGardenId(id);
+                      }
+                      setPlantedAt(effectivePlantedAt);
                       setEditingLayout(false);
                       setActiveTab("dashboard");
-                      setPlantedAt((prev) => prev ?? Date.now());
                       // Cloud save is best-effort — the demo never blocks on it.
                       saveGardenToCloud({
                         garden: requestGarden(),
@@ -375,7 +601,17 @@ export function App() {
       )}
 
       {onboarded && activeTab === "dashboard" && result && (
-        <DashboardScreen result={result} plantedAt={plantedAt} cloudId={cloudId} />
+        <DashboardScreen
+          result={result}
+          plantedAt={plantedAt}
+          cloudId={cloudId}
+          gardens={gardens}
+          activeGardenId={activeGardenId}
+          onSwitchGarden={switchGarden}
+          onNewGarden={startNewGarden}
+          onRenameGarden={renameGarden}
+          onDeleteGarden={deleteGarden}
+        />
       )}
 
       {onboarded && <TabBar active={activeTab} onSelect={setActiveTab} />}
@@ -389,12 +625,16 @@ export function App() {
  *  through browser devtools every time. */
 function DevTools(props: { onRestart: () => void }) {
   const [open, setOpen] = useState(false);
+  const [armed, setArmed] = useState(false);
   const { offsetDays } = useDevClock();
   return (
     <div className="devtools">
       <button
         className="devtools-toggle"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          setOpen((o) => !o);
+          setArmed(false);
+        }}
         title="Developer tools"
       >
         🛠
@@ -423,16 +663,19 @@ function DevTools(props: { onRestart: () => void }) {
           >
             ↺ Reset clock to real time
           </button>
-          <button
-            className="small secondary"
-            onClick={() => {
-              if (confirm("Wipe all saved progress and reload as a first-time user?")) {
-                props.onRestart();
-              }
-            }}
-          >
-            ↺ Restart app (first-time use)
-          </button>
+          {/* Two-step "arm then confirm" instead of window.confirm() — some
+              embedded webviews (VS Code preview, in-app browsers) silently
+              swallow blocking dialogs, which made a confirm()-gated button
+              look broken. */}
+          {armed ? (
+            <button className="small" onClick={props.onRestart}>
+              ⚠ Click again to wipe everything
+            </button>
+          ) : (
+            <button className="small secondary" onClick={() => setArmed(true)}>
+              ↺ Restart app (first-time use)
+            </button>
+          )}
         </div>
       )}
     </div>
@@ -1435,10 +1678,107 @@ function FoodWasteCard(props: { foodKg: number; kgCo2e: number }) {
 
 /* ─────────────── 6. Dashboard ─────────────── */
 
+/** Switches, renames, creates, or deletes gardens. Shared by DashboardScreen
+ *  and the Planner tab's plain view mode — both are "not mid-edit" contexts,
+ *  the only ones where there's no in-progress draft a switch could clobber. */
+function GardenSwitcher(props: {
+  gardens: { id: string; name: string }[];
+  activeGardenId: string | null;
+  onSwitchGarden: (id: string) => void;
+  onNewGarden: () => void;
+  onRenameGarden: (id: string, name: string) => void;
+  onDeleteGarden: (id: string) => void;
+}) {
+  const [renaming, setRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const [deleteArmed, setDeleteArmed] = useState(false);
+  const activeGarden = props.gardens.find((g) => g.id === props.activeGardenId);
+
+  return (
+    <div className="card">
+      <div className="row spread">
+        <select
+          value={props.activeGardenId ?? ""}
+          onChange={(e) => {
+            props.onSwitchGarden(e.target.value);
+            setRenaming(false);
+            setDeleteArmed(false);
+          }}
+          style={{ flex: 1 }}
+        >
+          {props.gardens.map((g) => (
+            <option key={g.id} value={g.id}>
+              {g.name}
+            </option>
+          ))}
+        </select>
+        <button className="small secondary" onClick={props.onNewGarden}>
+          + New garden
+        </button>
+      </div>
+
+      {renaming ? (
+        <div className="row" style={{ marginTop: 6 }}>
+          <input
+            type="text"
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            style={{ flex: 1, minWidth: 100 }}
+            autoFocus
+          />
+          <button
+            className="small"
+            onClick={() => {
+              if (props.activeGardenId) props.onRenameGarden(props.activeGardenId, renameValue);
+              setRenaming(false);
+            }}
+          >
+            Save
+          </button>
+          <button className="small secondary" onClick={() => setRenaming(false)}>
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <div className="row" style={{ marginTop: 6 }}>
+          <button
+            className="small secondary"
+            onClick={() => {
+              setRenameValue(activeGarden?.name ?? "");
+              setRenaming(true);
+            }}
+          >
+            ✎ Rename
+          </button>
+          {/* Two-step arm/confirm instead of window.confirm() — see DevTools. */}
+          {deleteArmed ? (
+            <button
+              className="small"
+              onClick={() => props.activeGardenId && props.onDeleteGarden(props.activeGardenId)}
+            >
+              ⚠ Click again to delete "{activeGarden?.name}"
+            </button>
+          ) : (
+            <button className="small secondary" onClick={() => setDeleteArmed(true)}>
+              🗑 Delete garden
+            </button>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DashboardScreen(props: {
   result: OptimizerResponse;
   plantedAt: number | null;
   cloudId?: string | null;
+  gardens: { id: string; name: string }[];
+  activeGardenId: string | null;
+  onSwitchGarden: (id: string) => void;
+  onNewGarden: () => void;
+  onRenameGarden: (id: string, name: string) => void;
+  onDeleteGarden: (id: string) => void;
 }) {
   const { result } = props;
   const planted = Object.entries(result.counts).filter(([, n]) => n > 0);
@@ -1461,6 +1801,15 @@ function DashboardScreen(props: {
 
   return (
     <>
+      <GardenSwitcher
+        gardens={props.gardens}
+        activeGardenId={props.activeGardenId}
+        onSwitchGarden={props.onSwitchGarden}
+        onNewGarden={props.onNewGarden}
+        onRenameGarden={props.onRenameGarden}
+        onDeleteGarden={props.onDeleteGarden}
+      />
+
       <WeatherCard plantIds={planted.map(([id]) => id)} />
 
       <FoodWasteCard
