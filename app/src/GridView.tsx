@@ -19,9 +19,31 @@ interface Props {
   /** Planted layout to overlay; `reveal` limits to the first N (animation). */
   placements?: PlacementInstance[];
   reveal?: number;
+  /** Planting units (by origin cellKey) currently harvested — rendered as an
+   *  empty, reseedable spot instead of the species' color. */
+  harvestedUnits?: Set<string>;
+  /** When set, clicking an eligible planted cell fires onUnitClick with that
+   *  unit's origin key: "harvest" targets non-empty units, "reseed" targets
+   *  empty ones. Clicking anywhere in a multi-cell plant's footprint targets
+   *  the whole unit, not just the cell under the cursor. */
+  clickMode?: "harvest" | "reseed" | null;
+  onUnitClick?: (unitKey: string) => void;
+  /** Row/column number strip along the top and left edges — lets "R2C3" in
+   *  the Dashboard's unit bars be found on the actual grid at a glance. */
+  showAxisLabels?: boolean;
 }
 
-export function GridView({ garden, selected, onPaint, placements, reveal }: Props) {
+export function GridView({
+  garden,
+  selected,
+  onPaint,
+  placements,
+  reveal,
+  harvestedUnits,
+  clickMode,
+  onUnitClick,
+  showAxisLabels,
+}: Props) {
   const painting = useRef<boolean | null>(null);
   const lastTouched = useRef<string | null>(null);
 
@@ -49,28 +71,46 @@ export function GridView({ garden, selected, onPaint, placements, reveal }: Prop
   }
 
   const stateAt = new Map(garden.cells.map((c) => [cellKey(c.r, c.c), c.state]));
-  const planted = new Map<string, string>();
+  // Cells map to the whole PlacementInstance (not just a species id) so a
+  // click anywhere in a multi-cell plant's footprint resolves back to its
+  // origin — the same unit key harvestedUnits/onUnitClick use everywhere else.
+  const plantedBy = new Map<string, PlacementInstance>();
   const shown = placements ? placements.slice(0, reveal ?? placements.length) : [];
   for (const p of shown) {
-    for (const [r, c] of p.cells) planted.set(cellKey(r, c), p.speciesId);
+    for (const [r, c] of p.cells) plantedBy.set(cellKey(r, c), p);
   }
 
   const cellPx = Math.max(18, Math.min(34, Math.floor(430 / garden.cols)));
+  // Axis labels get their own leading track — data cells (and headers) are
+  // placed via explicit gridColumn/gridRow so the render order below doesn't
+  // need to change, just shift by one track when labels are on.
+  const axisOffset = showAxisLabels ? 1 : 0;
+  const labelPx = Math.max(14, Math.min(20, Math.floor(cellPx * 0.6)));
   const cells = [];
   for (let r = 0; r < garden.rows; r++) {
     for (let c = 0; c < garden.cols; c++) {
       const k = cellKey(r, c);
       const state = stateAt.get(k);
-      const species = planted.get(k);
+      const placement = plantedBy.get(k);
+      const species = placement?.speciesId;
+      const unitKey = placement ? cellKey(placement.origin[0], placement.origin[1]) : null;
+      const isEmptyUnit = unitKey ? (harvestedUnits?.has(unitKey) ?? false) : false;
       const paintable = state === "selected" || state === "obstacle_movable";
       const isSelected = !selected || selected.has(k);
+      const actionable =
+        !!unitKey &&
+        !!clickMode &&
+        ((clickMode === "harvest" && !isEmptyUnit) || (clickMode === "reseed" && isEmptyUnit));
 
       let cls = "cell";
       let style: React.CSSProperties = {};
       let label = "";
       if (species) {
+        // Keep the species' color even once harvested — faded via CSS — so
+        // it's still obvious what used to (and can again) grow there.
         style.background = speciesColor(species);
         cls += " planted";
+        if (isEmptyUnit) cls += " empty-unit";
       } else if (state === "existing_plant") {
         cls += " existing";
         label = "🌸";
@@ -84,6 +124,11 @@ export function GridView({ garden, selected, onPaint, placements, reveal }: Prop
       } else {
         cls += " off";
       }
+      if (actionable) cls += ` actionable mode-${clickMode}`;
+
+      if (showAxisLabels) {
+        style = { ...style, gridColumn: c + 1 + axisOffset, gridRow: r + 1 + axisOffset };
+      }
 
       cells.push(
         <div
@@ -91,6 +136,13 @@ export function GridView({ garden, selected, onPaint, placements, reveal }: Prop
           data-key={k}
           className={cls}
           style={style}
+          title={
+            actionable
+              ? clickMode === "harvest"
+                ? "Click to harvest"
+                : "Click to reseed"
+              : undefined
+          }
           onPointerDown={
             onPaint && paintable
               ? (e) => {
@@ -108,8 +160,30 @@ export function GridView({ garden, selected, onPaint, placements, reveal }: Prop
                 }
               : undefined
           }
+          onClick={actionable ? () => onUnitClick?.(unitKey!) : undefined}
         >
           {label}
+        </div>,
+      );
+    }
+  }
+
+  const axisLabels = [];
+  if (showAxisLabels) {
+    axisLabels.push(
+      <div key="corner" className="grid-label" style={{ gridColumn: 1, gridRow: 1 }} />,
+    );
+    for (let c = 0; c < garden.cols; c++) {
+      axisLabels.push(
+        <div key={`ch${c}`} className="grid-label" style={{ gridColumn: c + 2, gridRow: 1 }}>
+          {c + 1}
+        </div>,
+      );
+    }
+    for (let r = 0; r < garden.rows; r++) {
+      axisLabels.push(
+        <div key={`rh${r}`} className="grid-label" style={{ gridColumn: 1, gridRow: r + 2 }}>
+          {r + 1}
         </div>,
       );
     }
@@ -119,11 +193,19 @@ export function GridView({ garden, selected, onPaint, placements, reveal }: Prop
     <div
       className="grid"
       onPointerMove={handlePointerMove}
-      style={{
-        gridTemplateColumns: `repeat(${garden.cols}, ${cellPx}px)`,
-        gridAutoRows: `${cellPx}px`,
-      }}
+      style={
+        showAxisLabels
+          ? {
+              gridTemplateColumns: `${labelPx}px repeat(${garden.cols}, ${cellPx}px)`,
+              gridTemplateRows: `${labelPx}px repeat(${garden.rows}, ${cellPx}px)`,
+            }
+          : {
+              gridTemplateColumns: `repeat(${garden.cols}, ${cellPx}px)`,
+              gridAutoRows: `${cellPx}px`,
+            }
+      }
     >
+      {axisLabels}
       {cells}
     </div>
   );

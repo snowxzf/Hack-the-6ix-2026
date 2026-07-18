@@ -9,7 +9,7 @@ import type {
 } from "../../optimizer/src/index";
 import { GridView, cellKey, speciesColor } from "./GridView";
 import { CarbonChart } from "./CarbonChart";
-import { advanceDevClock, resetDevClock, useDevClock } from "./devClock";
+import { advanceDevClock, devNow, resetDevClock, useDevClock } from "./devClock";
 import {
   DAYS_TO_HARVEST,
   FAKE_WEATHER_ALERT,
@@ -82,6 +82,16 @@ interface SavedGarden {
    *  ramp from. */
   plantedAt: number | null;
   cloudId: string | null;
+  /** Individual planting units that have been harvested, keyed by
+   *  cellKey(origin[r], origin[c]) of their PlacementInstance — each unit is
+   *  its own spot in the grid, tracked independently so two same-species
+   *  plants can be at different growth stages. An empty (harvested) spot
+   *  stays visible in "Your plants" with a Reseed option. */
+  harvestedUnits: string[];
+  /** Per-unit "day 0" override set by Reseed, so a replanted spot's progress
+   *  bar restarts independently of both the garden's plantedAt and every
+   *  other unit of the same species. Absent = still on the garden's clock. */
+  unitPlantedAt: Record<string, number>;
 }
 
 /** Everything needed to resume mid-flow after a refresh. `photo` and
@@ -107,6 +117,8 @@ interface PersistedState {
   result: OptimizerResponse | null;
   plantedAt: number | null;
   cloudId: string | null;
+  harvestedUnits: string[];
+  unitPlantedAt: Record<string, number>;
 }
 
 // Bumped from v2: single-garden fields (onboarded, the working state) split
@@ -142,6 +154,9 @@ export function App() {
   // prefs/space (Tweak/Confirm apply).
   const [editingLayout, setEditingLayout] = useState(saved?.editingLayout ?? false);
   const [draftName, setDraftName] = useState(saved?.draftName ?? "My Garden");
+  // Ephemeral (not persisted) — which grid-click action, if any, is armed.
+  // Lets the user tap multiple plants in a row without re-arming each time.
+  const [clickMode, setClickMode] = useState<"harvest" | "reseed" | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
   const [garden, setGarden] = useState<GardenGrid | null>(saved?.garden ?? null);
   const [scanInfo, setScanInfo] = useState<ScanDiagnostics | null>(null);
@@ -156,6 +171,10 @@ export function App() {
   const [result, setResult] = useState<OptimizerResponse | null>(saved?.result ?? null);
   const [plantedAt, setPlantedAt] = useState<number | null>(saved?.plantedAt ?? null);
   const [cloudId, setCloudId] = useState<string | null>(saved?.cloudId ?? null);
+  const [harvestedUnits, setHarvestedUnits] = useState<string[]>(saved?.harvestedUnits ?? []);
+  const [unitPlantedAt, setUnitPlantedAt] = useState<Record<string, number>>(
+    saved?.unitPlantedAt ?? {},
+  );
   const [catalogSource, setCatalogSource] = useState<"demo" | "live">("demo");
   const [catalogCount, setCatalogCount] = useState(CATALOG.length);
 
@@ -193,6 +212,8 @@ export function App() {
               result,
               plantedAt,
               cloudId,
+              harvestedUnits,
+              unitPlantedAt,
             }
           : g,
       ),
@@ -210,6 +231,8 @@ export function App() {
     result,
     plantedAt,
     cloudId,
+    harvestedUnits,
+    unitPlantedAt,
   ]);
 
   useEffect(() => {
@@ -230,6 +253,8 @@ export function App() {
       result,
       plantedAt,
       cloudId,
+      harvestedUnits,
+      unitPlantedAt,
     };
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
@@ -253,6 +278,8 @@ export function App() {
     result,
     plantedAt,
     cloudId,
+    harvestedUnits,
+    unitPlantedAt,
   ]);
 
   const paintableKeys = useMemo(() => {
@@ -353,10 +380,13 @@ export function App() {
     setResult(g.result);
     setPlantedAt(g.plantedAt);
     setCloudId(g.cloudId);
+    setHarvestedUnits(g.harvestedUnits ?? []);
+    setUnitPlantedAt(g.unitPlantedAt ?? {});
     setPhoto(null);
     setScanInfo(null);
     setStep("results");
     setEditingLayout(false);
+    setClickMode(null);
   }
 
   /** Blanks the working copy with activeGardenId = null — the shared core of
@@ -373,8 +403,34 @@ export function App() {
     setResult(null);
     setPlantedAt(null);
     setCloudId(null);
+    setHarvestedUnits([]);
+    setUnitPlantedAt({});
     setPhoto(null);
     setScanInfo(null);
+    setClickMode(null);
+  }
+
+  /** Harvest one specific planting unit (by its grid-origin key) — leaves an
+   *  empty, reseedable spot behind rather than just decrementing a count, so
+   *  two same-species plants can be tracked (and shown) independently. */
+  function harvestUnit(unitKey: string) {
+    setHarvestedUnits((h) => (h.includes(unitKey) ? h : [...h, unitKey]));
+  }
+
+  /** Replant one empty unit: clears its harvested flag and restarts just
+   *  that spot's progress clock from right now, independent of every other
+   *  unit — including other plants of the same species. */
+  function reseedUnit(unitKey: string) {
+    setHarvestedUnits((h) => h.filter((k) => k !== unitKey));
+    setUnitPlantedAt((r) => ({ ...r, [unitKey]: devNow() }));
+  }
+
+  /** Grid-click dispatch while a mode is armed — GridView already restricts
+   *  which cells are clickable per mode (harvest = grown, reseed = empty),
+   *  so this just routes to the matching action. */
+  function handleUnitClick(unitKey: string) {
+    if (clickMode === "harvest") harvestUnit(unitKey);
+    else if (clickMode === "reseed") reseedUnit(unitKey);
   }
 
   /** The Dashboard's garden dropdown only ever appears in plain view mode
@@ -533,14 +589,35 @@ export function App() {
             />
           )}
           {step === "results" && garden && result && onboarded && !editingLayout && (
-            <GardenSwitcher
-              gardens={gardens}
-              activeGardenId={activeGardenId}
-              onSwitchGarden={switchGarden}
-              onNewGarden={startNewGarden}
-              onRenameGarden={renameGarden}
-              onDeleteGarden={deleteGarden}
-            />
+            <>
+              <GardenSwitcher
+                gardens={gardens}
+                activeGardenId={activeGardenId}
+                onSwitchGarden={switchGarden}
+                onNewGarden={startNewGarden}
+                onRenameGarden={renameGarden}
+                onDeleteGarden={deleteGarden}
+              />
+              <div className="row">
+                <button
+                  className={`small ${clickMode === "harvest" ? "" : "secondary"}`}
+                  onClick={() => setClickMode((m) => (m === "harvest" ? null : "harvest"))}
+                >
+                  🤏 Harvest
+                </button>
+                <button
+                  className={`small ${clickMode === "reseed" ? "" : "secondary"}`}
+                  onClick={() => setClickMode((m) => (m === "reseed" ? null : "reseed"))}
+                >
+                  🌱 Reseed
+                </button>
+                {clickMode && (
+                  <span className="tiny">
+                    Tap {clickMode === "harvest" ? "a grown" : "an empty"} plant on the grid below.
+                  </span>
+                )}
+              </div>
+            </>
           )}
           {step === "results" && garden && result && (
             <ResultsScreen
@@ -548,11 +625,15 @@ export function App() {
               result={result}
               onSwap={applySwap}
               onUndoSwap={swapHistory.length > 0 ? undoSwap : undefined}
+              harvestedUnits={onboarded && !editingLayout ? new Set(harvestedUnits) : undefined}
+              clickMode={onboarded && !editingLayout ? clickMode : null}
+              onUnitClick={handleUnitClick}
               onEdit={
                 onboarded && !editingLayout
                   ? () => {
                       setEditingLayout(true);
                       setStep("scan");
+                      setClickMode(null);
                     }
                   : undefined
               }
@@ -580,6 +661,8 @@ export function App() {
                             result,
                             plantedAt: effectivePlantedAt,
                             cloudId: null,
+                            harvestedUnits: [],
+                            unitPlantedAt: {},
                           },
                         ]);
                         setActiveGardenId(id);
@@ -613,6 +696,8 @@ export function App() {
           onNewGarden={startNewGarden}
           onRenameGarden={renameGarden}
           onDeleteGarden={deleteGarden}
+          harvestedUnits={harvestedUnits}
+          unitPlantedAt={unitPlantedAt}
         />
       )}
 
@@ -1718,6 +1803,9 @@ function ResultsScreen(props: {
   onEdit?: () => void;
   onTweak?: () => void;
   onConfirm?: () => void;
+  harvestedUnits?: Set<string>;
+  clickMode?: "harvest" | "reseed" | null;
+  onUnitClick?: (unitKey: string) => void;
 }) {
   const { result } = props;
   const total = result.placements.length;
@@ -1773,7 +1861,22 @@ function ResultsScreen(props: {
 
       <div className="card">
         <h2>Your optimized layout</h2>
-        <GridView garden={props.garden} placements={result.placements} reveal={reveal} />
+        <GridView
+          garden={props.garden}
+          placements={result.placements}
+          reveal={reveal}
+          harvestedUnits={props.harvestedUnits}
+          clickMode={props.clickMode}
+          onUnitClick={props.onUnitClick}
+          showAxisLabels={!!props.harvestedUnits}
+        />
+        {props.clickMode && (
+          <p className="tiny">
+            {props.clickMode === "harvest"
+              ? "🤏 Harvest mode — tap a grown plant to harvest it."
+              : "🌱 Reseed mode — tap an empty (dashed) spot to replant it."}
+          </p>
+        )}
         <div className="legend">
           {speciesIds.map((id) => (
             <span className="item" key={id}>
@@ -2080,10 +2183,13 @@ function DashboardScreen(props: {
   onNewGarden: () => void;
   onRenameGarden: (id: string, name: string) => void;
   onDeleteGarden: (id: string) => void;
+  harvestedUnits: string[];
+  unitPlantedAt: Record<string, number>;
 }) {
   const { result } = props;
   const planted = Object.entries(result.counts).filter(([, n]) => n > 0);
   const { now } = useDevClock();
+  const harvestedSet = new Set(props.harvestedUnits);
 
   // Day 0 = planted today. Cadence "due" matches backend/simulation.py's
   // watering_due_on_day: nothing due on day 0 (just watered by definition),
@@ -2143,21 +2249,33 @@ function DashboardScreen(props: {
 
       <div className="card">
         <h2>Your plants</h2>
-        {planted.map(([id, n]) => {
+        <p className="muted">
+          Each stacked bar is one planted spot — hover for its square on the grid. Use 🤏
+          Harvest / 🌱 Reseed on the Garden Planner to act on them.
+        </p>
+        {planted.map(([id]) => {
           const s = byId.get(id);
           if (!s) return null;
+          const units = result.placements.filter((p) => p.speciesId === id);
+          if (units.length === 0) return null;
           const harvest = s.daysToHarvest ?? DAYS_TO_HARVEST[s.category] ?? 60;
           const harvestRange =
             s.daysToHarvestMin != null && s.daysToHarvestMax != null
               ? ` (${s.daysToHarvestMin}–${s.daysToHarvestMax}d; weather can shift this)`
               : "";
-          const progress = Math.min(1, daysSincePlanted / harvest);
+          const growingCount = units.filter(
+            (p) => !harvestedSet.has(cellKey(p.origin[0], p.origin[1])),
+          ).length;
+
           return (
-            <div key={id} style={{ margin: "10px 0" }}>
+            <div key={id} style={{ margin: "14px 0" }}>
               <div className="row spread">
                 <span>
                   <span className="dot" style={{ background: speciesColor(id), marginRight: 6 }} />
-                  {s.name} ×{n}
+                  <b>{s.name}</b>{" "}
+                  <span className="tiny">
+                    ({growingCount}/{units.length} growing)
+                  </span>
                 </span>
                 <span className="tiny">
                   water every {s.waterEveryDays}d ·{" "}
@@ -2166,16 +2284,38 @@ function DashboardScreen(props: {
                     : "ornamental"}
                 </span>
               </div>
-              <div className="bar">
-                <div style={{ width: `${Math.max(4, progress * 100)}%` }} />
+
+              <div className="unit-stack">
+                {units.map((p) => {
+                  const key = cellKey(p.origin[0], p.origin[1]);
+                  const isEmpty = harvestedSet.has(key);
+                  const effectivePlantedAt = props.unitPlantedAt[key] ?? props.plantedAt;
+                  const unitDays = effectivePlantedAt
+                    ? Math.max(0, Math.floor((now - effectivePlantedAt) / (24 * 60 * 60 * 1000)))
+                    : 0;
+                  const progress = Math.min(1, unitDays / harvest);
+                  const pct = Math.round(progress * 100);
+
+                  return (
+                    <div
+                      key={key}
+                      className="unit-row"
+                      title={
+                        isEmpty
+                          ? `Empty — row ${p.origin[0] + 1}, col ${p.origin[1] + 1}`
+                          : `Row ${p.origin[0] + 1}, col ${p.origin[1] + 1} — day ${unitDays} of ~${harvest} (${pct}%)`
+                      }
+                    >
+                      <span className="unit-label">
+                        R{p.origin[0] + 1}C{p.origin[1] + 1}
+                      </span>
+                      <div className={`unit-bar${isEmpty ? " empty" : ""}`}>
+                        {!isEmpty && <div style={{ width: `${Math.max(4, pct)}%` }} />}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-              <span className="tiny">
-                {daysSincePlanted === 0
-                  ? "Day 0 — planted today 🌱"
-                  : s.yieldKgPerSeason > 0 && progress >= 1
-                    ? `Day ${daysSincePlanted} — ready to harvest 🎉`
-                    : `Day ${daysSincePlanted}${s.yieldKgPerSeason > 0 ? ` — ${Math.round(progress * 100)}% to harvest` : ""}`}
-              </span>
             </div>
           );
         })}
