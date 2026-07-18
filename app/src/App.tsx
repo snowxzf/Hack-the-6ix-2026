@@ -309,6 +309,8 @@ function PrefsScreen(props: {
     ["advanced", "🧑‍🌾 Advanced — give me everything"],
   ];
 
+  const isBeginner = props.prefs.tier === "beginner";
+
   return (
     <>
       <div className="card">
@@ -325,101 +327,148 @@ function PrefsScreen(props: {
         ))}
       </div>
 
-      <div className="card">
-        <h2>What do you want to grow?</h2>
-        <p className="muted">Pick any — leave empty for "surprise me".</p>
-        <div className="row">
-          {categories.map((cat) => {
-            const on = props.prefs.categories.includes(cat);
-            return (
-              <span
-                key={cat}
-                className={`chip ${on ? "on" : ""}`}
-                onClick={() =>
-                  props.setPrefs({
-                    ...props.prefs,
-                    categories: on
-                      ? props.prefs.categories.filter((c) => c !== cat)
-                      : [...props.prefs.categories, cat],
-                  })
-                }
-              >
-                {cat}
-              </span>
-            );
-          })}
-        </div>
-      </div>
+      {isBeginner ? <BeginnerVibes prefs={props.prefs} setPrefs={props.setPrefs} /> : (
+        <>
+          <div className="card">
+            <h2>What do you want to grow?</h2>
+            <p className="muted">Pick any — leave empty for "surprise me".</p>
+            <div className="row">
+              {categories.map((cat) => {
+                const on = props.prefs.categories.includes(cat);
+                return (
+                  <span
+                    key={cat}
+                    className={`chip ${on ? "on" : ""}`}
+                    onClick={() =>
+                      props.setPrefs({
+                        ...props.prefs,
+                        categories: on
+                          ? props.prefs.categories.filter((c) => c !== cat)
+                          : [...props.prefs.categories, cat],
+                      })
+                    }
+                  >
+                    {cat}
+                  </span>
+                );
+              })}
+            </div>
+          </div>
 
-      <div className="card">
-        <h2>Must-haves</h2>
-        <p className="muted">Hard minimums — the optimizer treats these as promises.</p>
-        {props.targets.map((t, i) => (
-          <div className="row" key={i}>
-            <select
-              value={t.speciesId}
-              onChange={(e) =>
-                props.setTargets(
-                  props.targets.map((x, j) => (j === i ? { ...x, speciesId: e.target.value } : x)),
-                )
-              }
-            >
-              {CATALOG.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name} ({s.cellsPerPlant[0]}×{s.cellsPerPlant[1]})
-                </option>
-              ))}
-            </select>
-            <input
-              type="number"
-              min={1}
-              value={t.min}
-              onChange={(e) =>
-                props.setTargets(
-                  props.targets.map((x, j) =>
-                    j === i ? { ...x, min: Number(e.target.value) } : x,
-                  ),
-                )
-              }
-            />
+          <div className="card">
+            <h2>Must-haves</h2>
+            <p className="muted">Hard minimums — the optimizer treats these as promises.</p>
+            {props.targets.map((t, i) => (
+              <div className="row" key={i}>
+                <select
+                  value={t.speciesId}
+                  onChange={(e) =>
+                    props.setTargets(
+                      props.targets.map((x, j) =>
+                        j === i ? { ...x, speciesId: e.target.value } : x,
+                      ),
+                    )
+                  }
+                >
+                  {CATALOG.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.cellsPerPlant[0]}×{s.cellsPerPlant[1]})
+                    </option>
+                  ))}
+                </select>
+                <input
+                  type="number"
+                  min={1}
+                  value={t.min}
+                  onChange={(e) =>
+                    props.setTargets(
+                      props.targets.map((x, j) =>
+                        j === i ? { ...x, min: Number(e.target.value) } : x,
+                      ),
+                    )
+                  }
+                />
+                <button
+                  className="small secondary"
+                  onClick={() => props.setTargets(props.targets.filter((_, j) => j !== i))}
+                >
+                  ✕
+                </button>
+              </div>
+            ))}
             <button
               className="small secondary"
-              onClick={() => props.setTargets(props.targets.filter((_, j) => j !== i))}
+              onClick={() =>
+                props.setTargets([...props.targets, { speciesId: CATALOG[0].id, min: 1 }])
+              }
             >
-              ✕
+              + Add a must-have
             </button>
           </div>
-        ))}
-        <button
-          className="small secondary"
-          onClick={() =>
-            props.setTargets([...props.targets, { speciesId: CATALOG[0].id, min: 1 }])
-          }
-        >
-          + Add a must-have
-        </button>
-      </div>
 
-      <div className="card">
-        <h2>How much should carbon impact matter?</h2>
-        <div className="row">
-          <span className="tiny">just vibes</span>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            value={Math.round(props.carbonWeight * 100)}
-            onChange={(e) => props.setCarbonWeight(Number(e.target.value) / 100)}
-            style={{ flex: 1 }}
-          />
-          <span className="tiny">max climate</span>
-        </div>
-      </div>
+          <div className="card">
+            <h2>How much should carbon impact matter?</h2>
+            <div className="row">
+              <span className="tiny">just vibes</span>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                value={Math.round(props.carbonWeight * 100)}
+                onChange={(e) => props.setCarbonWeight(Number(e.target.value) / 100)}
+                style={{ flex: 1 }}
+              />
+              <span className="tiny">max climate</span>
+            </div>
+          </div>
+        </>
+      )}
 
       <button onClick={props.onNext}>Choose planting space →</button>
     </>
   );
 }
+
+/** Beginner goal cards — replaces the chip/must-have/carbon-slider UI with a
+ *  single pick. Maps each vibe to categories the optimizer already understands.
+ *  NOTE: "Low effort" is approximated via category (herbs/flowers tend to be
+ *  lower-maintenance) since the catalog has no hardiness/effort field yet —
+ *  swap this mapping out once that field exists. */
+function BeginnerVibes(props: {
+  prefs: Preferences;
+  setPrefs: (p: Preferences) => void;
+}) {
+  const goals: { emoji: string; label: string; categories: string[] }[] = [
+    { emoji: "🍅", label: "Feed me (easy edibles)", categories: ["veggies", "fruit", "herbs"] },
+    { emoji: "🌸", label: "Make it pretty (flowers)", categories: ["flowers"] },
+    { emoji: "🐝", label: "Help the bees (pollinators)", categories: ["pollinator"] },
+    { emoji: "🪴", label: "Low effort (hardy stuff)", categories: ["herbs", "flowers"] },
+  ];
+
+  const current = props.prefs.categories;
+  const isActive = (cats: string[]) =>
+    cats.length === current.length && cats.every((c) => current.includes(c));
+
+  return (
+    <div className="card">
+      <h2>What's the vibe?</h2>
+      <p className="muted">Pick one — we'll handle the species picking.</p>
+      <div className="row">
+        {goals.map((g) => (
+          <span
+            key={g.label}
+            className={`chip ${isActive(g.categories) ? "on" : ""}`}
+            style={{ fontSize: 14, padding: "10px 14px" }}
+            onClick={() => props.setPrefs({ ...props.prefs, categories: g.categories })}
+          >
+            {g.emoji} {g.label}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 
 /* ─────────────── 4. Select space ─────────────── */
 
