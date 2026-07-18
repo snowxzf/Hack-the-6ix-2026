@@ -23,12 +23,30 @@ interface Props {
 
 export function GridView({ garden, selected, onPaint, placements, reveal }: Props) {
   const painting = useRef<boolean | null>(null);
+  const lastTouched = useRef<string | null>(null);
 
   useEffect(() => {
-    const up = () => (painting.current = null);
+    const up = () => {
+      painting.current = null;
+      lastTouched.current = null;
+    };
     window.addEventListener("pointerup", up);
     return () => window.removeEventListener("pointerup", up);
   }, []);
+
+  /** Touch fix: during a touch drag the browser keeps sending pointermove
+   *  events to the cell where the finger went *down*, not the cell it's
+   *  currently over — pointerenter never fires on the cells in between.
+   *  We look up the actual cell under the finger via elementFromPoint
+   *  instead, using clientX/Y which stay accurate regardless of capture. */
+  function handlePointerMove(e: React.PointerEvent) {
+    if (!onPaint || painting.current === null || e.pointerType !== "touch") return;
+    const el = document.elementFromPoint(e.clientX, e.clientY) as HTMLElement | null;
+    const key = el?.dataset.key;
+    if (!key || key === lastTouched.current) return;
+    lastTouched.current = key;
+    onPaint(key, painting.current);
+  }
 
   const stateAt = new Map(garden.cells.map((c) => [cellKey(c.r, c.c), c.state]));
   const planted = new Map<string, string>();
@@ -70,6 +88,7 @@ export function GridView({ garden, selected, onPaint, placements, reveal }: Prop
       cells.push(
         <div
           key={k}
+          data-key={k}
           className={cls}
           style={style}
           onPointerDown={
@@ -77,6 +96,7 @@ export function GridView({ garden, selected, onPaint, placements, reveal }: Prop
               ? (e) => {
                   e.preventDefault();
                   painting.current = !selected?.has(k);
+                  lastTouched.current = k;
                   onPaint(k, painting.current);
                 }
               : undefined
@@ -98,6 +118,7 @@ export function GridView({ garden, selected, onPaint, placements, reveal }: Prop
   return (
     <div
       className="grid"
+      onPointerMove={handlePointerMove}
       style={{
         gridTemplateColumns: `repeat(${garden.cols}, ${cellPx}px)`,
         gridAutoRows: `${cellPx}px`,
