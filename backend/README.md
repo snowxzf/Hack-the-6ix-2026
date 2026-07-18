@@ -21,6 +21,19 @@ uvicorn main:app --reload --port 8000
 
 Docs: http://localhost:8000/docs
 
+## Day-passage simulator
+
+`simulation.py` steps a planted garden forward day-by-day to check the carbon-savings
+ramp and watering cadence math (mirrors `app/src/CarbonChart.tsx` and the DashboardScreen
+watering-trip grouping) without waiting for a real season to pass.
+
+```bash
+python simulation.py              # prints a 14-day demo run
+
+pip install -r requirements-dev.txt
+pytest test_simulation.py -q      # unit tests for the ramp + cadence math
+```
+
 ## Endpoints
 
 | Method | Path | Purpose |

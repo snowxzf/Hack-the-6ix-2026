@@ -9,6 +9,7 @@ import type {
 } from "../../optimizer/src/index";
 import { GridView, cellKey, speciesColor } from "./GridView";
 import { CarbonChart } from "./CarbonChart";
+import { advanceDevClock, resetDevClock, useDevClock } from "./devClock";
 import {
   DAYS_TO_HARVEST,
   FAKE_WEATHER_ALERT,
@@ -248,33 +249,26 @@ export function App() {
     run(prev.banned, prev.targets);
   }
 
-  /** Full reset back to the pre-onboarding scan step — used by the
-   *  dashboard's "Start over" action. */
-  function resetAll() {
+  /** Hard reset for testing: wipes persisted state and reloads, so the app
+   *  comes up exactly as it would for a brand-new user. Restarting the
+   *  garden itself is handled by "Edit my garden" in the Planner tab, which
+   *  walks back through scan/review/prefs/space while keeping existing data
+   *  to tweak — this is the dev-only full wipe instead. */
+  function hardResetApp() {
     try {
       localStorage.removeItem(STORAGE_KEY);
     } catch {
-      // storage unavailable — state reset below still works for this session
+      // best-effort — if storage is unavailable there's nothing to clear
     }
-    setStep("scan");
-    setOnboarded(false);
-    setEditingLayout(false);
-    setActiveTab("dashboard");
-    setPhoto(null);
-    setGarden(null);
-    setScanInfo(null);
-    setSelected(new Set());
-    setTargets([]);
-    setBanned([]);
-    setSwapHistory([]);
-    setResult(null);
-    setPlantedAt(null);
+    resetDevClock();
+    window.location.reload();
   }
 
   const showPlanner = !onboarded || activeTab === "planner";
 
   return (
     <div style={{ paddingBottom: onboarded ? 56 : 0 }}>
+      <DevTools onRestart={hardResetApp} />
       <h1>PlotTwist 🌱</h1>
       <p className="muted">Your garden, optimized — with a twist.</p>
       <p className="tiny">
@@ -381,15 +375,66 @@ export function App() {
       )}
 
       {onboarded && activeTab === "dashboard" && result && (
-        <DashboardScreen
-          result={result}
-          plantedAt={plantedAt}
-          cloudId={cloudId}
-          onReset={resetAll}
-        />
+        <DashboardScreen result={result} plantedAt={plantedAt} cloudId={cloudId} />
       )}
 
       {onboarded && <TabBar active={activeTab} onSelect={setActiveTab} />}
+    </div>
+  );
+}
+
+/** Dev-only corner widget — not part of the product flow. Lets us fast-forward
+ *  the simulated clock (to watch carbon-saved and watering respond live) and
+ *  wipe localStorage to test the first-time-use experience, without digging
+ *  through browser devtools every time. */
+function DevTools(props: { onRestart: () => void }) {
+  const [open, setOpen] = useState(false);
+  const { offsetDays } = useDevClock();
+  return (
+    <div className="devtools">
+      <button
+        className="devtools-toggle"
+        onClick={() => setOpen((o) => !o)}
+        title="Developer tools"
+      >
+        🛠
+      </button>
+      {open && (
+        <div className="devtools-panel">
+          <p className="tiny">Dev tools</p>
+          <p className="tiny">
+            Simulated time: <b>{offsetDays === 0 ? "real time" : `+${offsetDays}d`}</b>
+          </p>
+          <div className="row" style={{ margin: "4px 0" }}>
+            <button className="small secondary" onClick={() => advanceDevClock(1)}>
+              +1 day
+            </button>
+            <button className="small secondary" onClick={() => advanceDevClock(7)}>
+              +7 days
+            </button>
+            <button className="small secondary" onClick={() => advanceDevClock(30)}>
+              +30 days
+            </button>
+          </div>
+          <button
+            className="small secondary"
+            onClick={resetDevClock}
+            disabled={offsetDays === 0}
+          >
+            ↺ Reset clock to real time
+          </button>
+          <button
+            className="small secondary"
+            onClick={() => {
+              if (confirm("Wipe all saved progress and reload as a first-time user?")) {
+                props.onRestart();
+              }
+            }}
+          >
+            ↺ Restart app (first-time use)
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1394,10 +1439,18 @@ function DashboardScreen(props: {
   result: OptimizerResponse;
   plantedAt: number | null;
   cloudId?: string | null;
-  onReset?: () => void;
 }) {
   const { result } = props;
   const planted = Object.entries(result.counts).filter(([, n]) => n > 0);
+  const { now } = useDevClock();
+
+  // Day 0 = planted today. Cadence "due" matches backend/simulation.py's
+  // watering_due_on_day: nothing due on day 0 (just watered by definition),
+  // then due every waterEveryDays days after.
+  const daysSincePlanted = props.plantedAt
+    ? Math.max(0, Math.floor((now - props.plantedAt) / (24 * 60 * 60 * 1000)))
+    : 0;
+  const isDueToday = (days: number) => daysSincePlanted > 0 && daysSincePlanted % days === 0;
 
   const trips = new Map<number, string[]>();
   for (const [id] of planted) {
@@ -1432,6 +1485,7 @@ function DashboardScreen(props: {
             .map(([days, names]) => (
               <li key={days}>
                 <b>Every {days} day{days > 1 ? "s" : ""}:</b> {names.join(", ")}
+                {isDueToday(days) && <span className="tiny"> · 💧 due today (day {daysSincePlanted})</span>}
               </li>
             ))}
         </ul>
@@ -1443,6 +1497,7 @@ function DashboardScreen(props: {
           const s = byId.get(id);
           if (!s) return null;
           const harvest = DAYS_TO_HARVEST[s.category] ?? 60;
+          const progress = Math.min(1, daysSincePlanted / harvest);
           return (
             <div key={id} style={{ margin: "10px 0" }}>
               <div className="row spread">
@@ -1456,19 +1511,19 @@ function DashboardScreen(props: {
                 </span>
               </div>
               <div className="bar">
-                <div style={{ width: "4%" }} />
+                <div style={{ width: `${Math.max(4, progress * 100)}%` }} />
               </div>
-              <span className="tiny">Day 0 — planted today 🌱</span>
+              <span className="tiny">
+                {daysSincePlanted === 0
+                  ? "Day 0 — planted today 🌱"
+                  : s.yieldKgPerSeason > 0 && progress >= 1
+                    ? `Day ${daysSincePlanted} — ready to harvest 🎉`
+                    : `Day ${daysSincePlanted}${s.yieldKgPerSeason > 0 ? ` — ${Math.round(progress * 100)}% to harvest` : ""}`}
+              </span>
             </div>
           );
         })}
       </div>
-
-      {props.onReset && (
-        <button className="secondary small" onClick={props.onReset}>
-          ↺ Start over (wipes saved garden)
-        </button>
-      )}
     </>
   );
 }

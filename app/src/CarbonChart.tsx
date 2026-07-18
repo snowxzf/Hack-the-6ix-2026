@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useDevClock } from "./devClock";
 
 /**
  * Modeled carbon-savings trend — not real historical tracking. The optimizer
@@ -39,7 +40,7 @@ export function CarbonChart(props: { plantedAt: number; totalKgCo2eSeason: numbe
   const [range, setRange] = useState<RangeId>("1m");
   const [hover, setHover] = useState<number | null>(null);
 
-  const now = Date.now();
+  const { now } = useDevClock();
   const rangeMs = RANGES.find((r) => r.id === range)!.ms;
   const windowStart = Math.max(props.plantedAt, now - rangeMs);
   const yMax = Math.max(props.totalKgCo2eSeason, 0.1);

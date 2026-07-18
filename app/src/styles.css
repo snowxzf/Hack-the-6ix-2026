@@ -114,3 +114,15 @@ input[type="text"] {
   color: #7d927f; font-size: 13px;
 }
 .tabbar button.on { color: #eafbef; background: #1b241e; }
+
+.devtools { position: fixed; top: 10px; right: 10px; z-index: 50; }
+.devtools-toggle {
+  width: 30px; height: 30px; padding: 0; border-radius: 50%;
+  background: #23302a; color: #b9cfbf; font-size: 13px; opacity: 0.6;
+}
+.devtools-toggle:hover { opacity: 1; }
+.devtools-panel {
+  position: absolute; top: 36px; right: 0; width: 190px;
+  background: #171f1a; border: 1px solid #263229; border-radius: 10px;
+  padding: 10px; display: flex; flex-direction: column; gap: 6px;
+}
