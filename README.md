@@ -1,4 +1,4 @@
-# PlotTwist 🌱 — Hack the 6ix 2026
+# PlotTwist 🌱: Hack the 6ix 2026
 
 **Helping plants and people grow.** Scan your backyard, tell us what you dream of
 growing, and PlotTwist computes the optimal planting layout — space, sunlight,
@@ -194,7 +194,7 @@ Full table: [`backend/README.md`](backend/README.md).
 
 ---
 
-## 🎮 XP system
+## XP system
 
 Implemented in `app/src/xp.ts` + `App.tsx`. Local-first; synced to `clients` when logged in.
 
@@ -280,6 +280,8 @@ $ edible waste avoided     = (foodKgPerSeason ÷ 100) × $1,300 CAD
 curl http://localhost:8000/stats/toronto-food-waste
 curl "http://localhost:8000/impact/food-waste?foodKg=22.5"
 ```
+
+Example: a garden yielding **22.5 kg** food/season offsets **50%** of the typical Toronto household’s annual fruit & veg waste, **22.5%** of avoidable waste, and keeps an estimated **18 kg** out of the Green Bin.
 
 ---
 
