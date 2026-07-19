@@ -53,7 +53,9 @@ const result = scanYard([{
 }]);
 ```
 
-Wired into the web test app: `app/` → Scan step.
+Wired into the web app: `app/` Scan step (and Plan tab after onboarding).
+See the [root README](../README.md) and [`app/README.md`](../app/README.md).
+
 
 ## Multi-frame UX
 

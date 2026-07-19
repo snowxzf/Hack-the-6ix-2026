@@ -2,255 +2,325 @@
 
 **Helping plants and people grow.** Scan your backyard, tell us what you dream of
 growing, and PlotTwist computes the optimal planting layout — space, sunlight,
-watering logistics, and carbon footprint included. PlotTwist helps plants and people grow.
+watering logistics, and carbon footprint included.
 
-### Key Features
+### Key features
 
-* **Smart Camera Yard Scanning** — Easily measure awkwardly shaped backyard garden beds just by taking a photo with your phone next to a common object (like a coin).
-* **Smart Garden Layouts** — An intelligent, built-in planner that instantly figures out the best spot for each plant by balancing sunlight, watering needs, spacing, and which plants grow well together.
-* **Track Your Environmental Impact** — See exactly how much carbon you are saving by growing your own food, backed by real environmental data.
+* **Smart camera yard scanning** — Measure awkwardly shaped beds with a phone photo next to a coin or other reference object.
+* **Smart garden layouts** — On-device optimizer balances sunlight, watering, spacing, companions, and carbon.
+* **Track environmental impact** — Food-plant CO₂e savings from published lifecycle factors; Toronto food-waste context.
+* **Care, XP & weather** — Water/harvest loops, streaks, live sky conditions, and a Learn hub (guides + videos).
+* **Optional accounts** — Log in or start as a guest; Sign up later from Profile. Friends & leaderboard sync to MongoDB.
+
+---
 
 ## Repo layout
 
-| Package | What | Owner |
+| Package | What | Notes |
 |---|---|---|
-| `optimizer/` | Layout + carbon optimization engine (pure TS, tested, on-device) | Sara |
-| `yard-scan/` | Camera yard measure: coin (recommended) or custom object + tilt + stitch → grid | Jessica / Selina |
-| `app/` | Web test UI (scan → preferences → layout → dashboard) | Selina / Richa |
-| `database/` | Curated plant JSON + MongoDB seed script | Jessica |
-| `backend/` | FastAPI: PlantNet → Mongo lookup, weather, gardens, suggestions | Jessica |
+| `app/` | Vite + React web app (primary demo UI) | Tabs: Home, Garden, Plan, Learn, Profile |
+| `optimizer/` | Layout + carbon engine (pure TS, tested, on-device) | No I/O |
+| `yard-scan/` | Camera yard measure → `GardenGrid` | Coin or custom reference |
+| `database/` | Curated plant JSON + Mongo seed | Source of truth: `plants_curated.json` |
+| `backend/` | FastAPI: catalog, PlantNet, weather, search, Auth0 users | Mongo `plants`, `gardens`, `clients` |
+
+---
 
 ## Packages installed
 
-### Node (frontend / engines)
+### Node
 
 | Folder | Install | Notable packages |
 |---|---|---|
+| `app/` | `npm install` | `react`, `vite`, `tailwindcss`, `lucide-react`, `@auth0/auth0-react` |
 | `optimizer/` | `npm install` | `typescript`, `vitest`, `tsx` |
 | `yard-scan/` | `npm install` | `typescript`, `vitest`, `tsx` |
-| `app/` | `npm install` | `react`, `react-dom`, `vite`, `@vitejs/plugin-react`, `typescript`, `tailwindcss` v3, `lucide-react` |
 
-### Python (API / database)
+### Python
 
 | Folder | Install | Notable packages |
 |---|---|---|
 | `database/` | `pip install -r requirements.txt` | `pymongo`, `dnspython`, `python-dotenv` |
-| `backend/` | `pip install -r requirements.txt` | `fastapi`, `uvicorn`, `pymongo`, `httpx`, `python-multipart`, `python-dotenv` |
+| `backend/` | `pip install -r requirements.txt` | `fastapi`, `uvicorn`, `pymongo`, `httpx`, `python-jose`, `python-multipart`, `python-dotenv` |
 
-Secrets stay in repo-root `.env` (gitignored). Template: `.env.example`.
+Secrets stay in repo-root `.env` and `app/.env.local` (gitignored). Templates: `.env.example`, `app/.env.example`.
+
+---
 
 ## Quickstart
 
-**Test website** (scan UI + optimizer)
+**1. Env**
+
+```bash
+cp .env.example .env
+cp app/.env.example app/.env.local
+# fill MONGODB_URI, Auth0, optional PlantNet / Google keys
+```
+
+**2. Frontend** (always on port **5173** — Auth0 callbacks are locked to this)
 
 ```bash
 cd app && npm install && npm run dev
 ```
 
-Open the Vite URL (usually http://localhost:5173). On **Scan**:
-1. Choose **Coin (recommended)** or **Custom object**
-2. Upload a yard photo
-3. Tap both edges of the reference; a bed outline is pre-placed — drag its corners to fit (tap to add corners for odd shapes)
-4. **Measure yard →** (or skip to the demo yard)
+Open **http://localhost:5173** (not `127.0.0.1` if Auth0 is configured).
 
-**Optimizer**
-
-```bash
-cd optimizer && npm install && npm test && npm run demo
-```
-
-**Yard scan** (library only)
-
-```bash
-cd yard-scan && npm install && npm test && npm run demo
-```
-
-**Catalog + API**
+**3. Backend** (from repo root)
 
 ```bash
 cd database && pip install -r requirements.txt && python seed.py
-cd ../backend && pip install -r requirements.txt
-python -m uvicorn main:app --reload --port 8000
+cd ..
+pip install -r backend/requirements.txt
+python -m uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
-- API docs: http://localhost:8000/docs
-- Data contracts: `optimizer/src/types.ts`
-- Curated source of truth: `database/plants_curated.json` (seed into Mongo; app reads via backend)
+- API docs: http://localhost:8000/docs  
+- Contracts: `optimizer/src/types.ts`  
+- Catalog: `database/plants_curated.json`
 
-**Carbon honesty:** food plants only — `yieldKgPerSeason × co2eSavedPerKg` (Poore & Nemecek / OWID). Ornamentals get no invented CO₂e; their impact case is pollinator/biodiversity.
+**4. First open**
+
+1. **Log in** (Auth0) or **Start from beginning** (guest)
+2. Scan → preferences → select → confirm layout
+3. Use bottom nav: **Home · Garden · Plan · Learn · Profile**
+4. After setup, Profile shows **Sign up** (if still a guest) for friends/leaderboard
+
+**Optimizer / yard-scan alone**
+
+```bash
+cd optimizer && npm install && npm test && npm run demo
+cd yard-scan && npm install && npm test && npm run demo
+```
+
+**Carbon honesty:** food plants only — `yieldKgPerSeason × co2eSavedPerKg` (Poore & Nemecek / OWID). Ornamentals get no invented CO₂e.
+
+---
+
+## App architecture (`app/`)
+
+Entry: `main.tsx` (optional `Auth0Provider`) → `App.tsx` (state, XP engine, multi-garden, routing).
+
+### User flow
+
+```
+WelcomeGate ──Log in──► Auth0 ──► setup (scan…)
+           └──Start──► setup (scan → prefs → select → results)
+                              │
+                              ▼
+                    onboarded (gardens.length > 0)
+                              │
+         ┌────────┬───────────┼───────────┬────────┐
+         ▼        ▼           ▼           ▼        ▼
+       Home    Garden       Plan        Learn   Profile
+```
+
+Local persistence: `localStorage` key `plottwist:v3` (+ `plottwist:guestStarted`).
+
+### UI components (`app/src/components/`)
+
+| Component | Role |
+|---|---|
+| `WelcomeGate` | First open: **Log in** or **Start from beginning** |
+| `BottomNav` | Home / Garden / Plan / Learn / Profile |
+| `HomePanel` | Greeting, weather chip, care tasks, impact summary |
+| `WeatherProvider` / `WeatherChip` / `WeatherBackground` / `WeatherScene` | Live (or simulated) sky + plant-aware checks |
+| `LocationPicker` | City / GPS for weather |
+| `ProfilePanel` | Avatar, planter progress, greener-swaps toggle, impact |
+| `LeaderboardPanel` | Auth0 Sign up / account, username, friends, XP board |
+| `LearnPanel` | Tips + blog posts + search (YouTube / web / Wikipedia) |
+| `SearchPanel` | Full-screen plant + guide search overlay |
+| `VideoModal` | In-app YouTube (`youtube-nocookie`) |
+| `PlantIdentifyFlow` | Camera/photo → PlantNet identify |
+| `ImpactStats` | Food kg + CO₂e summary |
+| `SpeciesSelectOptions` | Preference / species pickers |
+
+### Other important `app/src/` modules
+
+| Module | Role |
+|---|---|
+| `App.tsx` | Gardens library, planner steps, XP tick, DevTools |
+| `GridView.tsx` / `PhotoGridOverlay.tsx` | Layout grid + scan overlay |
+| `CarbonChart.tsx` | Seasonal CO₂e ramp |
+| `xp.ts` | Levels, earn/lose amounts, streak bonuses |
+| `api.ts` | Backend client (catalog, weather, search, `/users/*`) |
+| `lib/auth0Config.ts` | `VITE_AUTH0_*` gating |
+| `lib/userProfile.ts` / `lib/savedPlants.ts` | Local profile + saved IDs |
+| `devClock.ts` / `devWeather.ts` | Demo time/weather overrides |
+
+Package details: see [`app/README.md`](app/README.md).
+
+---
+
+## Auth0 + MongoDB `clients`
+
+Optional. XP/streaks work fully offline.
+
+1. Auth0 → create a **Single Page Application**  
+   Callback / Logout / Web Origins: `http://localhost:5173`
+2. Root `.env`:
+   - `AUTH0_DOMAIN`
+   - `AUTH0_CLIENT_ID` = SPA client id  
+   - `AUTH0_AUDIENCE` = **same** client id (ID-token audience)
+3. `app/.env.local`: `VITE_AUTH0_DOMAIN`, `VITE_AUTH0_CLIENT_ID` (leave audience unset)
+
+No Auth0 API grant is required. The SPA sends an **ID token**; `backend/auth.py` verifies it (JWKS/RS256).
+
+User docs land in MongoDB collection **`clients`** (`authId`, email, username, xp, streakDays, friends). Without `MONGODB_URI`, the API keeps the same shape in memory.
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /users/me` | Fetch or create profile |
+| `PUT /users/me/username` | Claim unique username |
+| `PUT /users/me/stats` | Sync local xp / streak |
+| `POST /friends/add` | Add friend by username |
+| `GET /friends` | List friends |
+| `GET /leaderboard` | You + friends by XP |
+
+---
+
+## Backend highlights
+
+Full table: [`backend/README.md`](backend/README.md).
+
+| Area | Paths |
+|---|---|
+| Catalog | `/plants`, `/plants/{id}`, `/plants/search/by-name`, `/plants/suggest` |
+| Identify | `POST /identify` (PlantNet) |
+| Weather | `/geocode`, `/weather` (Open-Meteo) |
+| Learn search | `/search`, `/search/videos`, `/search/web`, `/search/wikipedia` |
+| Impact | `/stats/toronto-food-waste`, `/impact/food-waste` |
+| Gardens | `POST /gardens`, `GET /gardens/{id}` |
+| Accounts | `/users/*`, `/friends`, `/leaderboard` |
+
+---
+
+## 🎮 XP system
+
+Implemented in `app/src/xp.ts` + `App.tsx`. Local-first; synced to `clients` when logged in.
+
+### Earn
+
+| Action | XP |
+|---|---|
+| Water a due plant | +2 |
+| Harvest a ready plant | +5 |
+| Reseed an empty spot | +3 |
+| Every 5 kg CO₂e saved (milestone) | +20 |
+| Streak bonuses | see below |
+
+### Lose
+
+| Action | XP |
+|---|---|
+| Miss a scheduled watering | −4 / plant |
+| Ready plant unharvested 7+ days | −2 / week until harvested |
+
+XP never drops below the current level floor.
+
+### Streaks
+
+Confirm every due watering each day; miss a day → streak resets to 0.
+
+| Streak | Bonus |
+|---|---|
+| 3 days | +10 |
+| 7 days | +25 |
+| 30 days | +150 |
+
+### Levels
+
+| Level | Title | XP |
+|---|---|---|
+| 1 | Seedling | 0 |
+| 2 | Dirt Enthusiast | 150 |
+| 3 | Master Grower | 400 |
+| 4 | Legendary Gardener | 800 |
+
+---
 
 ## Data sources & credits
 
 | Source | Used for | License / tier |
 |---|---|---|
-| [PlantNet](https://my.plantnet.org/) | Photo → species identification | Free API key |
-| [Open-Meteo](https://open-meteo.com/) | Live weather + geocoding for plant checks and harvest estimates | Free, keyless |
-| [OpenPlantDB](https://github.com/cwfrazier1/openplantdb) | Care-field verification: sun, water, height, days to maturity (**42/42 plants verified**) | CC0 (public domain) |
-| [Perenual](https://perenual.com/docs/api) | Second care-data check (10/42 so far; free tier is 100 req/day) | Free API key, non-commercial |
-| [Our World in Data / Poore & Nemecek 2018](https://ourworldindata.org/grapher/ghg-per-kg-poore) | CO₂e factors for store-bought food equivalents (**42/42 verified**, explicit category mapping) | CC BY |
-| [City of Toronto food waste audits](https://www.toronto.ca/services-payments/recycling-organics-garbage/waste-management/waste-reduction/food-waste/) | Pitch impact baselines | Public data |
+| [PlantNet](https://my.plantnet.org/) | Photo → species ID | Free API key |
+| [Open-Meteo](https://open-meteo.com/) | Weather + geocoding | Free, keyless |
+| [OpenPlantDB](https://github.com/cwfrazier1/openplantdb) | Care-field verification | CC0 |
+| [Perenual](https://perenual.com/docs/api) | Second care-data check | Free API key |
+| [OWID / Poore & Nemecek 2018](https://ourworldindata.org/grapher/ghg-per-kg-poore) | Food CO₂e factors | CC BY |
+| [City of Toronto food waste audits](https://www.toronto.ca/services-payments/recycling-organics-garbage/waste-management/waste-reduction/food-waste/) | Pitch impact baselines | Public |
+| Auth0 | Optional login / friends | Free tenant |
+| YouTube / Google CSE / Wikipedia | Learn search | API keys optional (demo fallbacks) |
 
-Our catalog (`database/plants_curated.json`) is hand-curated, then cross-checked
-against these sources — each plant carries `verified` flags per source.
+Catalog (`database/plants_curated.json`) is hand-curated with per-source `verified` flags. See [`database/README.md`](database/README.md).
 
-## Toronto Food Waste Context
+---
 
-Source: [City of Toronto — Food Waste](https://www.toronto.ca/services-payments/recycling-organics-garbage/waste-management/waste-reduction/food-waste/) (2017–2018 single-family household audits).
+## Toronto food waste context
+
+Source: [City of Toronto — Food Waste](https://www.toronto.ca/services-payments/recycling-organics-garbage/waste-management/waste-reduction/food-waste/) (2017–2018 single-family audits).
 
 | Stat | Value |
 |---|---|
-| City-wide food waste generated annually | **99,000+ tonnes** (avoidable + unavoidable) |
-| Average single-family household food waste | **200+ kg / year** |
-| Avoidable food waste | **100+ kg / year** (>50% of total) |
-| Most wasted edible category | **Fruits & vegetables — ~45 kg / household / year** |
-| Put in the Green Bin | **~80%** of food waste |
-| Canadian household edible waste (same page, national) | **$1,300+ / year** thrown away |
-
-PlotTwist connects home-grown food to these numbers in the backend (`backend/food_waste_stats.py`):
+| City-wide food waste annually | **99,000+ tonnes** |
+| Avg single-family household | **200+ kg / year** |
+| Avoidable | **100+ kg / year** |
+| Fruits & vegetables | **~45 kg / household / year** |
+| Put in Green Bin | **~80%** |
+| Canadian edible waste (national context) | **$1,300+ / year** |
 
 ```
 % fruit/veg waste offset   = foodKgPerSeason ÷ 45 × 100
 % avoidable waste offset   = foodKgPerSeason ÷ 100 × 100
 % total food waste offset  = foodKgPerSeason ÷ 200 × 100
 Green Bin diversion (est.) = foodKgPerSeason × 0.80
-$ edible waste avoided (est.) = (foodKgPerSeason ÷ 100) × $1,300 CAD
+$ edible waste avoided     = (foodKgPerSeason ÷ 100) × $1,300 CAD
 ```
-
-`foodKgPerSeason` comes from the optimizer (`yieldKgPerSeason × plant count`). One season is treated as one year for the comparison.
-
-**API**
 
 ```bash
 curl http://localhost:8000/stats/toronto-food-waste
 curl "http://localhost:8000/impact/food-waste?foodKg=22.5"
 ```
 
-Example: a garden yielding **22.5 kg** food/season offsets **50%** of the typical Toronto household’s annual fruit & veg waste, **22.5%** of avoidable waste, and keeps an estimated **18 kg** out of the Green Bin.
-
-## 🎮 XP system
-
-Water, harvest, and keep carbon savings climbing — earn XP and level up!
-Implemented in `app/src/xp.ts` (the rules below) and `App.tsx` (the
-earning/losing/streak engine, a corner XP badge, and level-up/streak popups).
-Local to your device — no accounts, no backend.
-
-### Earning XP
-
-- 💧 **Water a due plant** — +2 XP each
-- 🤏 **Harvest a ready plant** — +5 XP
-- 🌱 **Reseed an empty spot** — +3 XP
-- 🌍 **Carbon milestone** — every 5 kg CO₂e your garden saves → +20 XP
-- 🔥 **Streaks** — see below
-
-### Losing XP
-
-- Miss a scheduled watering → **−4 XP** per plant
-- Leave a ready plant unharvested 7+ days → **−2 XP**, repeats weekly until picked
-- XP never drops below your current level's floor — losses slow your next level, never demote you
-
-### Streaks 🔥
-
-Confirm every watering due each day and your streak climbs; miss one day and it resets to 0.
-
-| Streak | Bonus |
-|---|---|
-| 3 days | +10 XP |
-| 7 days | +25 XP |
-| 30 days | +150 XP |
-
-### Levels
-
-| Level | Title | XP needed |
-|---|---|---|
-| 1 | 🌱 Seedling | 0 |
-| 2 | 🪴 Dirt Enthusiast | 150 |
-| 3 | 🌻 Master Grower | 400 |
-| 4 | 👑 Legendary Gardener | 800 |
-
-## 🏆 Friends & leaderboard
-
-Optional, opt-in layer on top of the local XP system: log in, pick a
-username, add friends by username, and see who's ahead. Nothing else in
-the app needs an account — XP/streaks keep working fully offline either
-way, and the Profile tab just shows a "not configured" message if Auth0
-isn't set up.
-
-**Setup** (both env files are gitignored — copy the `.env.example`s):
-
-1. In the [Auth0 dashboard](https://manage.auth0.com), create a
-   **Single Page Application** — Allowed Callback/Logout/Web Origins:
-   `http://localhost:5173`. Copy its **Domain** and **Client ID**.
-   (No Auth0 API is required — the app uses ID tokens.)
-2. Repo root `.env`: set `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, and
-   `AUTH0_AUDIENCE` to the SPA Client ID (same value for CLIENT_ID and AUDIENCE).
-3. `app/.env.local`: set `VITE_AUTH0_DOMAIN` and `VITE_AUTH0_CLIENT_ID`
-   (leave audience unset).
-4. Restart both the backend and `npm run dev`.
-
-**Backend** (`backend/auth.py`, `backend/main.py`): verifies the Auth0
-ID token (JWKS/RS256) on every call, then stores one small profile
-doc per user — `{ username, xp, streakDays, friends[] }` — in MongoDB’s
-`clients` collection, or in memory when `MONGODB_URI` isn't set (same
-demo-safe fallback as everything else in this API).
-
-| Endpoint | Purpose |
-|---|---|
-| `GET /users/me` | Fetch (or lazily create) your profile |
-| `PUT /users/me/username` | Claim a unique username |
-| `PUT /users/me/stats` | Push local `xp`/`streakDays` up |
-| `POST /friends/add` | Add a friend by username (bidirectional) |
-| `GET /friends` | List your friends' profiles |
-| `GET /leaderboard` | You + friends, ranked by XP |
-
-**Frontend** (`app/src/components/LeaderboardPanel.tsx`, wired into the
-Profile tab): `@auth0/auth0-react`'s `Auth0Provider` only mounts when
-`VITE_AUTH0_DOMAIN`/`VITE_AUTH0_CLIENT_ID` are set (`app/src/lib/auth0Config.ts`).
-Logged-in users sync their live `xp`/`streakDays` from `app/src/xp.ts`
-to the backend automatically so friends see current standing.
+---
 
 ## Pitch — what to say
 
-Use this as a script outline (≈2–3 min). Swap in live numbers from your demo layout.
+Use as a ≈2–3 min script. Swap in live numbers from your demo layout.
 
-### 1. Hook (problem — local + relatable)
+### 1. Hook
 
-> “Toronto single-family homes throw away **over 200 kg of food every year** — more than **100 kg is avoidable**, and **fruits and vegetables are the #1 wasted food** at about **45 kg per household**. Almost **80%** of that still goes in the Green Bin. Canadians waste **$1,300+** of edible food at home annually. People want to grow their own food, but most don’t know *what* fits *their* yard, sun, or skill level — so good intentions turn into wasted space and wasted groceries.”
+> “Toronto single-family homes throw away **over 200 kg of food every year** — more than **100 kg is avoidable**, and **fruits and vegetables are the #1 wasted food** at about **45 kg per household**. Almost **80%** of that still goes in the Green Bin. Canadians waste **$1,300+** of edible food at home annually. People want to grow their own food, but most don’t know *what* fits *their* yard, sun, or skill level.”
 
-### 2. Solution (what PlotTwist does)
+### 2. Solution
 
-> “**PlotTwist** scans your yard, learns what you want to grow, and computes an **optimized planting layout** — space, sunlight, watering, companions, and **carbon impact**. When your dream garden doesn’t fit, we **negotiate** — that’s the plot twist: we trade plants, shrink beds, and show greener swaps instead of saying no.”
+> “**PlotTwist** scans your yard, learns what you want to grow, and computes an **optimized planting layout** — space, sunlight, watering, companions, and **carbon impact**. When your dream garden doesn’t fit, we **negotiate** — that’s the plot twist.”
 
-### 3. Demo beat (show, don’t tell)
+### 3. Demo beat
 
-Walk through: **Scan → Preferences → Select → Results → Dashboard**
+Walk: **Welcome → Scan → Preferences → Select → Results → Home / Garden**
 
-Call out one concrete win from the results screen, e.g.:
-
-> “This **demo backyard** grows **~X kg of food per season**, offsets **Y%** of the average Toronto household’s **fruit & veg waste**, and saves **~Z kg CO₂e** — food plants only, no greenwashing on flowers.”
-
-(Pull X/Y/Z from the app’s **kg food grown**, `/impact/food-waste?foodKg=X`, and **kg CO₂e saved** stats.)
+> “This garden grows **~X kg of food per season**, offsets **Y%** of typical Toronto fruit & veg waste, and saves **~Z kg CO₂e** — food plants only.”
 
 ### 4. Why it’s credible
 
-- **Yard scan:** coin or reference object + phone camera → real grid (`yard-scan/`)
-- **Optimizer:** on-device TypeScript engine, tested (`optimizer/`)
-- **Plants & weather:** curated catalog verified vs OpenPlantDB + Perenual, live Open-Meteo, PlantNet ID (`backend/`, `database/`)
-- **Honest carbon:** only food yield × published lifecycle factors; ornamentals = pollinator story, not fake CO₂e
-- **Toronto math:** comparisons backed by City audit data, not vibes (`/impact/food-waste`)
+- Yard scan → real grid (`yard-scan/`)
+- Optimizer on-device, tested (`optimizer/`)
+- Catalog verified vs OpenPlantDB + Perenual; live Open-Meteo; PlantNet ID
+- Honest carbon; Toronto baselines via `/impact/food-waste`
 
-### 5. Close (impact + vision)
+### 5. Close
 
-> “We’re not just a garden planner — we’re helping **Toronto households grow food that would otherwise be wasted**, with numbers tied to **City waste audits**. PlotTwist turns a backyard photo into a **measurable** step toward less Green Bin waste, lower grocery bills, and lower food-mile emissions. **Helping plants and people grow.**”
+> “We’re helping **Toronto households grow food that would otherwise be wasted**, with numbers tied to **City waste audits**. **Helping plants and people grow.**”
 
-### Sound bites (one-liners if judges ask)
+### Sound bites
 
 - **Problem:** “The average Toronto home wastes **45 kg of produce a year** — we help you grow that instead.”
 - **Differentiator:** “When your garden doesn’t fit, we **negotiate**, not reject.”
 - **Impact:** “Every kg you grow is a kg that never hit the **Green Bin**.”
-- **Honesty:** “We only claim CO₂e on **food you actually yield** — no invented numbers for petunias.”
+- **Honesty:** “We only claim CO₂e on **food you actually yield**.”
 
 ### What not to claim
 
-- Don’t say PlotTwist eliminates all household food waste — compare to **baselines** (45 / 100 / 200 kg).
-- Don’t conflate **CO₂e from growing vs buying** with **methane from landfill** unless you add a separate model.
-- The **$1,300** figure is **Canadian national** context on Toronto’s page, not a Toronto-only audit — say “estimated” or “roughly.”
+- Don’t say PlotTwist eliminates all household food waste — compare to baselines (45 / 100 / 200 kg).
+- Don’t conflate growing-vs-buying CO₂e with landfill methane unless modeled separately.
+- The **$1,300** figure is **Canadian national** context — say “estimated.”

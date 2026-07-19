@@ -15,8 +15,17 @@ pip install -r requirements.txt
 python seed.py
 ```
 
-Collections written: `plantapp.plants`, `plantapp.catalog_meta`.
-Gardens are created at runtime by `POST /gardens` on the backend.
+Collections written by seed: `plantapp.plants`, `plantapp.catalog_meta`.
+
+Created at runtime by the API:
+
+| Collection | Who writes it |
+|---|---|
+| `gardens` | `POST /gardens` |
+| `clients` | Auth0 login / `/users/*` (username, xp, streak, friends) |
+
+Gardens and clients are **not** created by `seed.py`.
+
 
 Vegetable records include `daysToHarvest` (+ min/max) and optional `harvest`
 season/weather fields (`plantSeasons`, `frostSensitive`, `slowsBelowC`, etc.).

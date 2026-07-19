@@ -90,6 +90,9 @@ yards!), counts reflect reality and a conflict explains why.
 
 ## Placeholders we need to replace before judging
 
-- `MOCK_CATALOG` numbers (yields, CO₂e factors, spacing) → Jessica's curated catalog
+- `MOCK_CATALOG` numbers (yields, CO₂e factors, spacing) → live catalog via
+  `GET /plants?optimizer=true` (seeded from `database/plants_curated.json`)
 - `KG_CO2E_PER_KM_DRIVEN = 0.2` in `carbon.ts` → research team verifies
-- Mock gardens in `gardens.mock.ts` → real scan output
+- Mock gardens in `gardens.mock.ts` → real scan output from `yard-scan` / `app`
+
+See the [root README](../README.md) for how the app wires this engine in.
