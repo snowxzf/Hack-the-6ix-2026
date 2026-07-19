@@ -4,6 +4,34 @@
 growing, and PlotTwist computes the optimal planting layout — space, sunlight,
 watering logistics, and carbon footprint included.
 
+## Toronto food waste context
+
+Source: [City of Toronto — Food Waste](https://www.toronto.ca/services-payments/recycling-organics-garbage/waste-management/waste-reduction/food-waste/) (2017–2018 single-family audits).
+
+| Stat | Value |
+|---|---|
+| City-wide food waste annually | **99,000+ tonnes** |
+| Avg single-family household | **200+ kg / year** |
+| Avoidable | **100+ kg / year** |
+| Fruits & vegetables | **~45 kg / household / year** |
+| Put in Green Bin | **~80%** |
+| Canadian edible waste (national context) | **$1,300+ / year** |
+
+```
+% fruit/veg waste offset   = foodKgPerSeason ÷ 45 × 100
+% avoidable waste offset   = foodKgPerSeason ÷ 100 × 100
+% total food waste offset  = foodKgPerSeason ÷ 200 × 100
+Green Bin diversion (est.) = foodKgPerSeason × 0.80
+$ edible waste avoided     = (foodKgPerSeason ÷ 100) × $1,300 CAD
+```
+
+```bash
+curl http://localhost:8000/stats/toronto-food-waste
+curl "http://localhost:8000/impact/food-waste?foodKg=22.5"
+```
+
+Example: a garden yielding **22.5 kg** food/season offsets **50%** of the typical Toronto household’s annual fruit & veg waste, **22.5%** of avoidable waste, and keeps an estimated **18 kg** out of the Green Bin.
+
 ### Key features
 
 * **Smart camera yard scanning** — Measure awkwardly shaped beds with a phone photo next to a coin or other reference object.
@@ -252,77 +280,3 @@ Confirm every due watering each day; miss a day → streak resets to 0.
 | YouTube / Google CSE / Wikipedia | Learn search | API keys optional (demo fallbacks) |
 
 Catalog (`database/plants_curated.json`) is hand-curated with per-source `verified` flags. See [`database/README.md`](database/README.md).
-
----
-
-## Toronto food waste context
-
-Source: [City of Toronto — Food Waste](https://www.toronto.ca/services-payments/recycling-organics-garbage/waste-management/waste-reduction/food-waste/) (2017–2018 single-family audits).
-
-| Stat | Value |
-|---|---|
-| City-wide food waste annually | **99,000+ tonnes** |
-| Avg single-family household | **200+ kg / year** |
-| Avoidable | **100+ kg / year** |
-| Fruits & vegetables | **~45 kg / household / year** |
-| Put in Green Bin | **~80%** |
-| Canadian edible waste (national context) | **$1,300+ / year** |
-
-```
-% fruit/veg waste offset   = foodKgPerSeason ÷ 45 × 100
-% avoidable waste offset   = foodKgPerSeason ÷ 100 × 100
-% total food waste offset  = foodKgPerSeason ÷ 200 × 100
-Green Bin diversion (est.) = foodKgPerSeason × 0.80
-$ edible waste avoided     = (foodKgPerSeason ÷ 100) × $1,300 CAD
-```
-
-```bash
-curl http://localhost:8000/stats/toronto-food-waste
-curl "http://localhost:8000/impact/food-waste?foodKg=22.5"
-```
-
-Example: a garden yielding **22.5 kg** food/season offsets **50%** of the typical Toronto household’s annual fruit & veg waste, **22.5%** of avoidable waste, and keeps an estimated **18 kg** out of the Green Bin.
-
----
-
-## Pitch — what to say
-
-Use as a ≈2–3 min script. Swap in live numbers from your demo layout.
-
-### 1. Hook
-
-> “Toronto single-family homes throw away **over 200 kg of food every year** — more than **100 kg is avoidable**, and **fruits and vegetables are the #1 wasted food** at about **45 kg per household**. Almost **80%** of that still goes in the Green Bin. Canadians waste **$1,300+** of edible food at home annually. People want to grow their own food, but most don’t know *what* fits *their* yard, sun, or skill level.”
-
-### 2. Solution
-
-> “**PlotTwist** scans your yard, learns what you want to grow, and computes an **optimized planting layout** — space, sunlight, watering, companions, and **carbon impact**. When your dream garden doesn’t fit, we **negotiate** — that’s the plot twist.”
-
-### 3. Demo beat
-
-Walk: **Welcome → Scan → Preferences → Select → Results → Home / Garden**
-
-> “This garden grows **~X kg of food per season**, offsets **Y%** of typical Toronto fruit & veg waste, and saves **~Z kg CO₂e** — food plants only.”
-
-### 4. Why it’s credible
-
-- Yard scan → real grid (`yard-scan/`)
-- Optimizer on-device, tested (`optimizer/`)
-- Catalog verified vs OpenPlantDB + Perenual; live Open-Meteo; PlantNet ID
-- Honest carbon; Toronto baselines via `/impact/food-waste`
-
-### 5. Close
-
-> “We’re helping **Toronto households grow food that would otherwise be wasted**, with numbers tied to **City waste audits**. **Helping plants and people grow.**”
-
-### Sound bites
-
-- **Problem:** “The average Toronto home wastes **45 kg of produce a year** — we help you grow that instead.”
-- **Differentiator:** “When your garden doesn’t fit, we **negotiate**, not reject.”
-- **Impact:** “Every kg you grow is a kg that never hit the **Green Bin**.”
-- **Honesty:** “We only claim CO₂e on **food you actually yield**.”
-
-### What not to claim
-
-- Don’t say PlotTwist eliminates all household food waste — compare to baselines (45 / 100 / 200 kg).
-- Don’t conflate growing-vs-buying CO₂e with landfill methane unless modeled separately.
-- The **$1,300** figure is **Canadian national** context — say “estimated.”
