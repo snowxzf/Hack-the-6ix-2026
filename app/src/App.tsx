@@ -246,6 +246,29 @@ function isUnitDue(
   return days >= waterEveryDays;
 }
 
+/** Gating for the per-unit "+" watering button. Unlike isUnitDue (the scoring
+ * clock, anchored to planting), the button is available BY DEFAULT — a fresh
+ * plant can always be logged — and only goes on cooldown after a press:
+ * once watered, it refreshes waterEveryDays later. */
+function canLogWatering(
+  now: number,
+  lastWateredAt: number | undefined,
+  waterEveryDays: number,
+): boolean {
+  if (waterEveryDays <= 0) return false;
+  if (lastWateredAt == null) return true;
+  return now - lastWateredAt >= waterEveryDays * DAY_MS;
+}
+
+/** Whole days until the "+" button refreshes (≥1 while on cooldown). */
+function daysUntilWaterRefresh(
+  now: number,
+  lastWateredAt: number,
+  waterEveryDays: number,
+): number {
+  return Math.max(1, Math.ceil(waterEveryDays - (now - lastWateredAt) / DAY_MS));
+}
+
 function loadPersisted(): PersistedState | null {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -4598,9 +4621,7 @@ function DashboardScreen(props: {
           const dueCount = units.filter((p) => {
             const key = cellKey(p.origin[0], p.origin[1]);
             if (harvestedSet.has(key)) return false;
-            const wateringAnchor =
-              props.lastWateredAt[key] ?? props.unitPlantedAt[key] ?? props.plantedAt;
-            return isUnitDue(now, wateringAnchor, s.waterEveryDays);
+            return canLogWatering(now, props.lastWateredAt[key], s.waterEveryDays);
           }).length;
 
           return (
@@ -4644,15 +4665,13 @@ function DashboardScreen(props: {
                     const denom = harvest ?? 60;
                     const progress = Math.min(1, unitDays / denom);
                     const pct = Math.round(progress * 100);
-                    // Watering has its own anchor/clock, separate from the
-                    // harvest-progress one above: it shifts to lastWateredAt
-                    // once ever confirmed. Once due it STAYS due/clickable
-                    // (doesn't grey back out) until actually watered — missing
-                    // a day shouldn't hide the button, see isUnitDue().
-                    const wateringAnchor =
-                      props.lastWateredAt[key] ?? props.unitPlantedAt[key] ?? props.plantedAt;
+                    // The "+" button is available by default (new plants can
+                    // always be logged) and cools down for waterEveryDays
+                    // after each press — see canLogWatering(). Once available
+                    // again it STAYS clickable until pressed.
+                    const lastWatered = props.lastWateredAt[key];
                     const needsWater =
-                      !isEmpty && isUnitDue(now, wateringAnchor, s.waterEveryDays);
+                      !isEmpty && canLogWatering(now, lastWatered, s.waterEveryDays);
 
                     return (
                       <div
@@ -4678,7 +4697,9 @@ function DashboardScreen(props: {
                             title={
                               needsWater
                                 ? "Log watering this plant (+2 XP)"
-                                : `Not due yet — waters every ${s.waterEveryDays}d`
+                                : lastWatered != null
+                                  ? `Watered ✓ — refreshes in ~${daysUntilWaterRefresh(now, lastWatered, s.waterEveryDays)}d`
+                                  : `Waters every ${s.waterEveryDays}d`
                             }
                             onClick={() => props.onWaterUnit(key)}
                           >
