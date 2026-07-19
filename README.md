@@ -177,22 +177,21 @@ isn't set up.
 
 **Setup** (both env files are gitignored — copy the `.env.example`s):
 
-1. In the [Auth0 dashboard](https://manage.auth0.com), create:
-   - A **Single Page Application** — Allowed Callback/Logout/Web Origins:
-     `http://localhost:5173`. Copy its **Domain** and **Client ID**.
-   - An **API** (Applications → APIs → Create API) — any name, and copy its
-     **Identifier** (a URL-shaped string, e.g. `https://plottwist-api`).
-2. Repo root `.env`: set `AUTH0_DOMAIN` and `AUTH0_AUDIENCE` (the API
-   Identifier from step 1).
-3. `app/.env.local`: set `VITE_AUTH0_DOMAIN`, `VITE_AUTH0_CLIENT_ID`, and
-   `VITE_AUTH0_AUDIENCE` (must match `AUTH0_AUDIENCE` above).
+1. In the [Auth0 dashboard](https://manage.auth0.com), create a
+   **Single Page Application** — Allowed Callback/Logout/Web Origins:
+   `http://localhost:5173`. Copy its **Domain** and **Client ID**.
+   (No Auth0 API is required — the app uses ID tokens.)
+2. Repo root `.env`: set `AUTH0_DOMAIN`, `AUTH0_CLIENT_ID`, and
+   `AUTH0_AUDIENCE` to the SPA Client ID (same value for CLIENT_ID and AUDIENCE).
+3. `app/.env.local`: set `VITE_AUTH0_DOMAIN` and `VITE_AUTH0_CLIENT_ID`
+   (leave audience unset).
 4. Restart both the backend and `npm run dev`.
 
 **Backend** (`backend/auth.py`, `backend/main.py`): verifies the Auth0
-access token (JWKS/RS256) on every call, then stores one small profile
-doc per user — `{ username, xp, streakDays, friends[] }` — in Mongo, or
-in memory when `MONGODB_URI` isn't set (same demo-safe fallback as
-everything else in this API).
+ID token (JWKS/RS256) on every call, then stores one small profile
+doc per user — `{ username, xp, streakDays, friends[] }` — in MongoDB’s
+`clients` collection, or in memory when `MONGODB_URI` isn't set (same
+demo-safe fallback as everything else in this API).
 
 | Endpoint | Purpose |
 |---|---|

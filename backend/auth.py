@@ -18,7 +18,9 @@ from jose import jwt
 from jose.exceptions import JWTError
 
 AUTH0_DOMAIN = os.getenv("AUTH0_DOMAIN", "")
-AUTH0_AUDIENCE = os.getenv("AUTH0_AUDIENCE", "")
+# Prefer SPA client id (ID-token aud). Fall back to AUTH0_AUDIENCE for older API setup.
+AUTH0_CLIENT_ID = os.getenv("AUTH0_CLIENT_ID", "")
+AUTH0_AUDIENCE = os.getenv("AUTH0_AUDIENCE", "") or AUTH0_CLIENT_ID
 ALGORITHMS = ["RS256"]
 
 AUTH_CONFIGURED = bool(AUTH0_DOMAIN and AUTH0_AUDIENCE)
@@ -49,7 +51,7 @@ def _signing_key(token: str) -> dict[str, Any]:
 
 
 class CurrentUser:
-    """Minimal identity extracted from a verified Auth0 access token."""
+    """Minimal identity extracted from a verified Auth0 ID token."""
 
     def __init__(self, sub: str, email: str | None = None) -> None:
         self.sub = sub

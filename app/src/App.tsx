@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent, type PointerEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent,
+  type PointerEvent,
+} from "react";
 import { optimizeGarden } from "../../optimizer/src/index";
 import type {
   GardenGrid,
@@ -63,6 +71,12 @@ import { HomePanel } from "./components/HomePanel";
 import { LearnPanel } from "./components/LearnPanel";
 import { PlantIdentifyFlow } from "./components/PlantIdentifyFlow";
 import { ProfilePanel } from "./components/ProfilePanel";
+import {
+  clearGuestStarted,
+  loadGuestStarted,
+  saveGuestStarted,
+  WelcomeGate,
+} from "./components/WelcomeGate";
 import { SearchPanel } from "./components/SearchPanel";
 import { SpeciesSelectOptions } from "./components/SpeciesSelectOptions";
 import { WeatherBackground } from "./components/WeatherBackground";
@@ -224,9 +238,15 @@ export function App() {
   const [activeGardenId, setActiveGardenId] = useState<string | null>(
     saved?.activeGardenId ?? null,
  );
-  // "Onboarded" now just means at least one garden has ever been confirmed : 
+  // "Onboarded" now just means at least one garden has ever been confirmed :
   // no separate flag to drift out of sync with the gardens list.
   const onboarded = gardens.length > 0;
+  // Guest chose "Start from beginning" (or returned via Auth0) before any garden.
+  const [guestStarted, setGuestStarted] = useState(() => loadGuestStarted());
+  const beginAsGuest = useCallback(() => {
+    saveGuestStarted();
+    setGuestStarted(true);
+  }, []);
 
   const [step, setStep] = useState<Step>(saved?.step ?? "scan");
   const [activeTab, setActiveTab] = useState<Tab>(() => {
@@ -826,6 +846,7 @@ export function App() {
     } catch {
       // best-effort: if storage is unavailable there's nothing to clear
     }
+    clearGuestStarted();
     resetDevClock();
     resetDevWeatherOverride();
     window.location.reload();
@@ -883,6 +904,9 @@ export function App() {
       activeTab === "garden" ||
       activeTab === "planner");
 
+  // First open: choose Log in or Start from beginning before scan/setup.
+  const showWelcome = !onboarded && !guestStarted;
+
   return (
     <WeatherProvider plantIds={weatherPlantIds}>
       <WeatherBackground />
@@ -898,6 +922,10 @@ export function App() {
         <CelebrationPopup celebration={celebration} onDismiss={() => setCelebration(null)} />
       )}
       <div className="app-scroll">
+        {showWelcome ? (
+          <WelcomeGate onStart={beginAsGuest} />
+        ) : (
+          <>
         {showFlowChrome && (
           <>
             <div className="flow-header">
@@ -1163,6 +1191,8 @@ export function App() {
             xp={xp}
             streakDays={streakDays}
           />
+        )}
+          </>
         )}
       </div>
 

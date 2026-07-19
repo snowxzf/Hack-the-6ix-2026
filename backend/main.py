@@ -148,8 +148,9 @@ def gardens_coll() -> Collection:
     return get_db()["gardens"]
 
 
-def users_coll() -> Collection:
-    return get_db()["users"]
+def clients_coll() -> Collection:
+    """All Auth0-backed app users live in the Mongo `clients` collection."""
+    return get_db()["clients"]
 
 
 # ── Demo-safe fallbacks ──────────────────────────────────────────────
@@ -1491,10 +1492,10 @@ def _user_doc_public(doc: dict[str, Any]) -> dict[str, Any]:
 
 
 def get_or_create_user(sub: str, email: str | None) -> dict[str, Any]:
-    """Look up a user by Auth0 sub, creating a bare (usernameless) doc on first login."""
+    """Look up a client by Auth0 sub, creating a bare (usernameless) doc on first login."""
     if MONGODB_URI:
         try:
-            doc = users_coll().find_one({"authId": sub})
+            doc = clients_coll().find_one({"authId": sub})
             if doc:
                 return strip_mongo_id(doc)  # type: ignore[return-value]
             now = datetime.now(timezone.utc).isoformat()
@@ -1509,7 +1510,7 @@ def get_or_create_user(sub: str, email: str | None) -> dict[str, Any]:
                 "createdAt": now,
                 "updatedAt": now,
             }
-            users_coll().insert_one(dict(new_doc))
+            clients_coll().insert_one(dict(new_doc))
             return new_doc
         except Exception:  # noqa: BLE001
             pass
@@ -1536,7 +1537,7 @@ def save_user(doc: dict[str, Any]) -> None:
     doc["updatedAt"] = datetime.now(timezone.utc).isoformat()
     if MONGODB_URI:
         try:
-            users_coll().update_one({"authId": doc["authId"]}, {"$set": doc}, upsert=True)
+            clients_coll().update_one({"authId": doc["authId"]}, {"$set": doc}, upsert=True)
             return
         except Exception:  # noqa: BLE001
             pass
@@ -1549,7 +1550,7 @@ def find_user_by_username(username: str) -> dict[str, Any] | None:
     lower = username.strip().lower()
     if MONGODB_URI:
         try:
-            doc = users_coll().find_one({"usernameLower": lower})
+            doc = clients_coll().find_one({"usernameLower": lower})
             if doc:
                 return strip_mongo_id(doc)
         except Exception:  # noqa: BLE001
@@ -1561,7 +1562,7 @@ def find_user_by_username(username: str) -> dict[str, Any] | None:
 def find_user_by_auth_id(auth_id: str) -> dict[str, Any] | None:
     if MONGODB_URI:
         try:
-            doc = users_coll().find_one({"authId": auth_id})
+            doc = clients_coll().find_one({"authId": auth_id})
             if doc:
                 return strip_mongo_id(doc)
         except Exception:  # noqa: BLE001

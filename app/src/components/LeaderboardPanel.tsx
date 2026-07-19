@@ -12,8 +12,9 @@ import {
 } from "../api";
 import { AUTH0_CONFIGURED } from "../lib/auth0Config";
 
+/** ID token (not API access token) — login skips Auth0 API audience grants. */
 function useAccessToken(isAuthenticated: boolean): string | null {
-  const { getAccessTokenSilently } = useAuth0();
+  const { getIdTokenClaims } = useAuth0();
   const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
@@ -22,9 +23,10 @@ function useAccessToken(isAuthenticated: boolean): string | null {
       return;
     }
     let cancelled = false;
-    getAccessTokenSilently()
-      .then((t) => {
-        if (!cancelled) setToken(t);
+    getIdTokenClaims()
+      .then((claims) => {
+        const raw = claims?.__raw ?? null;
+        if (!cancelled) setToken(raw);
       })
       .catch(() => {
         if (!cancelled) setToken(null);
@@ -32,7 +34,7 @@ function useAccessToken(isAuthenticated: boolean): string | null {
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated, getAccessTokenSilently]);
+  }, [isAuthenticated, getIdTokenClaims]);
 
   return token;
 }
@@ -151,7 +153,16 @@ function AuthedLeaderboard(props: { token: string; xp: number; streakDays: numbe
         </p>
         <button
           type="button"
-          onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })}
+          onClick={() =>
+            logout({
+              logoutParams: {
+                returnTo:
+                  window.location.hostname === "127.0.0.1"
+                    ? `${window.location.protocol}//localhost${window.location.port ? `:${window.location.port}` : ""}`
+                    : window.location.origin,
+              },
+            })
+          }
           className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
         >
           Log out
@@ -204,8 +215,8 @@ function AuthedLeaderboard(props: { token: string; xp: number; streakDays: numbe
   );
 }
 
-/** Friends + leaderboard. Local XP/streak tracking works with no login at all;
- *  this section only unlocks competing with friends once you sign in. */
+/** Friends + leaderboard. Local XP/streak tracking works with no account;
+ *  this section unlocks friends once you Sign up after garden setup. */
 export function LeaderboardPanel(props: { xp: number; streakDays: number }) {
   const { isAuthenticated, isLoading, loginWithRedirect, error } = useAuth0();
   const token = useAccessToken(AUTH0_CONFIGURED && isAuthenticated);
@@ -226,7 +237,7 @@ export function LeaderboardPanel(props: { xp: number; streakDays: number }) {
         ) : !isAuthenticated ? (
           <div className="space-y-2">
             <p className="text-sm text-muted-foreground">
-              Log in to add friends and compare XP.
+              Create an account to save your progress, add friends, and compare XP.
             </p>
             {error && (
               <p className="text-xs text-destructive">
@@ -235,10 +246,14 @@ export function LeaderboardPanel(props: { xp: number; streakDays: number }) {
             )}
             <button
               type="button"
-              onClick={() => loginWithRedirect()}
+              onClick={() =>
+                loginWithRedirect({
+                  authorizationParams: { screen_hint: "signup" },
+                })
+              }
               className="bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
             >
-              Log in
+              Sign up
             </button>
           </div>
         ) : !token ? (
