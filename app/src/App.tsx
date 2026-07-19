@@ -623,6 +623,25 @@ export function App() {
     setResult(res);
   }
 
+  /** Blank layout for DIY planting — skip the optimizer until the user asks. */
+  function emptyLayoutResult(g: GardenGrid = requestGarden()): OptimizerResponse {
+    const usable = g.cells.filter(
+      (c) => c.state === "selected" || c.state === "obstacle_movable",
+    ).length;
+    return {
+      feasible: true,
+      conflicts: [],
+      counts: {},
+      placements: [],
+      beds: [],
+      existingBeds: [],
+      carbon: { kgCo2eSeason: 0, foodKgPerSeason: 0, kmDrivingEquiv: 0 },
+      swaps: [],
+      tasks: [],
+      stats: { usableCells: usable, usedCells: 0, utilization: 0, solveMs: 0 },
+    };
+  }
+
   /** Applying a swap = ban the old species AND promise its freed area to the
    *  new one (as a hard target): otherwise greedy refill may hand the space
    *  to something with worse carbon and the counter would drop on screen. */
@@ -1055,10 +1074,16 @@ export function App() {
                 selected={selected}
                 setSelected={setSelected}
                 paintableKeys={paintableKeys}
-                onNext={() => {
+                onOptimize={() => {
                   setBanned([]);
                   setSwapHistory([]);
                   run([]);
+                  setStep("results");
+                }}
+                onDone={() => {
+                  setBanned([]);
+                  setSwapHistory([]);
+                  setResult(emptyLayoutResult());
                   setStep("results");
                 }}
                 onBack={() => setStep("prefs")}
@@ -1104,6 +1129,28 @@ export function App() {
                 careAboutCarbon={carbonWeight > 0}
                 onSwap={applySwap}
                 onSpaceReplace={applySpaceReplace}
+                onAddPlants={(speciesId, count) => {
+                  const have = result?.counts[speciesId] ?? 0;
+                  const nextTargets = [
+                    ...targets.filter((t) => t.speciesId !== speciesId),
+                    { speciesId, min: have + Math.max(1, count) },
+                  ];
+                  // Lock every other currently placed species so adding one
+                  // plant doesn't reshuffle the whole DIY layout.
+                  for (const [id, n] of Object.entries(result?.counts ?? {})) {
+                    if (id === speciesId || (n ?? 0) <= 0) continue;
+                    if (!nextTargets.some((t) => t.speciesId === id)) {
+                      nextTargets.push({ speciesId: id, min: n });
+                    }
+                  }
+                  setTargets(nextTargets);
+                  run(banned, nextTargets);
+                }}
+                onOptimize={() => {
+                  setBanned([]);
+                  setSwapHistory([]);
+                  run([]);
+                }}
                 onUndoSwap={swapHistory.length > 0 ? undoSwap : undefined}
                 harvestedUnits={onboarded && !editingLayout ? new Set(harvestedUnits) : undefined}
                 clickMode={onboarded && !editingLayout ? clickMode : null}
@@ -3372,7 +3419,10 @@ function SelectScreen(props: {
   selected: Set<string>;
   setSelected: (s: Set<string>) => void;
   paintableKeys: string[];
-  onNext: () => void;
+  /** Run the optimizer, then go to Layout. */
+  onOptimize: () => void;
+  /** Skip optimize — blank layout you fill yourself. */
+  onDone: () => void;
   onBack: () => void;
   skippable?: boolean;
 }) {
@@ -3383,6 +3433,7 @@ function SelectScreen(props: {
         <h2>Where can we plant?</h2>
         <p className="muted">
           Drag to paint the area you're giving us. Dashed cells are opted out.
+          Then optimize, or tap <b>Done</b> to place plants yourself on Layout.
         </p>
         <GridView
           garden={props.garden}
@@ -3400,32 +3451,50 @@ function SelectScreen(props: {
           </span>
           <span className="row">
             <button
+              type="button"
               className="small secondary"
               onClick={() => props.setSelected(new Set(props.paintableKeys))}
             >
               Select all
             </button>
-            <button className="small secondary" onClick={() => props.setSelected(new Set())}>
+            <button
+              type="button"
+              className="small secondary"
+              onClick={() => props.setSelected(new Set())}
+            >
               Clear
             </button>
           </span>
         </div>
       </div>
       <div className="row">
-        <button className="secondary" onClick={props.onBack}>
+        <button type="button" className="secondary" onClick={props.onBack}>
           ← Back
         </button>
-        <button disabled={props.selected.size === 0} onClick={props.onNext}>
+        <button
+          type="button"
+          disabled={props.selected.size === 0}
+          onClick={props.onOptimize}
+        >
           Optimize my garden
         </button>
+        <button
+          type="button"
+          className="secondary"
+          disabled={props.selected.size === 0}
+          onClick={props.onDone}
+          title="Skip optimize and place plants yourself"
+        >
+          Done
+        </button>
         {props.skippable && (
-          <button className="secondary" onClick={props.onNext}>
+          <button type="button" className="secondary" onClick={props.onDone}>
             Skip → keep painted area
           </button>
- )}
+        )}
       </div>
     </>
- );
+  );
 }
 
 /* ─────────────── 5. Results / layout playground ─────────────── */
@@ -3438,6 +3507,10 @@ function ResultsScreen(props: {
   onSwap: (out: string, inId: string) => void;
   /** Replace N units of one plant with another, using cell-area conversion. */
   onSpaceReplace?: (outId: string, outUnits: number, inId: string) => void;
+  /** Add planting units without wiping the rest of a DIY layout. */
+  onAddPlants?: (speciesId: string, count: number) => void;
+  /** Run (or re-run) the full optimizer on the painted space. */
+  onOptimize?: () => void;
   onUndoSwap?: () => void;
   onEdit?: () => void;
   onTweak?: () => void;
@@ -3453,8 +3526,12 @@ function ResultsScreen(props: {
   const { profile } = useUserProfile();
   const showGreenerSwaps = profile.greenerSwapsEnabled;
   const total = result.placements.length;
+  const isBlank = total === 0;
   const [reveal, setReveal] = useState(0);
   const [changing, setChanging] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [addId, setAddId] = useState("");
+  const [addCount, setAddCount] = useState(1);
   const [outId, setOutId] = useState("");
   const [inId, setInId] = useState("");
   const [outUnits, setOutUnits] = useState(1);
@@ -3484,6 +3561,9 @@ function ResultsScreen(props: {
   // Reset the change form when the layout updates after a replace.
   useEffect(() => {
     setChanging(false);
+    setAdding(false);
+    setAddId("");
+    setAddCount(1);
     setOutId("");
     setInId("");
     setOutUnits(1);
@@ -3549,7 +3629,13 @@ function ResultsScreen(props: {
       )}
 
       <div className="card">
-        <h2>Your optimized layout</h2>
+        <h2>{isBlank ? "Your planting layout" : "Your optimized layout"}</h2>
+        {isBlank && (
+          <p className="muted">
+            Empty for now — add plants yourself, or tap <b>Optimize my layout</b> to fill the
+            space automatically. You can still tweak after optimizing.
+          </p>
+        )}
         <GridView
           garden={props.garden}
           placements={result.placements}
@@ -3595,21 +3681,89 @@ function ResultsScreen(props: {
           </div>
         )}
 
-        {props.onSpaceReplace && !changing && (
+        {(props.onAddPlants || props.onSpaceReplace) && !changing && !adding && (
           <div className="row" style={{ marginTop: 10 }}>
-            <button
-              type="button"
-              className="secondary small"
-              onClick={() => {
-                const first = speciesIds[0] ?? "";
-                setOutId(first);
-                setOutUnits(1);
-                setInId("");
-                setChanging(true);
-              }}
+            {props.onAddPlants && (
+              <button
+                type="button"
+                className="secondary small"
+                onClick={() => {
+                  setAddId("");
+                  setAddCount(1);
+                  setAdding(true);
+                }}
+              >
+                Add plants
+              </button>
+            )}
+            {props.onSpaceReplace && !isBlank && (
+              <button
+                type="button"
+                className="secondary small"
+                onClick={() => {
+                  const first = speciesIds[0] ?? "";
+                  setOutId(first);
+                  setOutUnits(1);
+                  setInId("");
+                  setChanging(true);
+                }}
+              >
+                I want to change something
+              </button>
+            )}
+          </div>
+        )}
+
+        {props.onAddPlants && adding && (
+          <div
+            style={{
+              marginTop: 12,
+              padding: 12,
+              border: "1px solid var(--border, #ddd)",
+              background: "rgba(255,255,255,0.5)",
+            }}
+          >
+            <h3 style={{ margin: "0 0 8px", fontSize: 16 }}>Add plants</h3>
+            <p className="muted" style={{ marginTop: 0 }}>
+              Pick a plant and how many units to place. Existing plants stay put.
+            </p>
+            <label className="tiny" style={{ display: "block", marginBottom: 4 }}>
+              Plant
+            </label>
+            <select
+              value={addId}
+              onChange={(e) => setAddId(e.target.value)}
+              style={{ width: "100%", marginBottom: 8 }}
             >
-              I want to change something
-            </button>
+              <option value="">Choose a plant…</option>
+              <SpeciesSelectOptions catalog={CATALOG} />
+            </select>
+            <label className="tiny" style={{ display: "block", marginBottom: 4 }}>
+              How many units
+            </label>
+            <input
+              type="number"
+              min={1}
+              max={99}
+              value={addCount}
+              onChange={(e) => setAddCount(Math.max(1, Number(e.target.value) || 1))}
+              style={{ width: 72, marginBottom: 8 }}
+            />
+            <div className="row">
+              <button
+                type="button"
+                disabled={!addId}
+                onClick={() => {
+                  if (!addId) return;
+                  props.onAddPlants!(addId, addCount);
+                }}
+              >
+                Add to layout
+              </button>
+              <button type="button" className="secondary" onClick={() => setAdding(false)}>
+                Cancel
+              </button>
+            </div>
           </div>
         )}
 
@@ -3755,19 +3909,19 @@ function ResultsScreen(props: {
           </div>
         </div>
         <p className="tiny">
-          {Math.round(result.stats.utilization * 100)}% of your space used · solved in{" "}
-          {result.stats.solveMs} ms
+          {Math.round(result.stats.utilization * 100)}% of your space used
+          {!isBlank ? ` · solved in ${result.stats.solveMs} ms` : " · DIY layout"}
           {!careAboutCarbon ? " · carbon ignored (your preference)" : ""}
         </p>
       </div>
 
       {props.onUndoSwap && (
         <div className="row">
-          <button className="small secondary" onClick={props.onUndoSwap}>
+          <button type="button" className="small secondary" onClick={props.onUndoSwap}>
             ↩ Undo last change
           </button>
         </div>
- )}
+      )}
 
       {showGreenerSwaps && result.swaps.length > 0 && (
         <div className="card info">
@@ -3798,25 +3952,38 @@ function ResultsScreen(props: {
  )}
 
       <div className="row">
+        {props.onTweak && (
+          <button type="button" className="secondary" onClick={props.onTweak}>
+            ← Tweak space
+          </button>
+        )}
+        {props.onOptimize && (
+          <button
+            type="button"
+            className={isBlank || !props.onConfirm ? undefined : "secondary"}
+            onClick={props.onOptimize}
+          >
+            Optimize my layout
+          </button>
+        )}
         {props.onEdit && (
-          <button className="secondary" onClick={props.onEdit}>
+          <button type="button" className="secondary" onClick={props.onEdit}>
             Edit my garden
           </button>
         )}
         {props.onSeeProgress && (
-          <button className="secondary" onClick={props.onSeeProgress}>
+          <button type="button" className="secondary" onClick={props.onSeeProgress}>
             See plant progress
           </button>
         )}
-        {props.onTweak && (
-          <button className="secondary" onClick={props.onTweak}>
-            ← Tweak space
+        {props.onConfirm && (
+          <button type="button" onClick={props.onConfirm}>
+            Confirm my garden
           </button>
         )}
-        {props.onConfirm && <button onClick={props.onConfirm}>Confirm my garden</button>}
       </div>
     </>
- );
+  );
 }
 
 /** Live Open-Meteo forecast + per-plant tolerance checks via backend /weather.
