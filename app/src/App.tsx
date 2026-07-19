@@ -3895,7 +3895,6 @@ function SelectScreen(props: {
         <h2>Where can we plant?</h2>
         <p className="muted">
           Drag to paint the area you're giving us. Dashed cells are opted out.
-          Then optimize, or tap <b>Done</b> to place plants yourself on Layout.
         </p>
         <GridView
           garden={props.garden}
@@ -3939,15 +3938,6 @@ function SelectScreen(props: {
           onClick={props.onOptimize}
         >
           Optimize my garden
-        </button>
-        <button
-          type="button"
-          className="secondary"
-          disabled={props.selected.size === 0}
-          onClick={props.onDone}
-          title="Skip optimize and place plants yourself"
-        >
-          Done
         </button>
         {props.skippable && (
           <button type="button" className="secondary" onClick={props.onDone}>
