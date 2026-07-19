@@ -8,10 +8,11 @@ import {
   type PointerEvent,
 } from "react";
 import { Pencil, Trash2 } from "lucide-react";
-import { optimizeGarden } from "../../optimizer/src/index";
+import { carbonReport, optimizeGarden } from "../../optimizer/src/index";
 import type {
   GardenGrid,
   OptimizerResponse,
+  PlacementInstance,
   Preferences,
   SkillTier,
   Target,
@@ -292,7 +293,14 @@ export function App() {
   const [draftName, setDraftName] = useState(saved?.draftName ?? "My Garden");
   // Ephemeral (not persisted): which grid-click action, if any, is armed.
   // Lets the user tap multiple plants in a row without re-arming each time.
-  const [clickMode, setClickMode] = useState<"harvest" | "reseed" | null>(null);
+  // "plan-add"/"plan-remove" are the Plan tab's "Edit plot" click-to-place
+  // and click-to-remove modes (manual, exact-cell edits — no re-optimize).
+  const [clickMode, setClickMode] = useState<
+    "harvest" | "reseed" | "plan-add" | "plan-remove" | null
+  >(null);
+  // Which species "plan-add" mode will place on the next grid click.
+  const [planAddSpeciesId, setPlanAddSpeciesId] = useState<string | null>(null);
+  const [planEditError, setPlanEditError] = useState<string | null>(null);
   const [photo, setPhoto] = useState<string | null>(null);
   const [garden, setGarden] = useState<GardenGrid | null>(saved?.garden ?? null);
   const [scanInfo, setScanInfo] = useState<ScanDiagnostics | null>(null);
@@ -308,6 +316,10 @@ export function App() {
   const [banned, setBanned] = useState<string[]>(saved?.banned ?? []);
   const [swapHistory, setSwapHistory] = useState<SwapSnapshot[]>(saved?.swapHistory ?? []);
   const [result, setResult] = useState<OptimizerResponse | null>(saved?.result ?? null);
+  // Bumped only by a fresh optimizer run (never by an "Edit plot" manual
+  // add/remove) so the reveal animation replays on a new layout but not on
+  // every single-cell tweak.
+  const [resultGeneration, setResultGeneration] = useState(0);
   const [plantedAt, setPlantedAt] = useState<number | null>(saved?.plantedAt ?? null);
   const [cloudId, setCloudId] = useState<string | null>(saved?.cloudId ?? null);
   const [harvestedUnits, setHarvestedUnits] = useState<string[]>(saved?.harvestedUnits ?? []);
@@ -624,6 +636,7 @@ export function App() {
       catalog: mergeCatalogWithSaved(CATALOG).filter((s) => !bannedList.includes(s.id)),
     });
     setResult(res);
+    setResultGeneration((g) => g + 1);
   }
 
   /** Blank layout for DIY planting — skip the optimizer until the user asks. */
@@ -667,6 +680,12 @@ export function App() {
     setTargets(nextTargets);
     setBanned(nextBanned);
     run(nextBanned, nextTargets);
+    // Swapping doesn't lock every other species' position, so the solver is
+    // free to reshuffle placements beyond just outId/inId: clear per-unit
+    // tracking for the same reason as a full re-optimize (see onOptimize).
+    setHarvestedUnits([]);
+    setUnitPlantedAt({});
+    setLastWateredAt({});
   }
 
   function undoSwap() {
@@ -676,45 +695,6 @@ export function App() {
     setTargets(prev.targets);
     setBanned(prev.banned);
     run(prev.banned, prev.targets);
-  }
-
-  /** After optimize: replace N units of one plant with as many of another as
-   *  the freed cells allow (space conversion). Other plants stay locked. */
-  function applySpaceReplace(outId: string, outUnits: number, inId: string) {
-    if (!result || outId === inId) return;
-    refreshByIdFromCatalog();
-    const outS = byId.get(outId);
-    const inS = byId.get(inId);
-    if (!outS || !inS) return;
-
-    const have = result.counts[outId] ?? 0;
-    const replaceN = Math.max(1, Math.min(have, Math.floor(outUnits)));
-    const outArea = outS.cellsPerPlant[0] * outS.cellsPerPlant[1];
-    const inArea = inS.cellsPerPlant[0] * inS.cellsPerPlant[1];
-    const freed = replaceN * outArea;
-    const inGain = Math.floor(freed / inArea);
-    if (inGain < 1) return;
-
-    const nextOut = have - replaceN;
-    const nextTargets: Target[] = [];
-    for (const [id, count] of Object.entries(result.counts)) {
-      if (id === outId || id === inId) continue;
-      if ((count ?? 0) > 0) nextTargets.push({ speciesId: id, min: count });
-    }
-    if (nextOut > 0) nextTargets.push({ speciesId: outId, min: nextOut });
-    nextTargets.push({
-      speciesId: inId,
-      min: (result.counts[inId] ?? 0) + inGain,
-    });
-
-    let nextBanned = banned.filter((b) => b !== inId);
-    if (nextOut <= 0) nextBanned = [...nextBanned.filter((b) => b !== outId), outId];
-    else nextBanned = nextBanned.filter((b) => b !== outId);
-
-    setSwapHistory([...swapHistory, { targets, banned }]);
-    setTargets(nextTargets);
-    setBanned(nextBanned);
-    run(nextBanned, nextTargets);
   }
 
   /** Loads a saved garden's data into the working copy: the shared core of
@@ -732,6 +712,7 @@ export function App() {
     setBanned(g.banned);
     setSwapHistory(g.swapHistory);
     setResult(g.result);
+    setResultGeneration((n) => n + 1);
     setPlantedAt(g.plantedAt);
     setCloudId(g.cloudId);
     setHarvestedUnits(g.harvestedUnits ?? []);
@@ -821,6 +802,121 @@ export function App() {
   function handleUnitClick(unitKey: string) {
     if (clickMode === "harvest") harvestUnit(unitKey);
     else if (clickMode === "reseed") reseedUnit(unitKey);
+    else if (clickMode === "plan-remove") removeUnitAt(unitKey);
+    else if (clickMode === "plan-add" && planAddSpeciesId) addUnitAt(planAddSpeciesId, unitKey);
+  }
+
+  /** Recomputes counts/beds/carbon/stats from a direct placements edit and
+   *  locks every resulting count as a target, so a later "Optimize my
+   *  layout" click doesn't immediately undo the manual edit. */
+  function applyManualPlacements(nextPlacements: PlacementInstance[]) {
+    if (!result) return;
+    refreshByIdFromCatalog();
+    const counts: Record<string, number> = {};
+    for (const p of nextPlacements) counts[p.speciesId] = (counts[p.speciesId] ?? 0) + 1;
+    const beds = Object.entries(counts).map(([speciesId, count]) => ({
+      speciesId,
+      count,
+      cells: nextPlacements
+        .filter((p) => p.speciesId === speciesId)
+        .flatMap((p) => p.cells),
+    }));
+    const carbon = carbonReport(new Map(Object.entries(counts)), mergeCatalogWithSaved(CATALOG));
+    const usedCells = nextPlacements.reduce((sum, p) => sum + p.cells.length, 0);
+    const usableCells = result.stats.usableCells;
+    setResult({
+      ...result,
+      placements: nextPlacements,
+      counts,
+      beds,
+      carbon,
+      stats: {
+        ...result.stats,
+        usedCells,
+        utilization:
+          usableCells === 0 ? 0 : Math.round((usedCells / usableCells) * 1000) / 1000,
+      },
+    });
+    setTargets(Object.entries(counts).map(([speciesId, n]) => ({ speciesId, min: n })));
+  }
+
+  /** "Edit plot" → remove: drops the exact unit occupying this origin.
+   *  Every other placement's position is untouched (no re-optimize). Also
+   *  clears this unit's watering/harvest tracking so the Garden tab doesn't
+   *  hang onto stale state for a spot that no longer has a plant — and so a
+   *  different plant added at the same coordinates later doesn't inherit it. */
+  function removeUnitAt(unitKey: string) {
+    if (!result) return;
+    setPlanEditError(null);
+    const placement = result.placements.find(
+      (p) => cellKey(p.origin[0], p.origin[1]) === unitKey,
+    );
+    if (!placement) return;
+    applyManualPlacements(result.placements.filter((p) => p !== placement));
+    setHarvestedUnits((h) => h.filter((k) => k !== unitKey));
+    setUnitPlantedAt((r) => {
+      if (!(unitKey in r)) return r;
+      const next = { ...r };
+      delete next[unitKey];
+      return next;
+    });
+    setLastWateredAt((w) => {
+      if (!(unitKey in w)) return w;
+      const next = { ...w };
+      delete next[unitKey];
+      return next;
+    });
+  }
+
+  /** "Edit plot" → add: places one unit of the chosen species anchored at
+   *  the clicked empty cell, if its footprint fits without overlap. */
+  function addUnitAt(speciesId: string, originKey: string) {
+    if (!result || !garden) return;
+    setPlanEditError(null);
+    refreshByIdFromCatalog();
+    const species = byId.get(speciesId);
+    if (!species) return;
+    const [r, c] = originKey.split(",").map(Number);
+    const [w, h] = species.cellsPerPlant;
+
+    const g = requestGarden();
+    const usable = new Set(
+      g.cells
+        .filter((cell) => cell.state === "selected" || cell.state === "obstacle_movable")
+        .map((cell) => cellKey(cell.r, cell.c)),
+    );
+    const occupied = new Set(
+      result.placements.flatMap((p) => p.cells.map(([pr, pc]) => cellKey(pr, pc))),
+    );
+
+    const cells: [number, number][] = [];
+    for (let dr = 0; dr < h; dr++) {
+      for (let dc = 0; dc < w; dc++) {
+        const rr = r + dr;
+        const cc = c + dc;
+        const k = cellKey(rr, cc);
+        if (!usable.has(k) || occupied.has(k)) {
+          setPlanEditError(
+            `${species.name} needs a clear ${w}×${h} spot — that one doesn't fit.`,
+          );
+          return;
+        }
+        cells.push([rr, cc]);
+      }
+    }
+    const placement: PlacementInstance = { speciesId, origin: [r, c], w, h, cells };
+    applyManualPlacements([...result.placements, placement]);
+    // Fresh unit: start its own growth/watering clock now (don't inherit
+    // the garden's overall plantedAt, and clear any stale "harvested" flag
+    // a previous, now-gone plant may have left at this exact spot).
+    setHarvestedUnits((h) => h.filter((k) => k !== originKey));
+    setUnitPlantedAt((r2) => ({ ...r2, [originKey]: devNow() }));
+    setLastWateredAt((w2) => {
+      if (!(originKey in w2)) return w2;
+      const next = { ...w2 };
+      delete next[originKey];
+      return next;
+    });
   }
 
   /** The Dashboard's garden dropdown only ever appears in plain view mode
@@ -1088,6 +1184,7 @@ export function App() {
                   setBanned([]);
                   setSwapHistory([]);
                   setResult(emptyLayoutResult());
+                  setResultGeneration((n) => n + 1);
                   setStep("results");
                 }}
                 onBack={() => setStep("prefs")}
@@ -1130,34 +1227,38 @@ export function App() {
               <ResultsScreen
                 garden={requestGarden()}
                 result={result}
+                revealKey={resultGeneration}
                 careAboutCarbon={carbonWeight > 0}
                 onSwap={applySwap}
-                onSpaceReplace={applySpaceReplace}
-                onAddPlants={(speciesId, count) => {
-                  const have = result?.counts[speciesId] ?? 0;
-                  const nextTargets = [
-                    ...targets.filter((t) => t.speciesId !== speciesId),
-                    { speciesId, min: have + Math.max(1, count) },
-                  ];
-                  // Lock every other currently placed species so adding one
-                  // plant doesn't reshuffle the whole DIY layout.
-                  for (const [id, n] of Object.entries(result?.counts ?? {})) {
-                    if (id === speciesId || (n ?? 0) <= 0) continue;
-                    if (!nextTargets.some((t) => t.speciesId === id)) {
-                      nextTargets.push({ speciesId: id, min: n });
-                    }
-                  }
-                  setTargets(nextTargets);
-                  run(banned, nextTargets);
+                onSetClickMode={(mode) => {
+                  setPlanEditError(null);
+                  if (!mode) setPlanAddSpeciesId(null);
+                  setClickMode(mode);
                 }}
+                onSetPlanAddSpecies={setPlanAddSpeciesId}
+                planAddSpeciesId={planAddSpeciesId}
+                planEditError={planEditError}
                 onOptimize={() => {
                   setBanned([]);
                   setSwapHistory([]);
                   run([]);
+                  // A full re-optimize can move every plant to new
+                  // coordinates: clear per-unit watering/harvest history so
+                  // it can't attach itself to a different plant that lands
+                  // at the same grid position by coincidence.
+                  setHarvestedUnits([]);
+                  setUnitPlantedAt({});
+                  setLastWateredAt({});
                 }}
                 onUndoSwap={swapHistory.length > 0 ? undoSwap : undefined}
                 harvestedUnits={onboarded && !editingLayout ? new Set(harvestedUnits) : undefined}
-                clickMode={onboarded && !editingLayout ? clickMode : null}
+                clickMode={
+                  clickMode === "plan-add" || clickMode === "plan-remove"
+                    ? clickMode
+                    : onboarded && !editingLayout
+                      ? clickMode
+                      : null
+                }
                 onUnitClick={handleUnitClick}
                 onEdit={
                   onboarded && !editingLayout
@@ -1209,6 +1310,15 @@ export function App() {
                           ]);
                           setActiveGardenId(id);
                         }
+                        // Whether brand-new or an existing garden that just
+                        // went through "Start over" (re-scan/re-optimize),
+                        // the resulting layout is effectively new: clear
+                        // per-unit watering/harvest history so it can't
+                        // carry over onto a different plant that happens to
+                        // land at the same grid coordinates.
+                        setHarvestedUnits([]);
+                        setUnitPlantedAt({});
+                        setLastWateredAt({});
                         setPlantedAt(effectivePlantedAt);
                         setEditingLayout(false);
                         setActiveTab("dashboard");
@@ -3659,13 +3769,19 @@ function SelectScreen(props: {
 function ResultsScreen(props: {
   garden: GardenGrid;
   result: OptimizerResponse;
+  /** Bumped only by a fresh optimizer run: the placement-reveal animation
+   *  keys off this, not the result itself, so a manual add/remove edit
+   *  updates the grid instantly without replaying the whole reveal. */
+  revealKey?: number;
   /** When false, carbon is ignored in picks: hide CO₂e stats & greener swaps. */
   careAboutCarbon?: boolean;
   onSwap: (out: string, inId: string) => void;
-  /** Replace N units of one plant with another, using cell-area conversion. */
-  onSpaceReplace?: (outId: string, outUnits: number, inId: string) => void;
-  /** Add planting units without wiping the rest of a DIY layout. */
-  onAddPlants?: (speciesId: string, count: number) => void;
+  /** "+"/"✕" buttons: arm/disarm click-to-add or click-to-remove on the
+   *  grid below, and (for add) which species the next click will place. */
+  onSetClickMode?: (mode: "plan-add" | "plan-remove" | null) => void;
+  onSetPlanAddSpecies?: (speciesId: string) => void;
+  planAddSpeciesId?: string | null;
+  planEditError?: string | null;
   /** Run (or re-run) the full optimizer on the painted space. */
   onOptimize?: () => void;
   onUndoSwap?: () => void;
@@ -3675,7 +3791,7 @@ function ResultsScreen(props: {
   /** Jump to Garden tab (watering / harvest progress). */
   onSeeProgress?: () => void;
   harvestedUnits?: Set<string>;
-  clickMode?: "harvest" | "reseed" | null;
+  clickMode?: "harvest" | "reseed" | "plan-add" | "plan-remove" | null;
   onUnitClick?: (unitKey: string) => void;
 }) {
   const { result } = props;
@@ -3685,21 +3801,29 @@ function ResultsScreen(props: {
   const total = result.placements.length;
   const isBlank = total === 0;
   const [reveal, setReveal] = useState(0);
-  const [changing, setChanging] = useState(false);
-  const [adding, setAdding] = useState(false);
-  const [addId, setAddId] = useState("");
-  const [addCount, setAddCount] = useState(1);
-  const [outId, setOutId] = useState("");
-  const [inId, setInId] = useState("");
-  const [outUnits, setOutUnits] = useState(1);
+  const [pickingAddSpecies, setPickingAddSpecies] = useState(false);
+  const [addSpeciesDraft, setAddSpeciesDraft] = useState("");
   const [legendOpen, setLegendOpen] = useState(false);
+  const planEditActive = props.clickMode === "plan-add" || props.clickMode === "plan-remove";
 
   // 80ms/bed reads nicely for small gardens, but scales past ~40 beds
   // (90 beds ≈ 7s): scale the interval down so the whole reveal caps at ~3s.
   const REVEAL_CAP_MS = 3000;
   const MIN_INTERVAL_MS = 10;
 
+  // Only replay the reveal animation when revealKey changes (a fresh
+  // optimizer run/garden load). A manual "+"/"✕" edit changes `total`
+  // without changing revealKey, so it just snaps `reveal` to the new
+  // total instantly instead of re-animating from zero.
+  const prevRevealKeyRef = useRef<number | undefined>(undefined);
   useEffect(() => {
+    const isFresh = prevRevealKeyRef.current !== props.revealKey;
+    prevRevealKeyRef.current = props.revealKey;
+
+    if (!isFresh) {
+      setReveal(total);
+      return;
+    }
     setReveal(0);
     const interval =
       total > 0 ? Math.max(MIN_INTERVAL_MS, Math.min(80, REVEAL_CAP_MS / total)) : 80;
@@ -3713,45 +3837,10 @@ function ResultsScreen(props: {
       });
     }, interval);
     return () => clearInterval(iv);
-  }, [result, total]);
-
-  // Reset the change form when the layout updates after a replace.
-  useEffect(() => {
-    setChanging(false);
-    setAdding(false);
-    setAddId("");
-    setAddCount(1);
-    setOutId("");
-    setInId("");
-    setOutUnits(1);
-  }, [result]);
+  }, [props.revealKey, total]);
 
   const frac = total === 0 ? 1 : Math.min(1, reveal / total);
   const speciesIds = result.beds.map((b) => b.speciesId);
-
-  const outS = outId
-    ? byId.get(outId) ?? mergeCatalogWithSaved(CATALOG).find((s) => s.id === outId)
-    : undefined;
-  const inS = inId
-    ? byId.get(inId) ?? mergeCatalogWithSaved(CATALOG).find((s) => s.id === inId)
-    : undefined;
-  const outHave = outId ? result.counts[outId] ?? 0 : 0;
-  const outArea = outS ? outS.cellsPerPlant[0] * outS.cellsPerPlant[1] : 0;
-  const inArea = inS ? inS.cellsPerPlant[0] * inS.cellsPerPlant[1] : 0;
-  const replaceN = Math.max(1, Math.min(outHave || 1, outUnits));
-  const freed = replaceN * outArea;
-  const inGain = inArea > 0 ? Math.floor(freed / inArea) : 0;
-  const leftover = inArea > 0 ? freed % inArea : 0;
-  // Simple conversion rate text: how many IN per 1 OUT
-  const ratePerOne =
-    outArea > 0 && inArea > 0 ? Math.floor(outArea / inArea) : 0;
-  const canApply =
-    !!props.onSpaceReplace &&
-    !!outId &&
-    !!inId &&
-    outId !== inId &&
-    outHave > 0 &&
-    inGain >= 1;
 
   function footprintLabel(id: string): string {
     const s =
@@ -3806,7 +3895,18 @@ function ResultsScreen(props: {
           <p className="tiny">
             {props.clickMode === "harvest"
               ? "Harvest mode: tap a grown plant to harvest it."
-              : "Reseed mode: tap an empty (dashed) spot to replant it."}
+              : props.clickMode === "reseed"
+                ? "Reseed mode: tap an empty (dashed) spot to replant it."
+                : props.clickMode === "plan-add"
+                  ? `Tap an empty spot to place ${
+                      props.planAddSpeciesId ? nameOf(props.planAddSpeciesId) : "it"
+                    }.`
+                  : "Tap any planted block to remove it."}
+          </p>
+        )}
+        {planEditActive && props.planEditError && (
+          <p className="tiny" style={{ color: "var(--destructive, #b91c1c)" }}>
+            {props.planEditError}
           </p>
         )}
         <div className="row" style={{ marginTop: 8 }}>
@@ -3838,212 +3938,58 @@ function ResultsScreen(props: {
           </div>
         )}
 
-        {(props.onAddPlants || props.onSpaceReplace) && !changing && !adding && (
-          <div className="row" style={{ marginTop: 10 }}>
-            {props.onAddPlants && (
-              <button
-                type="button"
-                className="secondary small"
-                onClick={() => {
-                  setAddId("");
-                  setAddCount(1);
-                  setAdding(true);
-                }}
-              >
-                Add plants
-              </button>
-            )}
-            {props.onSpaceReplace && !isBlank && (
-              <button
-                type="button"
-                className="secondary small"
-                onClick={() => {
-                  const first = speciesIds[0] ?? "";
-                  setOutId(first);
-                  setOutUnits(1);
-                  setInId("");
-                  setChanging(true);
-                }}
-              >
-                I want to change something
-              </button>
-            )}
-          </div>
-        )}
-
-        {props.onAddPlants && adding && (
-          <div
-            style={{
-              marginTop: 12,
-              padding: 12,
-              border: "1px solid var(--border, #ddd)",
-              background: "rgba(255,255,255,0.5)",
-            }}
-          >
-            <h3 style={{ margin: "0 0 8px", fontSize: 16 }}>Add plants</h3>
-            <p className="muted" style={{ marginTop: 0 }}>
-              Pick a plant and how many units to place. Existing plants stay put.
-            </p>
-            <label className="tiny" style={{ display: "block", marginBottom: 4 }}>
-              Plant
-            </label>
-            <select
-              value={addId}
-              onChange={(e) => setAddId(e.target.value)}
-              style={{ width: "100%", marginBottom: 8 }}
-            >
-              <option value="">Choose a plant…</option>
-              <SpeciesSelectOptions catalog={CATALOG} />
-            </select>
-            <label className="tiny" style={{ display: "block", marginBottom: 4 }}>
-              How many units
-            </label>
-            <input
-              type="number"
-              min={1}
-              max={99}
-              value={addCount}
-              onChange={(e) => setAddCount(Math.max(1, Number(e.target.value) || 1))}
-              style={{ width: 72, marginBottom: 8 }}
-            />
-            <div className="row">
-              <button
-                type="button"
-                disabled={!addId}
-                onClick={() => {
-                  if (!addId) return;
-                  props.onAddPlants!(addId, addCount);
-                }}
-              >
-                Add to layout
-              </button>
-              <button type="button" className="secondary" onClick={() => setAdding(false)}>
-                Cancel
-              </button>
-            </div>
-          </div>
-        )}
-
-        {props.onSpaceReplace && changing && (
-          <div
-            style={{
-              marginTop: 12,
-              padding: 12,
-              border: "1px solid var(--border, #ddd)",
-              background: "rgba(255,255,255,0.5)",
-            }}
-          >
-            <h3 style={{ margin: "0 0 8px", fontSize: 16 }}>Replace by space</h3>
-            <p className="muted" style={{ marginTop: 0 }}>
-              Pick what to take out and what to put in. We convert by garden cells
-              (footprint), not 1:1.
-            </p>
-
-            <label className="tiny" style={{ display: "block", marginBottom: 4 }}>
-              Remove
-            </label>
-            <select
-              value={outId}
-              onChange={(e) => {
-                setOutId(e.target.value);
-                setOutUnits(1);
+        {props.onSetClickMode && (
+          <div className="row" style={{ marginTop: 10, alignItems: "center" }}>
+            <button
+              type="button"
+              className={`small ${props.clickMode === "plan-add" || pickingAddSpecies ? "" : "secondary"}`}
+              aria-label="Add a crop"
+              aria-pressed={props.clickMode === "plan-add" || pickingAddSpecies}
+              title="Add a crop"
+              onClick={() => {
+                if (props.clickMode === "plan-add" || pickingAddSpecies) {
+                  setPickingAddSpecies(false);
+                  setAddSpeciesDraft("");
+                  props.onSetClickMode?.(null);
+                } else {
+                  setPickingAddSpecies(true);
+                }
               }}
-              style={{ width: "100%", marginBottom: 8 }}
             >
-              {speciesIds.map((id) => (
-                <option key={id} value={id}>
-                  {nameOf(id)} ×{result.counts[id]} · {footprintLabel(id)}
-                </option>
-              ))}
-            </select>
-
-            <label className="tiny" style={{ display: "block", marginBottom: 4 }}>
-              How many to replace
-            </label>
-            <input
-              type="number"
-              min={1}
-              max={Math.max(1, outHave)}
-              value={replaceN}
-              onChange={(e) => setOutUnits(Number(e.target.value) || 1)}
-              style={{ width: 72, marginBottom: 8 }}
-            />
-
-            <label className="tiny" style={{ display: "block", marginBottom: 4 }}>
-              Replace with
-            </label>
-            <select
-              value={inId}
-              onChange={(e) => setInId(e.target.value)}
-              style={{ width: "100%", marginBottom: 8 }}
-            >
-              <option value="">Choose a plant…</option>
-              <SpeciesSelectOptions catalog={CATALOG} />
-            </select>
-
-            {outS && inS && outId !== inId && (
-              <div
-                className="tiny"
-                style={{
-                  marginBottom: 10,
-                  padding: "8px 10px",
-                  background: "rgba(0,0,0,0.04)",
-                  lineHeight: 1.45,
-                }}
-              >
-                <b>Space conversion</b>
-                <ul className="clean" style={{ margin: "6px 0 0", paddingLeft: 16 }}>
-                  <li>
-                    {nameOf(outId)}: {outS.cellsPerPlant[0]}×{outS.cellsPerPlant[1]} ={" "}
-                    {outArea} cells each
-                  </li>
-                  <li>
-                    {nameOf(inId)}: {inS.cellsPerPlant[0]}×{inS.cellsPerPlant[1]} ={" "}
-                    {inArea} cells each
-                  </li>
-                  <li>
-                    Rate: 1 {nameOf(outId)} ≈ {ratePerOne > 0 ? ratePerOne : "<1"}{" "}
-                    {nameOf(inId)}
-                    {outArea < inArea
-                      ? ` (need ${Math.ceil(inArea / outArea)} ${nameOf(outId)} for 1 ${nameOf(inId)})`
-                      : ""}
-                  </li>
-                  <li>
-                    Swapping {replaceN} {nameOf(outId)} frees {freed} cells →{" "}
-                    {inGain >= 1 ? (
-                      <>
-                        <b>
-                          +{inGain} {nameOf(inId)}
-                        </b>
-                        {leftover > 0 ? ` (${leftover} cell leftover)` : ""}
-                      </>
-                    ) : (
-                      <b>not enough space for even 1 {nameOf(inId)}</b>
-                    )}
-                  </li>
-                </ul>
-              </div>
-            )}
-
-            <div className="row">
+              ➕
+            </button>
+            {!isBlank && (
               <button
                 type="button"
-                disabled={!canApply}
+                className={`small ${props.clickMode === "plan-remove" ? "" : "secondary"}`}
+                aria-label="Remove a crop"
+                aria-pressed={props.clickMode === "plan-remove"}
+                title="Remove a crop"
                 onClick={() => {
-                  if (!canApply) return;
-                  props.onSpaceReplace!(outId, replaceN, inId);
+                  setPickingAddSpecies(false);
+                  props.onSetClickMode?.(props.clickMode === "plan-remove" ? null : "plan-remove");
                 }}
               >
-                Apply swap
+                ✕
               </button>
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => setChanging(false)}
+            )}
+            {(pickingAddSpecies || props.clickMode === "plan-add") && (
+              <select
+                value={props.planAddSpeciesId ?? addSpeciesDraft}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  setAddSpeciesDraft(id);
+                  if (id) {
+                    props.onSetPlanAddSpecies?.(id);
+                    props.onSetClickMode?.("plan-add");
+                  }
+                }}
+                style={{ flex: 1, minWidth: 0 }}
               >
-                Cancel
-              </button>
-            </div>
+                <option value="">Choose a plant…</option>
+                <SpeciesSelectOptions catalog={CATALOG} />
+              </select>
+            )}
           </div>
         )}
 
@@ -4124,8 +4070,13 @@ function ResultsScreen(props: {
           </button>
         )}
         {props.onEdit && (
-          <button type="button" className="secondary" onClick={props.onEdit}>
-            Edit my garden
+          <button
+            type="button"
+            className="secondary"
+            title="Redo the whole scan → preferences → space → layout flow"
+            onClick={props.onEdit}
+          >
+            Start over
           </button>
         )}
         {props.onSeeProgress && (
@@ -4461,7 +4412,8 @@ function DashboardScreen(props: {
         <h2>Your plants</h2>
         <p className="muted">
           Tap a plant to expand its spots — then tap + to log watering, or use Harvest /
-          Reseed on the Garden Planner.
+          Reseed on the Garden Planner. Each spot is labeled by its position on the grid,
+          e.g. <b>R1C10</b> = row 1, column 10.
         </p>
         {planted.map(([id]) => {
           const s = byId.get(id);
@@ -4470,9 +4422,6 @@ function DashboardScreen(props: {
           if (units.length === 0) return null;
           const harvest = harvestDaysFor(s);
           const harvestRange = harvestRangeLabel(s);
-          const growingCount = units.filter(
-            (p) => !harvestedSet.has(cellKey(p.origin[0], p.origin[1])),
-          ).length;
           const open = expandedPlants.has(id);
           const dueCount = units.filter((p) => {
             const key = cellKey(p.origin[0], p.origin[1]);
@@ -4496,9 +4445,6 @@ function DashboardScreen(props: {
                   </span>
                   <span className="dot" style={{ background: speciesColor(id) }} />
                   <b>{s.name}</b>
-                  <span className="tiny">
-                    ({growingCount}/{units.length} growing)
-                  </span>
                   {dueCount > 0 && !open && (
                     <span className="tiny plant-fold-due"> · {dueCount} need water</span>
                   )}

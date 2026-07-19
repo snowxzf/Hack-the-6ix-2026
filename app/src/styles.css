@@ -703,6 +703,12 @@ img.photo {
 .cell.actionable.mode-reseed {
   cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28"><text x="0" y="22" font-size="24">🌱</text></svg>') 14 14, pointer;
 }
+.cell.actionable.mode-plan-add {
+  cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28"><text x="0" y="22" font-size="24">➕</text></svg>') 14 14, pointer;
+}
+.cell.actionable.mode-plan-remove {
+  cursor: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="28" height="28"><text x="0" y="22" font-size="24">❌</text></svg>') 14 14, pointer;
+}
 .grid-label {
   display: flex;
   align-items: center;

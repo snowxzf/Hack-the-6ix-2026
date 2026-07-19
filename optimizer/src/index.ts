@@ -8,6 +8,9 @@ export * from "./types";
 export { MOCK_CATALOG } from "./catalog.mock";
 export { SUBURBAN, BALCONY, L_SHAPE, NARROW_STRIP } from "./gardens.mock";
 export { renderAscii } from "./ascii";
+/** Recompute carbon totals from a counts map — reused by the UI for manual
+ *  (non-solver) layout edits like clicking a specific cell to add/remove. */
+export { carbonReport } from "./carbon";
 
 /**
  * PlotTwist optimizer: pure, synchronous, deterministic black box.

@@ -22,11 +22,14 @@ interface Props {
   /** Planting units (by origin cellKey) currently harvested: rendered as an
    *  empty, reseedable spot instead of the species' color. */
   harvestedUnits?: Set<string>;
-  /** When set, clicking an eligible planted cell fires onUnitClick with that
-   *  unit's origin key: "harvest" targets non-empty units, "reseed" targets
-   *  empty ones. Clicking anywhere in a multi-cell plant's footprint targets
-   *  the whole unit, not just the cell under the cursor. */
-  clickMode?: "harvest" | "reseed" | null;
+  /** When set, clicking an eligible cell fires onUnitClick with its key:
+   *  "harvest" targets non-empty planted units, "reseed" targets empty
+   *  (harvested) units, "plan-remove" targets any planted unit, "plan-add"
+   *  targets any empty/plantable cell (key = that cell's own coordinates,
+   *  since there's no unit there yet). Clicking anywhere in a multi-cell
+   *  plant's footprint targets the whole unit, not just the cell under the
+   *  cursor. */
+  clickMode?: "harvest" | "reseed" | "plan-add" | "plan-remove" | null;
   onUnitClick?: (unitKey: string) => void;
   /** Row/column number strip along the top and left edges: lets "R2C3" in
    *  the Dashboard's unit bars be found on the actual grid at a glance. */
@@ -80,10 +83,10 @@ export function GridView({
       return;
     }
     if (onUnitClick && clickDragUnit.current !== null) {
-      const unitKey = el.dataset.unitKey;
-      if (!unitKey || unitKey === clickDragUnit.current) return;
-      clickDragUnit.current = unitKey;
-      onUnitClick(unitKey);
+      const actionKey = el.dataset.unitKey;
+      if (!actionKey || actionKey === clickDragUnit.current) return;
+      clickDragUnit.current = actionKey;
+      onUnitClick(actionKey);
     }
   }
 
@@ -108,9 +111,13 @@ export function GridView({
       const paintable = state === "selected" || state === "obstacle_movable";
       const isSelected = !selected || selected.has(k);
       const actionable =
-        !!unitKey &&
         !!clickMode &&
-        ((clickMode === "harvest" && !isEmptyUnit) || (clickMode === "reseed" && isEmptyUnit));
+        ((clickMode === "harvest" && !!unitKey && !isEmptyUnit) ||
+          (clickMode === "reseed" && !!unitKey && isEmptyUnit) ||
+          (clickMode === "plan-remove" && !!unitKey) ||
+          (clickMode === "plan-add" && !unitKey && paintable));
+      // "plan-add" targets an empty cell directly (no unit exists yet there).
+      const actionKey = unitKey ?? k;
 
       let cls = "cell";
       let style: React.CSSProperties = {};
@@ -142,22 +149,26 @@ export function GridView({
         <div
           key={k}
           data-key={k}
-          data-unit-key={unitKey ?? undefined}
+          data-unit-key={actionable ? actionKey : undefined}
           className={cls}
           style={style}
           title={
             actionable
               ? clickMode === "harvest"
                 ? "Click or drag to harvest"
-                : "Click or drag to reseed"
+                : clickMode === "reseed"
+                  ? "Click or drag to reseed"
+                  : clickMode === "plan-add"
+                    ? "Click or drag to place here"
+                    : "Click or drag to remove"
               : undefined
           }
           onPointerDown={
             actionable
               ? (e) => {
                   e.preventDefault();
-                  clickDragUnit.current = unitKey;
-                  onUnitClick?.(unitKey!);
+                  clickDragUnit.current = actionKey;
+                  onUnitClick?.(actionKey);
                 }
               : onPaint && paintable
                 ? (e) => {
@@ -171,9 +182,9 @@ export function GridView({
           onPointerEnter={
             actionable
               ? () => {
-                  if (clickDragUnit.current !== null && clickDragUnit.current !== unitKey) {
-                    clickDragUnit.current = unitKey;
-                    onUnitClick?.(unitKey!);
+                  if (clickDragUnit.current !== null && clickDragUnit.current !== actionKey) {
+                    clickDragUnit.current = actionKey;
+                    onUnitClick?.(actionKey);
                   }
                 }
               : onPaint && paintable
