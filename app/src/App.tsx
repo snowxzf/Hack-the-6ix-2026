@@ -1469,6 +1469,8 @@ function ScanScreen(props: {
   const exifByUrlRef = useRef(new Map<string, ExifCameraInfo>());
   /** Grayscale copy of the current photo for coin-tap edge snapping. */
   const photoLumaRef = useRef<{ img: LumaImage; scale: number } | null>(null);
+  /** Last picked File — retry as data-URL if blob: preview fails to decode. */
+  const lastPickedFileRef = useRef<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -1540,6 +1542,20 @@ function ScanScreen(props: {
     resetMarks(null);
     setImgSize(null);
     setError(null);
+    setCameraError(null);
+  }
+
+  /** If blob: URL fails to decode (common for some phone exports), try a data URL. */
+  function reloadPhotoAsDataUrl(file: File) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") loadPhotoUrl(reader.result);
+      else setError("Couldn't read that photo — try exporting as JPG/PNG.");
+    };
+    reader.onerror = () => {
+      setError("Couldn't read that photo — try exporting as JPG/PNG.");
+    };
+    reader.readAsDataURL(file);
   }
 
   function stopLiveCamera() {
@@ -1621,12 +1637,21 @@ function ScanScreen(props: {
 
   /** One photo now; if stitch is on and several were chosen, queue the rest. */
   function applyPickedPhotos(files: File[]) {
-    const images = files.filter((f) => f.type.startsWith("image/") || /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name));
+    // Windows often leaves File.type blank — don't reject those.
+    const images = files.filter(
+      (f) =>
+        !f.type ||
+        f.type.startsWith("image/") ||
+        /\.(jpe?g|png|webp|heic|heif|gif|bmp)$/i.test(f.name),
+    );
     if (!images.length) {
       setError("Pick an image file (JPG/PNG/WebP).");
       return;
     }
+    // Show the photo stage instead of the live preview.
+    if (liveCamera) stopLiveCamera();
     const [first, ...rest] = images;
+    lastPickedFileRef.current = first!;
     const firstUrl = URL.createObjectURL(first!);
     captureExif(firstUrl, first!);
     loadPhotoUrl(firstUrl);
@@ -1646,6 +1671,45 @@ function ScanScreen(props: {
       );
     } else if (!stitchMode && rest.length) {
       setError("Turn on Stitch wide yard first if you want to use more than one photo.");
+    }
+  }
+
+  function toggleLiveCamera() {
+    if (liveCamera) stopLiveCamera();
+    else void startLiveCamera();
+  }
+
+  /**
+   * Open the OS file dialog from a user gesture. Creating a fresh <input> on
+   * document.body avoids browsers that ignore .click() on React-hidden inputs
+   * (especially when an ancestor was display:none during mount).
+   */
+  function openFilePicker() {
+    setError(null);
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*,.jpg,.jpeg,.png,.webp,.heic,.heif,.gif,.bmp";
+    input.multiple = stitchMode;
+    input.style.cssText = "position:fixed;left:-9999px;top:0;opacity:0;width:1px;height:1px";
+    let settled = false;
+    const cleanup = () => {
+      if (settled) return;
+      settled = true;
+      input.remove();
+    };
+    input.addEventListener("change", () => {
+      const list = input.files ? Array.from(input.files) : [];
+      cleanup();
+      if (!list.length) return; // cancelled
+      applyPickedPhotos(list);
+    });
+    input.addEventListener("cancel", cleanup);
+    document.body.appendChild(input);
+    try {
+      input.click();
+    } catch {
+      cleanup();
+      fileInputRef.current?.click();
     }
   }
 
@@ -2195,44 +2259,49 @@ function ScanScreen(props: {
       {!manualRect && (
       <>
       <div className="row">
-        <button type="button" className="secondary small" onClick={() => void startLiveCamera()}>
-          Open camera
-        </button>
         <button
           type="button"
           className="secondary small"
-          onClick={() => fileInputRef.current?.click()}
+          onClick={toggleLiveCamera}
+          aria-pressed={liveCamera}
         >
+          {liveCamera ? "Close camera" : "Open camera"}
+        </button>
+        <button type="button" className="secondary small" onClick={openFilePicker}>
           {stitchMode
             ? savedFrames.length > 0
               ? `Upload photo ${savedFrames.length + 1}`
               : "Upload photo(s)"
             : "Upload photo"}
         </button>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/*"
-          multiple={stitchMode}
-          hidden
-          onChange={(e) => {
-            const list = e.target.files;
-            e.target.value = "";
-            if (!list?.length) return;
-            applyPickedPhotos(Array.from(list));
-          }}
-        />
+        {/* Fallback for getUserMedia failure → OS camera roll */}
         <input
           ref={cameraInputRef}
           type="file"
           accept="image/*"
           capture="environment"
-          hidden
+          className="file-picker-input"
           onChange={(e) => {
             const f = e.target.files?.[0];
             e.target.value = "";
             if (!f) return;
             applyPickedPhoto(f);
+          }}
+        />
+        {/* Kept for stitch-awaiting openFilePicker fallback if createElement blocked */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,.jpg,.jpeg,.png,.webp,.heic,.heif"
+          multiple={stitchMode}
+          className="file-picker-input"
+          tabIndex={-1}
+          aria-hidden
+          onChange={(e) => {
+            const list = e.target.files;
+            e.target.value = "";
+            if (!list?.length) return;
+            applyPickedPhotos(Array.from(list));
           }}
         />
       </div>
@@ -2251,11 +2320,11 @@ function ScanScreen(props: {
             photo. Save each frame, then Measure.
           </p>
           <div className="row">
-            <button type="button" onClick={() => fileInputRef.current?.click()}>
+            <button type="button" onClick={openFilePicker}>
               {savedFrames.length === 0 ? "Upload photo(s)" : `Upload photo ${savedFrames.length + 1}`}
             </button>
-            <button type="button" className="secondary" onClick={() => void startLiveCamera()}>
-              Open camera
+            <button type="button" className="secondary" onClick={toggleLiveCamera}>
+              {liveCamera ? "Close camera" : "Open camera"}
             </button>
             {savedFrames.length >= 2 && (
               <button type="button" className="secondary" onClick={measure}>
@@ -2399,6 +2468,13 @@ function ScanScreen(props: {
               onError={() => {
                 setImgSize(null);
                 photoLumaRef.current = null;
+                const file = lastPickedFileRef.current;
+                // First failure: retry as a data URL (helps some Windows/phone exports).
+                if (file && props.photo?.startsWith("blob:")) {
+                  lastPickedFileRef.current = null;
+                  reloadPhotoAsDataUrl(file);
+                  return;
+                }
                 setError(
                   "Couldn't display that photo in the browser. Re-save it as JPG/PNG (iPhone HEIC often fails on Windows) and try again.",
                 );
