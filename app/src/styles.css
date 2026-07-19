@@ -584,6 +584,29 @@ button:disabled:not([class*="flex"]):not([class*="bg-"]) {
   min-width: 64px;
   text-align: center;
 }
+/* Draggable coin circle: invisible square hit-area over the SVG ring */
+.coin-drag {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  aspect-ratio: 1;
+  min-width: 22px;
+  min-height: 22px;
+  border-radius: 50%;
+  cursor: grab;
+  touch-action: none;
+  z-index: 4;
+}
+.coin-drag:active {
+  cursor: grabbing;
+}
+.coin-size-row {
+  align-items: center;
+}
+.coin-size-row input[type="range"] {
+  flex: 1;
+  min-width: 120px;
+  accent-color: #4d8a5f;
+}
 .icon-btn {
   display: inline-flex;
   align-items: center;

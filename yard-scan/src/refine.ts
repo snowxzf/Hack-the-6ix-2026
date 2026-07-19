@@ -183,6 +183,43 @@ export function refineCoinTaps(
 }
 
 /**
+ * Find the coin from a SINGLE tap anywhere on (or near) it — no edge taps
+ * needed. Runs the circle refiner over a ladder of radius hypotheses
+ * (covering ~6–100 px diameters) and keeps the answer most hypotheses agree
+ * on. Returns null when nothing coin-like surrounds the tap.
+ */
+export function detectCoinFromTap(
+  img: LumaImage,
+  tap: Point2,
+): RefineResult | null {
+  const results: { a: Point2; b: Point2; d: number }[] = [];
+  for (const r0 of [5, 7, 10, 14, 19, 26, 34]) {
+    const res = refineCoinTaps(
+      img,
+      { x: tap.x - r0, y: tap.y },
+      { x: tap.x + r0, y: tap.y },
+    );
+    if (res.refined) {
+      results.push({
+        a: res.a,
+        b: res.b,
+        d: Math.hypot(res.b.x - res.a.x, res.b.y - res.a.y),
+      });
+    }
+  }
+  if (!results.length) return null;
+  // Consensus: the diameter cluster with the most agreeing hypotheses wins
+  results.sort((x, y) => x.d - y.d);
+  let best: typeof results = [];
+  for (const r of results) {
+    const group = results.filter((o) => Math.abs(o.d - r.d) <= r.d * 0.2);
+    if (group.length > best.length) best = group;
+  }
+  const mid = best[Math.floor(best.length / 2)]!;
+  return { a: mid.a, b: mid.b, refined: true };
+}
+
+/**
  * Walk a ray outward and return the sub-pixel radius where luma last leaves
  * the coin side of the threshold (i.e. the outermost inside→outside
  * transition that stays outside), or null if no clean boundary is found.

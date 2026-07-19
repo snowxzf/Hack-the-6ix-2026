@@ -43,6 +43,7 @@ export {
   type RgbaImage,
 } from "./detect";
 export {
+  detectCoinFromTap,
   lumaFromRgba,
   refineCoinTaps,
   refineReferenceTaps,

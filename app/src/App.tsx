@@ -57,6 +57,7 @@ import {
   SCAN_UX,
   coinGhostForNextFrame,
   detectBedQuad,
+  detectCoinFromTap,
   focalPxFromExif,
   lumaFromRgba,
   readExifCameraInfo,
@@ -1563,12 +1564,16 @@ function ScanScreen(props: {
   const [customSizeCm, setCustomSizeCm] = useState(8.56); // credit-card width default
   const [customLabel, setCustomLabel] = useState("credit card");
   const [tapPhase, setTapPhase] = useState<"reference" | "bed">("reference");
+  /** Coin-circle translation drag (move the whole ring, not one edge dot). */
+  const coinDragRef = useRef<{ startX: number; startY: number; taps: Point2[] } | null>(
+    null,
+  );
   const [refTaps, setRefTaps] = useState<Point2[]>([]);
   const [bedCorners, setBedCorners] = useState<Point2[]>([]);
   const [imgSize, setImgSize] = useState<{ w: number; h: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const dragMovedRef = useRef(false);
-  const dragRef = useRef<{ kind: "ref" | "bed"; index: number } | null>(null);
+  const dragRef = useRef<{ kind: "ref" | "bed" | "coin"; index: number } | null>(null);
   const bedCornersRef = useRef<Point2[]>([]);
   const refTapsRef = useRef<Point2[]>([]);
   bedCornersRef.current = bedCorners;
@@ -1631,6 +1636,43 @@ function ScanScreen(props: {
     setTapPhase("reference");
     setError(null);
     dragRef.current = null;
+    coinDragRef.current = null;
+  }
+
+  /**
+   * Coin mode: the coin is marked with a draggable circle (plus size slider),
+   * not edge taps. Seed it in the middle at a typical coin size; the user
+   * drags it onto the coin (or taps the coin to jump it there).
+   */
+  function initCoinCircle(size: { w: number; h: number }) {
+    const r = Math.max(10, size.w * 0.011);
+    const cx = size.w / 2;
+    const cy = size.h / 2;
+    setRefTaps([
+      { x: cx - r, y: cy },
+      { x: cx + r, y: cy },
+    ]);
+    setTapPhase("bed");
+  }
+
+  /** Move the coin circle so its center lands on `p` (keeping its size). */
+  function moveCoinCircleTo(p: Point2, taps = refTapsRef.current) {
+    if (taps.length !== 2) return;
+    const cx = (taps[0]!.x + taps[1]!.x) / 2;
+    const cy = (taps[0]!.y + taps[1]!.y) / 2;
+    setRefTaps(taps.map((t) => ({ x: t.x + p.x - cx, y: t.y + p.y - cy })));
+  }
+
+  /** Resize the coin circle to the given diameter (px), keeping its center. */
+  function setCoinDiameter(diamPx: number) {
+    const taps = refTapsRef.current;
+    if (taps.length !== 2) return;
+    const cx = (taps[0]!.x + taps[1]!.x) / 2;
+    const cy = (taps[0]!.y + taps[1]!.y) / 2;
+    const d = Math.hypot(taps[1]!.x - taps[0]!.x, taps[1]!.y - taps[0]!.y);
+    if (d < 1) return;
+    const k = diamPx / d;
+    setRefTaps(taps.map((t) => ({ x: cx + (t.x - cx) * k, y: cy + (t.y - cy) * k })));
   }
 
   function clearPendingPhotos() {
@@ -1878,13 +1920,33 @@ function ScanScreen(props: {
     const pt = stagePoint(e);
     if (!pt) return;
 
-    // Only coin-edge taps use empty clicks. Bed corners are drag-only —
-    // use the "Add point" button so misses don't spawn random corners.
+    // Coin mode: a tap jumps the circle onto the tapped spot — with an
+    // auto-size assist when the detector can actually see a coin there.
+    if (mode === "coin") {
+      if (refTaps.length !== 2) return;
+      const lum = photoLumaRef.current;
+      if (lum) {
+        const s = lum.scale;
+        const hit = detectCoinFromTap(lum.img, { x: pt.x * s, y: pt.y * s });
+        if (hit) {
+          setRefTaps([
+            { x: hit.a.x / s, y: hit.a.y / s },
+            { x: hit.b.x / s, y: hit.b.y / s },
+          ]);
+          return;
+        }
+      }
+      moveCoinCircleTo(pt);
+      return;
+    }
+
+    // Custom object: tap its two ends (that's the width you typed in).
     if (tapPhase === "reference") {
       let next = [...refTaps, pt].slice(0, 2);
       if (next.length === 2) {
         next = snapReferenceTaps(next[0]!, next[1]!);
         setTapPhase("bed");
+        autoDetectCorners({ quiet: true });
       }
       setRefTaps(next);
     }
@@ -1912,9 +1974,10 @@ function ScanScreen(props: {
    * the middle of the current quad, fit the biggest quad, snap corners to it.
    * The user can still drag corners afterwards to fine-tune.
    */
-  function autoDetectCorners() {
+  function autoDetectCorners(opts?: { quiet?: boolean; size?: { w: number; h: number } }) {
     const rgba = photoRgbaRef.current;
-    if (!rgba || !imgSize) return;
+    const size = opts?.size ?? imgSize;
+    if (!rgba || !size) return;
     setError(null);
     const corners = bedCornersRef.current;
     const seedNat =
@@ -1923,15 +1986,19 @@ function ScanScreen(props: {
             x: corners.reduce((s, p) => s + p.x, 0) / corners.length,
             y: corners.reduce((s, p) => s + p.y, 0) / corners.length,
           }
-        : { x: imgSize.w / 2, y: imgSize.h / 2 };
+        : { x: size.w / 2, y: size.h / 2 };
     const res = detectBedQuad(rgba.img, {
       x: seedNat.x * rgba.scale,
       y: seedNat.y * rgba.scale,
     });
     if (!res) {
-      setError(
-        "Couldn't auto-detect the bed here — drag a corner near the middle of the bed and try again, or place the corners by hand.",
-      );
+      // quiet = auto-chained after the coin tap; keep the default quad and
+      // let the user drag or press the button, without an alarming error.
+      if (!opts?.quiet) {
+        setError(
+          "Couldn't auto-detect the yard here — drag a corner near the middle of your yard and try again, or place the corners by hand.",
+        );
+      }
       return;
     }
     setBedCorners(
@@ -1979,11 +2046,35 @@ function ScanScreen(props: {
     const pt = stagePoint(e);
     if (!pt) return;
     dragMovedRef.current = true;
-    if (active.kind === "ref") {
+    if (active.kind === "coin") {
+      const start = coinDragRef.current;
+      if (start) {
+        setRefTaps(
+          start.taps.map((p) => ({
+            x: p.x + pt.x - start.startX,
+            y: p.y + pt.y - start.startY,
+          })),
+        );
+      }
+    } else if (active.kind === "ref") {
       setRefTaps((taps) => taps.map((p, i) => (i === active.index ? pt : p)));
     } else {
       setBedCorners((c) => c.map((p, i) => (i === active.index ? pt : p)));
     }
+  }
+
+  function startCoinDrag(e: PointerEvent<HTMLSpanElement>) {
+    e.stopPropagation();
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    const pt = stagePoint({
+      clientX: e.clientX,
+      clientY: e.clientY,
+      currentTarget: e.currentTarget.parentElement as HTMLDivElement,
+    });
+    if (!pt) return;
+    dragMovedRef.current = false;
+    coinDragRef.current = { startX: pt.x, startY: pt.y, taps: [...refTapsRef.current] };
+    dragRef.current = { kind: "coin", index: -1 };
   }
 
   function startDrag(kind: "ref" | "bed", index: number) {
@@ -1998,8 +2089,13 @@ function ScanScreen(props: {
   function endDrag() {
     const active = dragRef.current;
     dragRef.current = null;
-    // After hand-adjusting a coin mark, fine-snap it onto the coin edge.
-    if (active?.kind === "ref" && dragMovedRef.current && refTapsRef.current.length === 2) {
+    coinDragRef.current = null;
+    // After hand-adjusting the coin, fine-snap it onto the coin edge.
+    if (
+      (active?.kind === "ref" || active?.kind === "coin") &&
+      dragMovedRef.current &&
+      refTapsRef.current.length === 2
+    ) {
       const [a, b] = refTapsRef.current;
       setRefTaps(snapReferenceTaps(a!, b!));
     }
@@ -2030,7 +2126,7 @@ function ScanScreen(props: {
     }
     const frame = currentFramePayload();
     if (!frame) {
-      setError("Tap both coin edges and at least 3 bed corners before saving this frame.");
+      setError("Tap the coin and set at least 3 yard corners before saving this frame.");
       return;
     }
     // Tip: put the coin toward the edge you'll pan into (right edge if panning right).
@@ -2075,7 +2171,7 @@ function ScanScreen(props: {
       if (current) frames.push(current);
 
       if (!frames.length) {
-        setError("Upload a photo and mark the coin + bed corners first.");
+        setError("Upload a photo and mark the coin + yard corners first.");
         return;
       }
 
@@ -2131,7 +2227,7 @@ function ScanScreen(props: {
     <div className="card">
       <h2>Scan your garden</h2>
       <p className="muted">
-        Upload a photo, mark a scale reference, then tap the corners of your bed.
+        Upload a photo, mark a scale reference, then we auto-detect your yard corners.
         We convert pixels → real size → a planting grid you choose below.
       </p>
 
@@ -2162,6 +2258,7 @@ function ScanScreen(props: {
             setManualRect(false);
             setMode("coin");
             resetMarks();
+            if (imgSize) initCoinCircle(imgSize);
           }}
         >
           Coin
@@ -2530,28 +2627,71 @@ function ScanScreen(props: {
       {props.photo && !liveCamera && (
         <>
           <p className="scan-phase">
-            {tapPhase === "reference"
-              ? savedFrames.length > 0
-                ? "Phase 1 — Line up the coin with the ghost, then tap both edges"
-                : "Phase 1 — Tap both edges of the coin"
-              : "Phase 2 — Drag the blue numbered corners onto your bed"}
+            {mode === "coin"
+              ? "Drag the green circle onto the coin, then check the blue outline"
+              : tapPhase === "reference"
+                ? "Phase 1 — Tap both ends of your reference object"
+                : "Phase 2 — Check the outline, drag the blue corners to fix it"}
           </p>
           <p className="scan-phase-meta">
-            Green coin taps {refTaps.length}/2 · blue corners {bedCorners.length}
+            {mode === "coin"
+              ? `Blue corners ${bedCorners.length}`
+              : `Green taps ${refTaps.length}/2 · blue corners ${bedCorners.length}`}
             {stitchMode ? ` · frames saved ${savedFrames.length}` : ""}
           </p>
           <p className="scan-phase-hint">
-            <b>Green</b> = coin edges (scale). <b>Blue</b> = bed outline corners — drag them to
-            fit. Misses won’t add points; use <b>Add point</b> only if you need an extra corner.
+            {mode === "coin" ? (
+              <>
+                <b>Green circle</b> = your coin (sets the scale). Tap the coin to jump the
+                circle there, drag to fine-tune, and use the size slider if it's too small.{" "}
+                <b>Blue</b> = auto-detected yard outline — drag the corners to fix it.
+              </>
+            ) : (
+              <>
+                <b>Green</b> = the two ends of your object (that's the width you typed).{" "}
+                <b>Blue</b> = yard outline corners — drag them to fit. Use <b>Add point</b>{" "}
+                only if you need an extra corner.
+              </>
+            )}
           </p>
+          {mode === "coin" && imgSize && refTaps.length === 2 && (
+            <div className="row coin-size-row">
+              <label className="tiny" htmlFor="coin-size">
+                Coin size
+              </label>
+              <input
+                id="coin-size"
+                type="range"
+                min={8}
+                max={Math.round(imgSize.w * 0.1)}
+                step={1}
+                value={Math.round(
+                  Math.hypot(
+                    refTaps[1]!.x - refTaps[0]!.x,
+                    refTaps[1]!.y - refTaps[0]!.y,
+                  ),
+                )}
+                onChange={(e) => setCoinDiameter(Number(e.target.value))}
+              />
+              <span className="tiny muted">
+                {Math.round(
+                  Math.hypot(
+                    refTaps[1]!.x - refTaps[0]!.x,
+                    refTaps[1]!.y - refTaps[0]!.y,
+                  ),
+                )}{" "}
+                px
+              </span>
+            </div>
+          )}
           {tapPhase === "bed" && (
             <div className="row">
               <button
                 type="button"
                 className="small"
                 disabled={!imgSize || !photoRgbaRef.current}
-                onClick={autoDetectCorners}
-                title="Find the bed/table outline automatically from the photo"
+                onClick={() => autoDetectCorners()}
+                title="Find the yard outline automatically from the photo"
               >
                 ✨ Auto-detect corners
               </button>
@@ -2637,6 +2777,11 @@ function ScanScreen(props: {
                 setBedCorners((prev) =>
                   prev.length >= 3 ? prev : autoCorners(size.w, size.h),
                 );
+                // Coin mode needs no taps: drop the circle in, find the yard.
+                if (mode === "coin" && refTapsRef.current.length < 2) {
+                  initCoinCircle(size);
+                  autoDetectCorners({ quiet: true, size });
+                }
                 setError(null);
               }}
               onError={() => {
@@ -2667,6 +2812,24 @@ function ScanScreen(props: {
                 title="Line up your coin here"
               />
             )}
+            {imgSize && mode === "coin" && refTaps.length === 2 && (
+              <span
+                className="coin-drag"
+                onPointerDown={startCoinDrag}
+                title="Drag the circle onto your coin"
+                style={{
+                  left: `${(((refTaps[0]!.x + refTaps[1]!.x) / 2) / imgSize.w) * 100}%`,
+                  top: `${(((refTaps[0]!.y + refTaps[1]!.y) / 2) / imgSize.h) * 100}%`,
+                  width: `${(Math.max(
+                    Math.hypot(
+                      refTaps[1]!.x - refTaps[0]!.x,
+                      refTaps[1]!.y - refTaps[0]!.y,
+                    ),
+                    imgSize.w * 0.02,
+                  ) / imgSize.w) * 100}%`,
+                }}
+              />
+            )}
             {imgSize &&
               refTaps.map((p, i) => (
                 <span
@@ -2691,14 +2854,30 @@ function ScanScreen(props: {
                   />
                 )}
                 {refTaps.length === 2 && (
-                  <line
-                    x1={refTaps[0]!.x}
-                    y1={refTaps[0]!.y}
-                    x2={refTaps[1]!.x}
-                    y2={refTaps[1]!.y}
-                    stroke="#7fe89a"
-                    strokeWidth={Math.max(2, imgSize.w / 400)}
-                  />
+                  <>
+                    {/* Detected coin: ring + measured diameter chord */}
+                    <circle
+                      cx={(refTaps[0]!.x + refTaps[1]!.x) / 2}
+                      cy={(refTaps[0]!.y + refTaps[1]!.y) / 2}
+                      r={
+                        Math.hypot(
+                          refTaps[1]!.x - refTaps[0]!.x,
+                          refTaps[1]!.y - refTaps[0]!.y,
+                        ) / 2
+                      }
+                      fill="rgba(127, 232, 154, 0.15)"
+                      stroke="#7fe89a"
+                      strokeWidth={Math.max(2, imgSize.w / 400)}
+                    />
+                    <line
+                      x1={refTaps[0]!.x}
+                      y1={refTaps[0]!.y}
+                      x2={refTaps[1]!.x}
+                      y2={refTaps[1]!.y}
+                      stroke="#7fe89a"
+                      strokeWidth={Math.max(1.5, imgSize.w / 600)}
+                    />
+                  </>
                 )}
               </svg>
             )}

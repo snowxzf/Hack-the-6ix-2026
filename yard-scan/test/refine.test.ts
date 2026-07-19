@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  detectCoinFromTap,
   refineCoinTaps,
   refineReferenceTaps,
   type LumaImage,
@@ -201,3 +202,33 @@ describe("refineCoinTaps", () => {
   });
 });
 
+
+describe("detectCoinFromTap (single tap)", () => {
+  it("finds the coin from one tap near its center", () => {
+    const r = 14;
+    const img = texturedDisc({ w: 240, h: 240, cx: 120, cy: 120, r });
+    const res = detectCoinFromTap(img, { x: 122, y: 118 });
+    expect(res).not.toBeNull();
+    const d = Math.hypot(res!.b.x - res!.a.x, res!.b.y - res!.a.y);
+    expect(Math.abs(d - 2 * r)).toBeLessThan(2);
+  });
+
+  it("works for a small coin (r=8) and a big one (r=30)", () => {
+    for (const r of [8, 30]) {
+      const img = texturedDisc({ w: 300, h: 300, cx: 150, cy: 150, r });
+      const res = detectCoinFromTap(img, { x: 150 + 3, y: 150 - 2 });
+      expect(res).not.toBeNull();
+      const d = Math.hypot(res!.b.x - res!.a.x, res!.b.y - res!.a.y);
+      expect(Math.abs(d - 2 * r)).toBeLessThan(Math.max(2, r * 0.15));
+    }
+  });
+
+  it("returns null on a featureless image", () => {
+    const flat: LumaImage = {
+      widthPx: 120,
+      heightPx: 120,
+      luma: new Float32Array(120 * 120).fill(140),
+    };
+    expect(detectCoinFromTap(flat, { x: 60, y: 60 })).toBeNull();
+  });
+});
