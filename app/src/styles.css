@@ -427,7 +427,7 @@ body {
   background: hsl(var(--palette-seafoam) / 0.22);
 }
 
-button:not([class*="flex"]):not([class*="bg-"]):not([class*="text-"]):not(.toggle-switch) {
+button:not([class*="flex"]):not([class*="bg-"]):not([class*="text-"]):not(.toggle-switch):not(.plant-fold-toggle) {
   font: inherit;
   font-weight: 600;
   border: 0;
@@ -791,6 +791,62 @@ label.opt {
 .bar div {
   height: 100%;
   background: hsl(var(--primary));
+}
+
+.plant-fold {
+  margin: 8px 0;
+  border-bottom: 1px solid hsl(var(--border));
+  padding-bottom: 8px;
+}
+.plant-fold:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+.plant-fold-toggle {
+  display: flex !important;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  margin: 0;
+  padding: 8px 0 !important;
+  border: 0;
+  border-radius: 0 !important;
+  background: transparent !important;
+  color: inherit !important;
+  font: inherit;
+  font-weight: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.plant-fold-toggle:hover {
+  opacity: 0.9;
+}
+.plant-fold-left {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+}
+.plant-fold-chevron {
+  display: inline-block;
+  width: 1em;
+  font-size: 12px;
+  line-height: 1;
+  color: hsl(var(--muted-foreground));
+  transition: transform 0.15s ease;
+}
+.plant-fold-chevron.open {
+  transform: rotate(90deg);
+}
+.plant-fold-meta {
+  flex-shrink: 1;
+  text-align: right;
+}
+.plant-fold-due {
+  color: hsl(var(--palette-leaf));
+  font-weight: 600;
 }
 
 .unit-stack {

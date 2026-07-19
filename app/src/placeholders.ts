@@ -330,7 +330,7 @@ export function harvestRangeLabel(s: {
   daysToHarvestMax?: number;
 }): string {
   if (s.daysToHarvestMin != null && s.daysToHarvestMax != null) {
-    return ` (${s.daysToHarvestMin}-${s.daysToHarvestMax}d; weather can shift this)`;
+    return " (weather can vary this)";
   }
   return "";
 }

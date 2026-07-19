@@ -4230,6 +4230,17 @@ function DashboardScreen(props: {
   const planted = Object.entries(result.counts).filter(([, n]) => n > 0);
   const { now } = useDevClock();
   const harvestedSet = new Set(props.harvestedUnits);
+  /** Collapsed by default so long gardens don't bury the page in unit rows. */
+  const [expandedPlants, setExpandedPlants] = useState<Set<string>>(() => new Set());
+
+  function togglePlant(id: string) {
+    setExpandedPlants((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
 
   // Each cadence group tracks its *own* per-unit due-today check (a unit's
   // anchor shifts to lastWateredAt once it's ever been confirmed, and again
@@ -4292,7 +4303,7 @@ function DashboardScreen(props: {
       <div className="card">
         <h2>Your plants</h2>
         <p className="muted">
-          Each row is one planted spot — tap + to log watering it, or use Harvest /
+          Tap a plant to expand its spots — then tap + to log watering, or use Harvest /
           Reseed on the Garden Planner.
         </p>
         {planted.map(([id]) => {
@@ -4305,83 +4316,107 @@ function DashboardScreen(props: {
           const growingCount = units.filter(
             (p) => !harvestedSet.has(cellKey(p.origin[0], p.origin[1])),
           ).length;
+          const open = expandedPlants.has(id);
+          const dueCount = units.filter((p) => {
+            const key = cellKey(p.origin[0], p.origin[1]);
+            if (harvestedSet.has(key)) return false;
+            const wateringAnchor =
+              props.lastWateredAt[key] ?? props.unitPlantedAt[key] ?? props.plantedAt;
+            return isUnitDue(now, wateringAnchor, s.waterEveryDays);
+          }).length;
 
           return (
-            <div key={id} style={{ margin: "14px 0" }}>
-              <div className="row spread">
-                <span>
-                  <span className="dot" style={{ background: speciesColor(id), marginRight: 6 }} />
-                  <b>{s.name}</b>{" "}
+            <div key={id} className="plant-fold">
+              <button
+                type="button"
+                className="plant-fold-toggle"
+                aria-expanded={open}
+                onClick={() => togglePlant(id)}
+              >
+                <span className="plant-fold-left">
+                  <span className={`plant-fold-chevron${open ? " open" : ""}`} aria-hidden>
+                    ▸
+                  </span>
+                  <span className="dot" style={{ background: speciesColor(id) }} />
+                  <b>{s.name}</b>
                   <span className="tiny">
                     ({growingCount}/{units.length} growing)
                   </span>
+                  {dueCount > 0 && !open && (
+                    <span className="tiny plant-fold-due"> · {dueCount} need water</span>
+                  )}
                 </span>
-                <span className="tiny">
+                <span className="tiny plant-fold-meta">
                   water every {s.waterEveryDays}d ·{" "}
                   {harvest != null
                     ? `~${harvest}d to harvest${harvestRange}`
                     : "ornamental"}
                 </span>
-              </div>
+              </button>
 
-              <div className="unit-stack">
-                {units.map((p) => {
-                  const key = cellKey(p.origin[0], p.origin[1]);
-                  const isEmpty = harvestedSet.has(key);
-                  const effectivePlantedAt = props.unitPlantedAt[key] ?? props.plantedAt;
-                  const unitDays = effectivePlantedAt
-                    ? Math.max(0, Math.floor((now - effectivePlantedAt) / (24 * 60 * 60 * 1000)))
-                    : 0;
-                  const denom = harvest ?? 60;
-                  const progress = Math.min(1, unitDays / denom);
-                  const pct = Math.round(progress * 100);
-                  // Watering has its own anchor/clock, separate from the
-                  // harvest-progress one above: it shifts to lastWateredAt
-                  // once ever confirmed. Once due it STAYS due/clickable
-                  // (doesn't grey back out) until actually watered — missing
-                  // a day shouldn't hide the button, see isUnitDue().
-                  const wateringAnchor =
-                    props.lastWateredAt[key] ?? props.unitPlantedAt[key] ?? props.plantedAt;
-                  const needsWater =
-                    !isEmpty && isUnitDue(now, wateringAnchor, s.waterEveryDays);
+              {open && (
+                <div className="unit-stack">
+                  {units.map((p) => {
+                    const key = cellKey(p.origin[0], p.origin[1]);
+                    const isEmpty = harvestedSet.has(key);
+                    const effectivePlantedAt = props.unitPlantedAt[key] ?? props.plantedAt;
+                    const unitDays = effectivePlantedAt
+                      ? Math.max(
+                          0,
+                          Math.floor((now - effectivePlantedAt) / (24 * 60 * 60 * 1000)),
+                        )
+                      : 0;
+                    const denom = harvest ?? 60;
+                    const progress = Math.min(1, unitDays / denom);
+                    const pct = Math.round(progress * 100);
+                    // Watering has its own anchor/clock, separate from the
+                    // harvest-progress one above: it shifts to lastWateredAt
+                    // once ever confirmed. Once due it STAYS due/clickable
+                    // (doesn't grey back out) until actually watered — missing
+                    // a day shouldn't hide the button, see isUnitDue().
+                    const wateringAnchor =
+                      props.lastWateredAt[key] ?? props.unitPlantedAt[key] ?? props.plantedAt;
+                    const needsWater =
+                      !isEmpty && isUnitDue(now, wateringAnchor, s.waterEveryDays);
 
-                  return (
-                    <div
-                      key={key}
-                      className="unit-row"
-                      title={
-                        isEmpty
-                          ? `Empty: row ${p.origin[0] + 1}, col ${p.origin[1] + 1}`
-                          : `Row ${p.origin[0] + 1}, col ${p.origin[1] + 1}: day ${unitDays} of ~${denom} (${pct}%)`
-                      }
-                    >
-                      <span className="unit-label">
-                        R{p.origin[0] + 1}C{p.origin[1] + 1}
-                      </span>
-                      <div className={`unit-bar${isEmpty ? " empty" : ""}`}>
-                        {!isEmpty && <div style={{ width: `${Math.max(4, pct)}%` }} />}
+                    return (
+                      <div
+                        key={key}
+                        className="unit-row"
+                        title={
+                          isEmpty
+                            ? `Empty: row ${p.origin[0] + 1}, col ${p.origin[1] + 1}`
+                            : `Row ${p.origin[0] + 1}, col ${p.origin[1] + 1}: day ${unitDays} of ~${denom} (${pct}%)`
+                        }
+                      >
+                        <span className="unit-label">
+                          R{p.origin[0] + 1}C{p.origin[1] + 1}
+                        </span>
+                        <div className={`unit-bar${isEmpty ? " empty" : ""}`}>
+                          {!isEmpty && <div style={{ width: `${Math.max(4, pct)}%` }} />}
+                        </div>
+                        {!isEmpty && (
+                          <button
+                            type="button"
+                            className={`unit-water-btn${needsWater ? " due" : ""}`}
+                            disabled={!needsWater}
+                            title={
+                              needsWater
+                                ? "Log watering this plant (+2 XP)"
+                                : `Not due yet — waters every ${s.waterEveryDays}d`
+                            }
+                            onClick={() => props.onWaterUnit(key)}
+                          >
+                            +
+                          </button>
+                        )}
                       </div>
-                      {!isEmpty && (
-                        <button
-                          type="button"
-                          className={`unit-water-btn${needsWater ? " due" : ""}`}
-                          disabled={!needsWater}
-                          title={
-                            needsWater
-                              ? "Log watering this plant (+2 XP)"
-                              : `Not due yet — waters every ${s.waterEveryDays}d`
-                          }
-                          onClick={() => props.onWaterUnit(key)}
-                        >
-                          +
-                        </button>
-                      )}
-                    </div>
- );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
- );
+          );
         })}
       </div>
     </>
