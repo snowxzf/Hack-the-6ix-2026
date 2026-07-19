@@ -569,6 +569,25 @@ button:disabled:not([class*="flex"]):not([class*="bg-"]) {
   min-width: 64px;
   text-align: center;
 }
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 8px;
+}
+.review-done {
+  padding: 10px 16px;
+  margin: 8px 0;
+}
+.review-done .row {
+  justify-content: space-between;
+  margin: 0;
+}
+/* Take/Upload photo pair: centered, one left of middle, one right */
+.identify-actions {
+  justify-content: center;
+  gap: 24px;
+}
 .view-fade {
   animation: viewIn 0.35s ease;
 }

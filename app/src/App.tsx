@@ -7,6 +7,7 @@ import {
   type MouseEvent,
   type PointerEvent,
 } from "react";
+import { Pencil, Trash2 } from "lucide-react";
 import { optimizeGarden } from "../../optimizer/src/index";
 import type {
   GardenGrid,
@@ -2495,6 +2496,8 @@ function ReviewScreen(props: {
   const [gridView, setGridView] = useState<"photo" | "plain">(
     scanOverlay ? "photo" : "plain",
   );
+  /** Which detected plant's species is being edited (null = none). */
+  const [editingPlant, setEditingPlant] = useState<number | null>(null);
 
   function removeExisting(idx: number) {
     const target = existing[idx];
@@ -2639,39 +2642,76 @@ function ReviewScreen(props: {
           </div>
         )}
       </div>
-      <div className="card">
-        <h2>Detected plants: did we get it right?</h2>
-        {existing.length === 0 && <p className="muted">Nothing detected (or all removed).</p>}
-        {existing.map((e, i) => (
-          <div className="row spread" key={`${e.cell[0]}-${e.cell[1]}`}>
-            <span style={{ fontSize: 14 }}>
-              Plant at row {e.cell[0] + 1}, col {e.cell[1] + 1}
-              <span className="tiny"> {Math.round((e.confidence ?? 0) * 100)}% sure</span>
-            </span>
-            <span className="row">
-              <select value={e.speciesId} onChange={(ev) => renameExisting(i, ev.target.value)}>
-                <SpeciesSelectOptions catalog={CATALOG} />
-              </select>
-              <button className="small secondary" onClick={() => removeExisting(i)}>
-                 not a plant
-              </button>
-            </span>
-          </div>
+      {existing.length > 0 && (
+        <div className="card">
+          <h2>Plants</h2>
+          {existing.map((e, i) => (
+            <div className="row spread" key={`${e.cell[0]}-${e.cell[1]}`}>
+              <span style={{ fontSize: 14 }}>
+                {CATALOG.find((s) => s.id === e.speciesId)?.name ?? e.speciesId}
+                <span className="tiny muted">
+                  {" "}
+                  · row {e.cell[0] + 1}, col {e.cell[1] + 1} ·{" "}
+                  {Math.round((e.confidence ?? 0) * 100)}% verified
+                </span>
+              </span>
+              <span className="row">
+                {editingPlant === i ? (
+                  <select
+                    autoFocus
+                    value={e.speciesId}
+                    onChange={(ev) => {
+                      renameExisting(i, ev.target.value);
+                      setEditingPlant(null);
+                    }}
+                    onBlur={() => setEditingPlant(null)}
+                  >
+                    <SpeciesSelectOptions catalog={CATALOG} />
+                  </select>
+                ) : (
+                  <button
+                    type="button"
+                    className="small secondary icon-btn"
+                    title="Change what this plant is"
+                    onClick={() => setEditingPlant(i)}
+                  >
+                    <Pencil size={14} />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="small secondary icon-btn"
+                  title="Not a plant — remove it"
+                  onClick={() => {
+                    removeExisting(i);
+                    setEditingPlant(null);
+                  }}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </span>
+            </div>
  ))}
+        </div>
+      )}
+
+      <IdentifyCard />
+
+      <div className="card review-done">
         <div className="row">
           <button className="secondary" onClick={props.onBack}>
             ← Back
           </button>
-          <button onClick={props.onNext}>Looks right →</button>
-          {props.skippable && (
-            <button className="secondary" onClick={props.onNext}>
-              Skip → keep as detected
-            </button>
-          )}
+          <span className="row">
+            {props.skippable && (
+              <button className="secondary" onClick={props.onNext}>
+                Skip → keep as detected
+              </button>
+            )}
+            <button onClick={props.onNext}>Done →</button>
+          </span>
         </div>
       </div>
-
-      <IdentifyCard />
     </>
  );
 }
@@ -2753,7 +2793,7 @@ function IdentifyCard() {
       <p className="muted">
         Take or upload a close-up of one plant. PlantNet names it; we match care tips from our catalog when we can.
       </p>
-      <div className="row">
+      <div className="row identify-actions">
         <button
           type="button"
           className="secondary small"
@@ -2850,7 +2890,7 @@ function IdentifyCard() {
             </div>
             {confidencePct(top.score) != null && (
               <span className="chip on" style={{ cursor: "default" }}>
-                {confidencePct(top.score)}% sure
+                {confidencePct(top.score)}% verified
               </span>
  )}
           </div>
