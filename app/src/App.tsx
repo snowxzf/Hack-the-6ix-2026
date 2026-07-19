@@ -2688,15 +2688,6 @@ function ScanScreen(props: {
             <div className="row">
               <button
                 type="button"
-                className="small"
-                disabled={!imgSize || !photoRgbaRef.current}
-                onClick={() => autoDetectCorners()}
-                title="Find the yard outline automatically from the photo"
-              >
-                ✨ Auto-detect corners
-              </button>
-              <button
-                type="button"
                 className="secondary small"
                 disabled={!imgSize}
                 onClick={addBedPoint}
@@ -2830,7 +2821,9 @@ function ScanScreen(props: {
                 }}
               />
             )}
+            {/* Edge dots are for custom objects only — the coin has its circle */}
             {imgSize &&
+              mode !== "coin" &&
               refTaps.map((p, i) => (
                 <span
                   key={`r${i}`}
@@ -2853,31 +2846,31 @@ function ScanScreen(props: {
                     strokeDasharray={`${Math.max(6, imgSize.w / 150)}`}
                   />
                 )}
-                {refTaps.length === 2 && (
-                  <>
-                    {/* Detected coin: ring + measured diameter chord */}
-                    <circle
-                      cx={(refTaps[0]!.x + refTaps[1]!.x) / 2}
-                      cy={(refTaps[0]!.y + refTaps[1]!.y) / 2}
-                      r={
-                        Math.hypot(
-                          refTaps[1]!.x - refTaps[0]!.x,
-                          refTaps[1]!.y - refTaps[0]!.y,
-                        ) / 2
-                      }
-                      fill="rgba(127, 232, 154, 0.15)"
-                      stroke="#7fe89a"
-                      strokeWidth={Math.max(2, imgSize.w / 400)}
-                    />
-                    <line
-                      x1={refTaps[0]!.x}
-                      y1={refTaps[0]!.y}
-                      x2={refTaps[1]!.x}
-                      y2={refTaps[1]!.y}
-                      stroke="#7fe89a"
-                      strokeWidth={Math.max(1.5, imgSize.w / 600)}
-                    />
-                  </>
+                {refTaps.length === 2 && mode === "coin" && (
+                  /* The coin: one clean draggable ring, no edge dots */
+                  <circle
+                    cx={(refTaps[0]!.x + refTaps[1]!.x) / 2}
+                    cy={(refTaps[0]!.y + refTaps[1]!.y) / 2}
+                    r={
+                      Math.hypot(
+                        refTaps[1]!.x - refTaps[0]!.x,
+                        refTaps[1]!.y - refTaps[0]!.y,
+                      ) / 2
+                    }
+                    fill="rgba(127, 232, 154, 0.2)"
+                    stroke="#35c45f"
+                    strokeWidth={Math.max(2.5, imgSize.w / 350)}
+                  />
+                )}
+                {refTaps.length === 2 && mode !== "coin" && (
+                  <line
+                    x1={refTaps[0]!.x}
+                    y1={refTaps[0]!.y}
+                    x2={refTaps[1]!.x}
+                    y2={refTaps[1]!.y}
+                    stroke="#7fe89a"
+                    strokeWidth={Math.max(2, imgSize.w / 400)}
+                  />
                 )}
               </svg>
             )}
