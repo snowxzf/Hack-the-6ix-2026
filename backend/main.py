@@ -1641,6 +1641,27 @@ def add_friend(
     return {"ok": True, "friend": _user_doc_public(friend)}
 
 
+@app.post("/friends/remove")
+def remove_friend(
+    body: dict[str, Any], user: CurrentUser = Depends(current_user)
+) -> dict[str, Any]:
+    username = str(body.get("username", "")).strip()
+    me = get_or_create_user(user.sub, user.email)
+    friend = find_user_by_username(username)
+    if not friend:
+        raise HTTPException(
+            status_code=404, detail=f'No user found with username "{username}".'
+        )
+
+    me["friends"] = sorted(set(me.get("friends") or []) - {friend["authId"]})
+    save_user(me)
+
+    friend["friends"] = sorted(set(friend.get("friends") or []) - {me["authId"]})
+    save_user(friend)
+
+    return {"ok": True}
+
+
 @app.get("/friends")
 def list_friends(user: CurrentUser = Depends(current_user)) -> dict[str, Any]:
     me = get_or_create_user(user.sub, user.email)

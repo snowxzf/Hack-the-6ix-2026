@@ -88,6 +88,7 @@ import { HomePanel } from "./components/HomePanel";
 import { LearnPanel } from "./components/LearnPanel";
 import { PlantIdentifyFlow } from "./components/PlantIdentifyFlow";
 import { ProfilePanel } from "./components/ProfilePanel";
+import { UsernameOnboardingModal } from "./components/UsernameOnboardingModal";
 import {
   clearGuestStarted,
   loadGuestStarted,
@@ -969,6 +970,7 @@ export function App() {
       {celebration && (
         <CelebrationPopup celebration={celebration} onDismiss={() => setCelebration(null)} />
       )}
+      <UsernameOnboardingModal />
       <div className="app-scroll">
         {showWelcome ? (
           <WelcomeGate onStart={beginAsGuest} />

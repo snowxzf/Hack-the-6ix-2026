@@ -1,20 +1,19 @@
 import { useAuth0 } from "@auth0/auth0-react";
-import { Trophy, UserPlus } from "lucide-react";
+import { Trophy, UserMinus, UserPlus } from "lucide-react";
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import {
   addFriend,
-  claimUsername,
   fetchLeaderboard,
   fetchMyProfile,
+  removeFriend,
   syncMyStats,
   type LeaderboardEntry,
   type LeaderboardUser,
 } from "../api";
 import { AUTH0_CONFIGURED } from "../lib/auth0Config";
 
-/** ID token (not API access token) — login skips Auth0 API audience grants. */
 function useAccessToken(isAuthenticated: boolean): string | null {
-  const { getIdTokenClaims } = useAuth0();
+  const { getAccessTokenSilently } = useAuth0();
   const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
@@ -23,10 +22,9 @@ function useAccessToken(isAuthenticated: boolean): string | null {
       return;
     }
     let cancelled = false;
-    getIdTokenClaims()
-      .then((claims) => {
-        const raw = claims?.__raw ?? null;
-        if (!cancelled) setToken(raw);
+    getAccessTokenSilently()
+      .then((t) => {
+        if (!cancelled) setToken(t);
       })
       .catch(() => {
         if (!cancelled) setToken(null);
@@ -34,7 +32,7 @@ function useAccessToken(isAuthenticated: boolean): string | null {
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated, getIdTokenClaims]);
+  }, [isAuthenticated, getAccessTokenSilently]);
 
   return token;
 }
@@ -45,11 +43,8 @@ function AuthedLeaderboard(props: { token: string; xp: number; streakDays: numbe
 
   const [profile, setProfile] = useState<LeaderboardUser | null>(null);
   const [loadingProfile, setLoadingProfile] = useState(true);
-  const [usernameDraft, setUsernameDraft] = useState("");
-  const [usernameError, setUsernameError] = useState<string | null>(null);
   const [friendDraft, setFriendDraft] = useState("");
   const [friendError, setFriendError] = useState<string | null>(null);
-  const [friendSuccess, setFriendSuccess] = useState<string | null>(null);
   const [entries, setEntries] = useState<LeaderboardEntry[] | null>(null);
 
   useEffect(() => {
@@ -91,23 +86,13 @@ function AuthedLeaderboard(props: { token: string; xp: number; streakDays: numbe
     });
   }, [token, profile?.username, xp, streakDays]);
 
-  async function submitUsername(e: FormEvent) {
-    e.preventDefault();
-    setUsernameError(null);
-    const res = await claimUsername(token, usernameDraft.trim());
-    if (res.ok) setProfile(res.data);
-    else setUsernameError(res.error);
-  }
-
   async function submitFriend(e: FormEvent) {
     e.preventDefault();
     setFriendError(null);
-    setFriendSuccess(null);
     const name = friendDraft.trim();
     if (!name) return;
     const res = await addFriend(token, name);
     if (res.ok) {
-      setFriendSuccess(`Added @${res.data.friend.username}!`);
       setFriendDraft("");
       loadLeaderboard();
     } else {
@@ -115,33 +100,22 @@ function AuthedLeaderboard(props: { token: string; xp: number; streakDays: numbe
     }
   }
 
+  async function handleRemove(username: string | null) {
+    if (!username) return;
+    const res = await removeFriend(token, username);
+    if (res.ok) loadLeaderboard();
+  }
+
   if (loadingProfile) {
     return <p className="text-sm text-muted-foreground">Loading your profile…</p>;
   }
 
   if (!profile?.username) {
+    // Should only be reachable if the sign-up onboarding prompt was skipped.
     return (
-      <form onSubmit={submitUsername} className="space-y-2">
-        <p className="text-sm text-muted-foreground">
-          Pick a username so friends can find and add you.
-        </p>
-        <input
-          type="text"
-          value={usernameDraft}
-          onChange={(e) => setUsernameDraft(e.target.value)}
-          placeholder="username"
-          maxLength={20}
-          className="h-10 w-full border border-input bg-card px-3 text-sm outline-none ring-ring focus:ring-2"
-        />
-        {usernameError && <p className="text-xs text-destructive">{usernameError}</p>}
-        <button
-          type="submit"
-          disabled={usernameDraft.trim().length < 3}
-          className="bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground disabled:opacity-45"
-        >
-          Claim username
-        </button>
-      </form>
+      <p className="text-sm text-muted-foreground">
+        Pick a username from the welcome prompt to unlock friends and the leaderboard.
+      </p>
     );
   }
 
@@ -153,16 +127,7 @@ function AuthedLeaderboard(props: { token: string; xp: number; streakDays: numbe
         </p>
         <button
           type="button"
-          onClick={() =>
-            logout({
-              logoutParams: {
-                returnTo:
-                  window.location.hostname === "127.0.0.1"
-                    ? `${window.location.protocol}//localhost${window.location.port ? `:${window.location.port}` : ""}`
-                    : window.location.origin,
-              },
-            })
-          }
+          onClick={() => logout({ logoutParams: { returnTo: window.location.origin } })}
           className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
         >
           Log out
@@ -187,27 +152,38 @@ function AuthedLeaderboard(props: { token: string; xp: number; streakDays: numbe
         </button>
       </form>
       {friendError && <p className="text-xs text-destructive">{friendError}</p>}
-      {friendSuccess && <p className="text-xs text-primary">{friendSuccess}</p>}
 
       <div className="divide-y divide-border border border-border bg-card/85 backdrop-blur">
         {entries === null && (
           <p className="p-3 text-sm text-muted-foreground">Loading leaderboard…</p>
         )}
-        {entries?.length === 0 && (
+        {entries?.length === 1 && (
           <p className="p-3 text-sm text-muted-foreground">No friends yet — add one above!</p>
         )}
         {entries?.map((e) => (
           <div
             key={e.authId}
-            className={`flex items-center justify-between p-3 ${e.isMe ? "bg-primary/10" : ""}`}
+            className={`flex items-center justify-between gap-2 p-3 ${e.isMe ? "bg-primary/10" : ""}`}
           >
-            <span className="text-sm font-medium">
+            <span className="min-w-0 truncate text-sm font-medium">
               #{e.rank} {e.username}
               {e.isMe ? " (you)" : ""}
             </span>
-            <span className="text-xs text-muted-foreground">
-              {e.xp} XP · 🔥 {e.streakDays}
-            </span>
+            <div className="flex shrink-0 items-center gap-2">
+              <span className="text-xs text-muted-foreground">
+                {e.xp} XP · 🔥 {e.streakDays}
+              </span>
+              {!e.isMe && (
+                <button
+                  type="button"
+                  aria-label={`Remove ${e.username}`}
+                  onClick={() => handleRemove(e.username)}
+                  className="p-1 text-muted-foreground hover:text-destructive"
+                >
+                  <UserMinus className="h-3.5 w-3.5" />
+                </button>
+              )}
+            </div>
           </div>
         ))}
       </div>
@@ -215,8 +191,10 @@ function AuthedLeaderboard(props: { token: string; xp: number; streakDays: numbe
   );
 }
 
-/** Friends + leaderboard. Local XP/streak tracking works with no account;
- *  this section unlocks friends once you Sign up after garden setup. */
+/** Friends + leaderboard. Local XP/streak tracking works with no account at
+ *  all; this section unlocks add/remove-friend + leaderboard once signed in.
+ *  Username claiming itself happens once, right after first sign-in, via
+ *  <UsernameOnboardingModal> — not here. */
 export function LeaderboardPanel(props: { xp: number; streakDays: number }) {
   const { isAuthenticated, isLoading, loginWithRedirect, error } = useAuth0();
   const token = useAccessToken(AUTH0_CONFIGURED && isAuthenticated);
@@ -237,23 +215,15 @@ export function LeaderboardPanel(props: { xp: number; streakDays: number }) {
         ) : !isAuthenticated ? (
           <div className="space-y-2">
             <p className="text-sm text-muted-foreground">
-              Create an account to save your progress, add friends, and compare XP.
+              Log in to add friends and compare XP.
             </p>
-            {error && (
-              <p className="text-xs text-destructive">
-                Login error: {error.message}
-              </p>
-            )}
+            {error && <p className="text-xs text-destructive">Login error: {error.message}</p>}
             <button
               type="button"
-              onClick={() =>
-                loginWithRedirect({
-                  authorizationParams: { screen_hint: "signup" },
-                })
-              }
+              onClick={() => loginWithRedirect()}
               className="bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground"
             >
-              Sign up
+              Log in
             </button>
           </div>
         ) : !token ? (

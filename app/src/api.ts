@@ -599,6 +599,17 @@ export function addFriend(
   });
 }
 
+export function removeFriend(
+  token: string,
+  username: string,
+): Promise<AuthedOutcome<{ ok: boolean }>> {
+  return authedRequest<{ ok: boolean }>("/friends/remove", token, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username }),
+  });
+}
+
 export function fetchLeaderboard(
   token: string,
 ): Promise<AuthedOutcome<{ entries: LeaderboardEntry[] }>> {
