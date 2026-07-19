@@ -32,9 +32,24 @@ export {
   polygonImageToGroundCm,
 } from "./attitude";
 export {
+  applyHomographyPoint,
+  homographyUnitSquareToQuad,
   measureRectBedWithReference,
   type RectifiedMeasure,
 } from "./rectify";
+export {
+  lumaFromRgba,
+  refineCoinTaps,
+  refineReferenceTaps,
+  type LumaImage,
+  type RefineResult,
+} from "./refine";
+export {
+  estimateFocalPxFromJpeg,
+  focalPxFromExif,
+  readExifCameraInfo,
+  type ExifCameraInfo,
+} from "./exif";
 export {
   boundsOf,
   convexHull,
@@ -47,7 +62,7 @@ export {
   projectFramesToGround,
   stitchWorldPolygons,
 } from "./stitch";
-export { worldPolygonToGardenGrid } from "./grid";
+export { worldPolygonToGardenGrid, type GridDivisions } from "./grid";
 export { scanYard } from "./pipeline";
 export {
   SCAN_UX,

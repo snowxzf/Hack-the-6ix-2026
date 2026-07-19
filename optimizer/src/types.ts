@@ -28,9 +28,13 @@ export interface ExistingPlant {
 }
 
 export interface GardenGrid {
+  /** Nominal cell size the catalog spacing is calibrated for. */
   cellSizeCm: number;
   cols: number;
   rows: number;
+  /** Actual cell size after stretching to tile the bed exactly (≈ cellSizeCm). */
+  cellWidthCm?: number;
+  cellHeightCm?: number;
   /** Cells NOT listed are outside the garden and unusable. */
   cells: Cell[];
   existing?: ExistingPlant[];

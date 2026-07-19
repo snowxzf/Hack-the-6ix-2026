@@ -17,10 +17,14 @@ export interface Cell {
 }
 
 export interface GardenGrid {
+  /** Nominal cell size the catalog spacing is calibrated for. */
   cellSizeCm: number;
   cols: number;
   rows: number;
   cells: Cell[];
+  /** Actual cell size after stretching to tile the bed exactly (≈ cellSizeCm). */
+  cellWidthCm?: number;
+  cellHeightCm?: number;
 }
 
 /** Device spatial attitude at capture time (radians). */
@@ -76,6 +80,13 @@ export interface ScaleReference {
   centerPx: Point2;
   /** Pixel length of the known real-world dimension (coin diameter or object width). */
   diameterPx: number;
+  /**
+   * The two edge tap points the span was measured between. Optional but
+   * recommended: perspective rectification projects these exact points to the
+   * ground plane (direction matters — the coin is an ellipse in the image).
+   */
+  edgeAPx?: Point2;
+  edgeBPx?: Point2;
   confidence: number; // 0..1
 }
 
@@ -88,6 +99,8 @@ export interface ScanFrame {
   /** Pixel size of the image. */
   widthPx: number;
   heightPx: number;
+  /** Camera focal length in px (from EXIF) — improves perspective correction. */
+  focalPx?: number;
   attitude: DeviceAttitude;
   /**
    * Bed outline polygon in image pixels (user taps or CV segmentation).

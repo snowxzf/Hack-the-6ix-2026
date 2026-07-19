@@ -50,8 +50,24 @@ import {
   scanPhotoToGarden,
 } from "./placeholders";
 import type { ScanDiagnostics } from "../../yard-scan/src/index";
-import { COIN_LABELS, SCAN_UX, coinGhostForNextFrame } from "../../yard-scan/src/index";
-import type { Point2, ReferenceKind, ScaleReferenceMode } from "../../yard-scan/src/index";
+import {
+  COIN_LABELS,
+  SCAN_UX,
+  coinGhostForNextFrame,
+  focalPxFromExif,
+  lumaFromRgba,
+  readExifCameraInfo,
+  refineCoinTaps,
+  type ExifCameraInfo,
+  type LumaImage,
+} from "../../yard-scan/src/index";
+import type {
+  Point2,
+  ReferenceKind,
+  ScaleReferenceMode,
+  WorldPolygon,
+} from "../../yard-scan/src/index";
+import { worldPolygonToGardenGrid } from "../../yard-scan/src/index";
 import {
   API_URL,
   fetchFoodWasteImpact,
@@ -277,6 +293,8 @@ export function App() {
   const [garden, setGarden] = useState<GardenGrid | null>(saved?.garden ?? null);
   const [scanInfo, setScanInfo] = useState<ScanDiagnostics | null>(null);
   const [scanOverlay, setScanOverlay] = useState<ScanPhotoOverlay | null>(null);
+  /** Measured bed polygon (cm) — lets Review re-divide the grid on demand. */
+  const [scanWorldBed, setScanWorldBed] = useState<WorldPolygon | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set(saved?.selected ?? []));
   const [prefs, setPrefs] = useState<Preferences>(
     saved?.prefs ?? { tier: "beginner", categories: [] },
@@ -559,10 +577,12 @@ export function App() {
     g: GardenGrid,
     diagnostics: ScanDiagnostics | null,
     overlay: ScanPhotoOverlay | null = null,
+    worldBed: WorldPolygon | null = null,
   ) {
     setGarden(g);
     setScanInfo(diagnostics);
     setScanOverlay(overlay);
+    setScanWorldBed(worldBed);
     setSelected(
       new Set(
         g.cells
@@ -1006,6 +1026,7 @@ export function App() {
                 garden={garden}
                 scanInfo={scanInfo}
                 scanOverlay={scanOverlay}
+                worldBed={scanWorldBed}
                 setGarden={setGarden}
                 selected={selected}
                 setSelected={setSelected}
@@ -1351,6 +1372,8 @@ type SavedScanFrame = {
   referenceEdgeA: Point2;
   referenceEdgeB: Point2;
   bedCorners: Point2[];
+  /** Camera focal length in px, from the photo's EXIF (undefined = unknown). */
+  focalPx?: number;
 };
 
 function ScanScreen(props: {
@@ -1362,6 +1385,7 @@ function ScanScreen(props: {
     g: GardenGrid,
     d: ScanDiagnostics,
     overlay: ScanPhotoOverlay | null,
+    worldBed: WorldPolygon | null,
   ) => void;
   onDemo: () => void;
   onSkip?: () => void;
@@ -1393,6 +1417,10 @@ function ScanScreen(props: {
   const [savedFrames, setSavedFrames] = useState<SavedScanFrame[]>([]);
   /** Extra photos picked via multi-select, loaded after each "Save frame". */
   const [pendingPhotos, setPendingPhotos] = useState<string[]>([]);
+  /** EXIF camera info per photo object-URL (parsed async right after pick). */
+  const exifByUrlRef = useRef(new Map<string, ExifCameraInfo>());
+  /** Grayscale copy of the current photo for coin-tap edge snapping. */
+  const photoLumaRef = useRef<{ img: LumaImage; scale: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const cameraInputRef = useRef<HTMLInputElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
@@ -1533,6 +1561,16 @@ function ScanScreen(props: {
     applyPickedPhotos([f]);
   }
 
+  /** Parse EXIF (lens focal length) in the background; ok if it never lands. */
+  function captureExif(url: string, file: File) {
+    file
+      .arrayBuffer()
+      .then((buf) => {
+        exifByUrlRef.current.set(url, readExifCameraInfo(buf));
+      })
+      .catch(() => undefined);
+  }
+
   /** One photo now; if stitch is on and several were chosen, queue the rest. */
   function applyPickedPhotos(files: File[]) {
     const images = files.filter((f) => f.type.startsWith("image/") || /\.(jpe?g|png|webp|heic|heif)$/i.test(f.name));
@@ -1541,7 +1579,9 @@ function ScanScreen(props: {
       return;
     }
     const [first, ...rest] = images;
-    loadPhotoUrl(URL.createObjectURL(first!));
+    const firstUrl = URL.createObjectURL(first!);
+    captureExif(firstUrl, first!);
+    loadPhotoUrl(firstUrl);
     if (/\.heic$|\.heif$/i.test(first!.name) || /heic|heif/i.test(first!.type)) {
       setError(
         "This looks like an iPhone HEIC photo — if it doesn't appear below, open it in Photos and export as JPEG, then re-upload.",
@@ -1549,7 +1589,13 @@ function ScanScreen(props: {
     }
     if (stitchMode && rest.length) {
       clearPendingPhotos();
-      setPendingPhotos(rest.map((f) => URL.createObjectURL(f)));
+      setPendingPhotos(
+        rest.map((f) => {
+          const url = URL.createObjectURL(f);
+          captureExif(url, f);
+          return url;
+        }),
+      );
     } else if (!stitchMode && rest.length) {
       setError("Turn on Stitch wide yard first if you want to use more than one photo.");
     }
@@ -1607,10 +1653,30 @@ function ScanScreen(props: {
     // Only coin-edge taps use empty clicks. Bed corners are drag-only —
     // use the "Add point" button so misses don't spawn random corners.
     if (tapPhase === "reference") {
-      const next = [...refTaps, pt].slice(0, 2);
+      let next = [...refTaps, pt].slice(0, 2);
+      if (next.length === 2) {
+        next = snapReferenceTaps(next[0]!, next[1]!);
+        setTapPhase("bed");
+      }
       setRefTaps(next);
-      if (next.length === 2) setTapPhase("bed");
     }
+  }
+
+  /** Snap the two coin taps onto the detected coin boundary (coin mode only). */
+  function snapReferenceTaps(a: Point2, b: Point2): Point2[] {
+    const lum = photoLumaRef.current;
+    if (!lum || mode !== "coin") return [a, b];
+    const s = lum.scale;
+    const r = refineCoinTaps(
+      lum.img,
+      { x: a.x * s, y: a.y * s },
+      { x: b.x * s, y: b.y * s },
+    );
+    if (!r.refined) return [a, b];
+    return [
+      { x: r.a.x / s, y: r.a.y / s },
+      { x: r.b.x / s, y: r.b.y / s },
+    ];
   }
 
   /** Insert a new bed corner at the midpoint of the longest edge. */
@@ -1669,13 +1735,20 @@ function ScanScreen(props: {
   }
 
   function endDrag() {
+    const active = dragRef.current;
     dragRef.current = null;
+    // After hand-adjusting a coin mark, fine-snap it onto the coin edge.
+    if (active?.kind === "ref" && dragMovedRef.current && refTapsRef.current.length === 2) {
+      const [a, b] = refTapsRef.current;
+      setRefTaps(snapReferenceTaps(a!, b!));
+    }
   }
 
   function currentFramePayload(): SavedScanFrame | null {
     const taps = refTapsRef.current;
     const corners = bedCornersRef.current;
     if (!props.photo || !imgSize || taps.length < 2 || corners.length < 3) return null;
+    const exif = exifByUrlRef.current.get(props.photo);
     return {
       id: `frame-${savedFrames.length + 1}`,
       photoUrl: props.photo,
@@ -1684,6 +1757,7 @@ function ScanScreen(props: {
       referenceEdgeA: taps[0]!,
       referenceEdgeB: taps[1]!,
       bedCorners: corners.map((p) => ({ ...p })),
+      focalPx: exif ? focalPxFromExif(exif, imgSize.w, imgSize.h) : undefined,
     };
   }
 
@@ -1721,7 +1795,7 @@ function ScanScreen(props: {
     setError(null);
     try {
       const result = gardenFromRectangleCm(manualWidthCm, manualLengthCm, cellSizeCm);
-      props.onMeasured(result.garden, result.diagnostics, null);
+      props.onMeasured(result.garden, result.diagnostics, null, result.worldBed);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -1758,6 +1832,7 @@ function ScanScreen(props: {
               customSizeCm,
               customLabel,
               cellSizeCm,
+              focalPx: frames[0]!.focalPx,
             })
           : measureYardFromFrames({
               frames: frames.map(({ photoUrl: _p, ...f }) => f),
@@ -1778,7 +1853,7 @@ function ScanScreen(props: {
             bedCorners: last.bedCorners,
           }
         : null;
-      props.onMeasured(result.garden, result.diagnostics, overlay);
+      props.onMeasured(result.garden, result.diagnostics, overlay, result.worldBed);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -1952,6 +2027,36 @@ function ScanScreen(props: {
               <span className="toggle-knob" />
             </button>
           </label>
+          {stitchMode && (
+            <div className="stitch-howto">
+              <p className="scan-phase">How to scan a big garden (2+ photos)</p>
+              <ol className="tiny">
+                <li>
+                  Put <b>one coin</b> on the ground around the middle of the bed —
+                  it must <b>stay in the same spot</b> for every photo.
+                </li>
+                <li>
+                  Shoot at <b>1× zoom</b> (never 0.5× — the wide lens bends straight
+                  edges). Hold the phone up high, tilted down at the bed.
+                </li>
+                <li>
+                  Start at one end, then <b>step sideways</b> for each next shot,
+                  overlapping about <b>⅓</b> with the previous photo. Keep the coin
+                  in frame in every shot if you can.
+                </li>
+                <li>
+                  <b>Pan, don't rotate</b> — keep the phone facing the same way for
+                  all photos.
+                </li>
+                <li>
+                  On each photo: tap the coin's two edges, then drag the 4 blue
+                  corners around the <b>section of bed you can see</b> (a partial
+                  rectangle is fine — the photos get combined).
+                </li>
+                <li>Save each frame, then hit Measure.</li>
+              </ol>
+            </div>
+          )}
         </>
       ) : (
         <>
@@ -2093,8 +2198,9 @@ function ScanScreen(props: {
               : `Frame ${savedFrames.length} saved — upload photo ${savedFrames.length + 1} (or Measure when you have 2+)`}
           </p>
           <p className="scan-phase-hint">
-            Same coin must appear in each overlap. Mark coin edges + bed corners on every photo.
-            Keep saving frames until you’ve added all shots (2 or more), then Measure.
+            Same coin, same spot, in every photo. Shoot at 1× zoom, pan sideways with
+            ~⅓ overlap, and outline the visible section of bed with 4 corners on each
+            photo. Save each frame, then Measure.
           </p>
           <div className="row">
             <button type="button" onClick={() => fileInputRef.current?.click()}>
@@ -2214,6 +2320,28 @@ function ScanScreen(props: {
                 const img = e.currentTarget;
                 const size = { w: img.naturalWidth, h: img.naturalHeight };
                 setImgSize(size);
+                // Grayscale copy (capped size) so coin taps can snap to the coin edge.
+                photoLumaRef.current = null;
+                try {
+                  const maxSide = 2400;
+                  const s = Math.min(1, maxSide / Math.max(size.w, size.h));
+                  const cw = Math.max(1, Math.round(size.w * s));
+                  const ch = Math.max(1, Math.round(size.h * s));
+                  const canvas = document.createElement("canvas");
+                  canvas.width = cw;
+                  canvas.height = ch;
+                  const ctx = canvas.getContext("2d", { willReadFrequently: true });
+                  if (ctx) {
+                    ctx.drawImage(img, 0, 0, cw, ch);
+                    const data = ctx.getImageData(0, 0, cw, ch);
+                    photoLumaRef.current = {
+                      img: lumaFromRgba(data.data, cw, ch),
+                      scale: cw / size.w,
+                    };
+                  }
+                } catch {
+                  photoLumaRef.current = null; // e.g. cross-origin demo image
+                }
                 // Only seed the default quad once — never wipe corners the user already dragged.
                 setBedCorners((prev) =>
                   prev.length >= 3 ? prev : autoCorners(size.w, size.h),
@@ -2222,6 +2350,7 @@ function ScanScreen(props: {
               }}
               onError={() => {
                 setImgSize(null);
+                photoLumaRef.current = null;
                 setError(
                   "Couldn't display that photo in the browser. Re-save it as JPG/PNG (iPhone HEIC often fails on Windows) and try again.",
                 );
@@ -2351,6 +2480,8 @@ function ReviewScreen(props: {
   garden: GardenGrid;
   scanInfo: ScanDiagnostics | null;
   scanOverlay: ScanPhotoOverlay | null;
+  /** Measured bed polygon (cm); enables the grid-division controls. */
+  worldBed: WorldPolygon | null;
   setGarden: (g: GardenGrid) => void;
   selected: Set<string>;
   setSelected: (s: Set<string>) => void;
@@ -2360,6 +2491,10 @@ function ReviewScreen(props: {
 }) {
   const { garden, scanInfo, scanOverlay } = props;
   const existing = garden.existing ?? [];
+  /** Grid rendering: warped onto the scan photo, or the plain abstract grid. */
+  const [gridView, setGridView] = useState<"photo" | "plain">(
+    scanOverlay ? "photo" : "plain",
+  );
 
   function removeExisting(idx: number) {
     const target = existing[idx];
@@ -2381,6 +2516,27 @@ function ReviewScreen(props: {
     });
   }
 
+  /** Re-divide the measured bed into an explicit number of columns/rows. */
+  function redivide(cols: number, rows: number) {
+    if (!props.worldBed) return;
+    const g = worldPolygonToGardenGrid(props.worldBed, garden.cellSizeCm, {
+      cols: Math.min(Math.max(cols, 1), 40),
+      rows: Math.min(Math.max(rows, 1), 40),
+    });
+    props.setGarden(g);
+    props.setSelected(
+      new Set(
+        g.cells
+          .filter((c) => c.state === "selected")
+          .map((c) => cellKey(c.r, c.c)),
+      ),
+    );
+  }
+
+  const cellsTight =
+    (garden.cellWidthCm ?? garden.cellSizeCm) < garden.cellSizeCm * 0.8 ||
+    (garden.cellHeightCm ?? garden.cellSizeCm) < garden.cellSizeCm * 0.8;
+
   return (
     <>
       <div className="card">
@@ -2392,6 +2548,9 @@ function ReviewScreen(props: {
             {scanInfo.scale.referenceMode === "coin"
               ? `coin (${scanInfo.scale.reference})`
               : scanInfo.scale.referenceLabel || "custom object"}
+            {garden.cellWidthCm && garden.cellHeightCm
+              ? ` · cells ≈ ${garden.cellWidthCm} × ${garden.cellHeightCm} cm (stretched to tile the bed)`
+              : ""}
             . Gray path / bike / flowers only appear on the demo yard.
           </p>
         ) : (
@@ -2399,13 +2558,86 @@ function ReviewScreen(props: {
             Gray = path (can't plant). B = movable obstacle. P = plants we detected.
           </p>
         )}
-        {scanOverlay && (
-          <PhotoGridOverlay overlay={scanOverlay} garden={garden} />
+        {props.worldBed && (
+          <div className="grid-divisions">
+            <span className="tiny">Grid divisions</span>
+            <span className="division-stepper">
+              <button
+                type="button"
+                className="secondary small"
+                disabled={garden.cols <= 1}
+                onClick={() => redivide(garden.cols - 1, garden.rows)}
+              >
+                −
+              </button>
+              <span className="division-count">{garden.cols} across</span>
+              <button
+                type="button"
+                className="secondary small"
+                onClick={() => redivide(garden.cols + 1, garden.rows)}
+              >
+                +
+              </button>
+            </span>
+            <span className="tiny muted">×</span>
+            <span className="division-stepper">
+              <button
+                type="button"
+                className="secondary small"
+                disabled={garden.rows <= 1}
+                onClick={() => redivide(garden.cols, garden.rows - 1)}
+              >
+                −
+              </button>
+              <span className="division-count">{garden.rows} down</span>
+              <button
+                type="button"
+                className="secondary small"
+                onClick={() => redivide(garden.cols, garden.rows + 1)}
+              >
+                +
+              </button>
+            </span>
+            {garden.cellWidthCm && garden.cellHeightCm && (
+              <span className="tiny muted">
+                each cell ≈ {garden.cellWidthCm} × {garden.cellHeightCm} cm
+              </span>
+            )}
+            {cellsTight && (
+              <span className="tiny" style={{ color: "#c4a35a" }}>
+                Cells are getting small for {garden.cellSizeCm} cm plant spacing.
+              </span>
+            )}
+          </div>
         )}
-        <p className="tiny muted" style={{ marginTop: 10 }}>
-          Abstract grid (same cells)
-        </p>
-        <GridView garden={garden} />
+        {scanOverlay && (
+          <div className="row grid-view-toggle">
+            <span
+              className={`chip ${gridView === "photo" ? "on" : ""}`}
+              onClick={() => setGridView("photo")}
+            >
+              On your photo
+            </span>
+            <span
+              className={`chip ${gridView === "plain" ? "on" : ""}`}
+              onClick={() => setGridView("plain")}
+            >
+              Plain grid
+            </span>
+          </div>
+        )}
+        {scanOverlay && gridView === "photo" ? (
+          <div className="view-fade" key="grid-photo">
+            <PhotoGridOverlay overlay={scanOverlay} garden={garden} />
+          </div>
+        ) : (
+          <div className="view-fade" key="grid-plain">
+            <p className="tiny muted" style={{ marginTop: 10 }}>
+              Abstract grid (same cells{scanOverlay ? " as on the photo" : ""})
+            </p>
+            <GridView garden={garden} />
+          </div>
+        )}
       </div>
       <div className="card">
         <h2>Detected plants: did we get it right?</h2>

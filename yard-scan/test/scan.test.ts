@@ -66,8 +66,11 @@ describe("scanYard single frame", () => {
     expect(res.diagnostics.heightCm).toBeCloseTo(200, 0);
     expect(res.diagnostics.areaM2).toBeCloseTo(6, 1);
     expect(res.garden.cols).toBe(10);
-    expect(res.garden.rows).toBe(7); // ceil(200/30)=7
-    expect(res.garden.cells.length).toBeGreaterThan(40);
+    // Cells stretch to tile the bed: 200/30 → 6 rows of ~33.3 cm (no dead strip)
+    expect(res.garden.rows).toBe(6);
+    expect(res.garden.cellHeightCm).toBeCloseTo(33.3, 0);
+    // full rectangle → every cell usable
+    expect(res.garden.cells.length).toBe(60);
     expect(res.diagnostics.stitched).toBe(false);
   });
 });

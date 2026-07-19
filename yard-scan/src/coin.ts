@@ -66,7 +66,8 @@ export function referenceFromEdgeTaps(
   },
 ): ScaleReference {
   const diameterPx = Math.hypot(b.x - a.x, b.y - a.y);
-  if (diameterPx < 2) throw new Error("Reference taps are too close together");
+  // !(x >= 2) also catches NaN taps, which `x < 2` would let through
+  if (!(diameterPx >= 2)) throw new Error("Reference taps are too close together");
   return {
     mode: opts.mode,
     kind: opts.kind,
@@ -74,6 +75,8 @@ export function referenceFromEdgeTaps(
     customDiameterCm: opts.customDiameterCm,
     centerPx: { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 },
     diameterPx,
+    edgeAPx: { ...a },
+    edgeBPx: { ...b },
     confidence: opts.confidence ?? 0.95,
   };
 }

@@ -1,8 +1,13 @@
 import { attitudeWarnings, groundScaleFromAttitude } from "./attitude";
-import { scaleFromReference } from "./coin";
+import { referenceDiameterCm, scaleFromReference } from "./coin";
 import { boundsOf, polygonAreaCm2 } from "./geometry";
 import { worldPolygonToGardenGrid } from "./grid";
-import { projectFramesToGround, stitchWorldPolygons } from "./stitch";
+import { measureRectBedWithReference } from "./rectify";
+import {
+  projectFramesToGround,
+  stitchWorldPolygons,
+  type FrameWorld,
+} from "./stitch";
 import type {
   ScaleReference,
   ScanFrame,
@@ -13,6 +18,46 @@ import type {
 
 function frameReference(f: ScanFrame): ScaleReference | undefined {
   return f.reference ?? f.coin;
+}
+
+/**
+ * Project one frame to ground cm via full perspective rectification, treating
+ * its 4-corner outline as a rectangle on the ground (a garden bed, or the
+ * visible rectangular section of one in a multi-photo pan). The reference
+ * (coin) lands at the origin, and the outline's first tapped edge maps to +x —
+ * so frames tapped in a consistent order share a ground frame automatically.
+ * Returns null when the frame can't be rectified (≠4 corners, no reference).
+ */
+function rectifyFrameToGround(f: ScanFrame): FrameWorld | null {
+  const ref = frameReference(f);
+  if (!ref || f.bedPolygonPx.length !== 4 || ref.diameterPx <= 0) return null;
+  const a =
+    ref.edgeAPx ?? {
+      x: ref.centerPx.x - ref.diameterPx / 2,
+      y: ref.centerPx.y,
+    };
+  const b =
+    ref.edgeBPx ?? {
+      x: ref.centerPx.x + ref.diameterPx / 2,
+      y: ref.centerPx.y,
+    };
+  let dCm: number;
+  try {
+    dCm = referenceDiameterCm(ref.kind, ref.customDiameterCm);
+  } catch {
+    return null;
+  }
+  const m = measureRectBedWithReference(
+    f.bedPolygonPx,
+    a,
+    b,
+    dCm,
+    f.widthPx,
+    f.heightPx,
+    f.focalPx,
+  );
+  if (!m || m.widthCm <= 1 || m.heightCm <= 1) return null;
+  return { frameId: f.id, polygonCm: m.bedCm };
 }
 
 /**
@@ -78,12 +123,31 @@ export function scanYard(
     );
   }
 
-  const projected = projectFramesToGround(
+  // Prefer full perspective rectification per frame (accurate); fall back to
+  // the attitude/foreshortening approximation for frames it can't handle.
+  const attitudeProjected = projectFramesToGround(
     frames,
     scale,
     ref.centerPx,
     refFrame.attitude.rollRad ?? 0,
   );
+  const byId = new Map(attitudeProjected.map((p) => [p.frameId, p]));
+  let rectifiedCount = 0;
+  const projected = frames.map((f) => {
+    const rect = rectifyFrameToGround(f);
+    if (rect) {
+      rectifiedCount++;
+      return rect;
+    }
+    return byId.get(f.id)!;
+  });
+  if (rectifiedCount < frames.length) {
+    warnings.push(
+      frames.length === 1
+        ? "Couldn't perspective-correct this photo — outline the bed with exactly 4 corners for best accuracy."
+        : `Perspective-corrected ${rectifiedCount}/${frames.length} photos — outline a 4-corner section and mark the coin in every photo for best accuracy.`,
+    );
+  }
 
   const worldBed = stitchWorldPolygons(frames, projected);
   const b = boundsOf(worldBed.pointsCm);

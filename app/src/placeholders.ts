@@ -9,10 +9,8 @@ import {
   scanYard,
   referenceFromEdgeTaps,
   estimatePitchFromRectangle,
-  measureRectBedWithReference,
   scaleFromReference,
   worldPolygonToGardenGrid,
-  boundsOf,
   polygonAreaCm2,
   type Point2,
   type ReferenceKind,
@@ -101,6 +99,8 @@ export interface MeasureYardInput {
   pitchFromNadirRad?: number;
   /** Planting grid cell edge length in cm (default 30). */
   cellSizeCm?: number;
+  /** Camera focal length in px (from photo EXIF) — big accuracy win when set. */
+  focalPx?: number;
 }
 
 /** Live yard-scan: coin or any known-size object → GardenGrid. */
@@ -126,63 +126,10 @@ export function measureYardFromTaps(input: MeasureYardInput): YardScanResult {
   });
 
   const customCm = mode === "custom_object" ? input.customSizeCm : undefined;
-  const { cmPerPx, referenceDiameterCm: dCm } = scaleFromReference(
-    reference.diameterPx,
-    kind,
-    customCm,
-  );
+  const { cmPerPx } = scaleFromReference(reference.diameterPx, kind, customCm);
 
-  // 4 corners of a real rectangle (desk / raised bed / patio): undo
-  // perspective with vanishing-point metric rectification + reference scale.
-  if (input.bedCorners.length === 4 && input.pitchFromNadirRad == null) {
-    const rect = measureRectBedWithReference(
-      input.bedCorners,
-      input.referenceEdgeA,
-      input.referenceEdgeB,
-      dCm,
-      input.imageWidthPx,
-      input.imageHeightPx,
-    );
-    if (rect && rect.widthCm > 5 && rect.heightCm > 5) {
-      const worldBed = {
-        pointsCm: rect.bedCm,
-        sourceFrameIds: ["web-frame"],
-      };
-      const garden = worldPolygonToGardenGrid(worldBed, cellSizeCm);
-      const b = boundsOf(rect.bedCm);
-      const areaCm2 = polygonAreaCm2(rect.bedCm);
-      const warnings = [
-        "Perspective-corrected assuming a rectangular bed (desk / raised bed / patio).",
-      ];
-      if (cellSizeCm !== 30) {
-        warnings.push(
-          `Grid cells are ${cellSizeCm} cm (plant footprints in the catalog are sized for 30 cm cells).`,
-        );
-      }
-      return {
-        garden,
-        worldBed,
-        diagnostics: {
-          scale: {
-            cmPerPx,
-            reference: kind,
-            referenceMode: mode,
-            referenceLabel: reference.label,
-            referenceDiameterCm: dCm,
-            cmPerPxGround: { x: cmPerPx, y: cmPerPx },
-          },
-          frameCount: 1,
-          stitched: false,
-          widthCm: Math.round(b.widthCm * 10) / 10,
-          heightCm: Math.round(b.heightCm * 10) / 10,
-          areaM2: Math.round((areaCm2 / 10_000) * 100) / 100,
-          warnings,
-        },
-      };
-    }
-  }
-
-  // Fallback: mild pitch estimate when the outline isn't a clean quad.
+  // Fallback attitude for frames the pipeline can't perspective-rectify
+  // (scanYard rectifies 4-corner outlines internally; ≠4 corners use this).
   let pitch = input.pitchFromNadirRad;
   if (pitch == null) {
     pitch = estimatePitchFromRectangle(
@@ -192,12 +139,13 @@ export function measureYardFromTaps(input: MeasureYardInput): YardScanResult {
     ).pitchFromNadirRad;
   }
 
-  return scanYard(
+  const result = scanYard(
     [
       {
         id: "web-frame",
         widthPx: input.imageWidthPx,
         heightPx: input.imageHeightPx,
+        focalPx: input.focalPx,
         attitude: {
           pitchFromNadirRad: pitch,
         },
@@ -207,6 +155,26 @@ export function measureYardFromTaps(input: MeasureYardInput): YardScanResult {
     ],
     { cellSizeCm },
   );
+  annotateWebScan(result, input.focalPx, cellSizeCm);
+  return result;
+}
+
+/** Shared web-app diagnostics: lens source + non-default cell size. */
+function annotateWebScan(
+  result: YardScanResult,
+  focalPx: number | undefined,
+  cellSizeCm: number,
+): void {
+  result.diagnostics.warnings.push(
+    focalPx
+      ? "Lens focal length read from the photo's EXIF."
+      : "No EXIF lens data in this photo — used a typical phone-lens estimate.",
+  );
+  if (cellSizeCm !== 30) {
+    result.diagnostics.warnings.push(
+      `Grid cells are ${cellSizeCm} cm (plant footprints in the catalog are sized for 30 cm cells).`,
+    );
+  }
 }
 
 export interface MeasureFrameInput {
@@ -216,6 +184,7 @@ export interface MeasureFrameInput {
   referenceEdgeA: Point2;
   referenceEdgeB: Point2;
   bedCorners: Point2[];
+  focalPx?: number;
 }
 
 export interface MeasureYardFramesInput {
@@ -255,6 +224,7 @@ export function measureYardFromFrames(input: MeasureYardFramesInput): YardScanRe
       customLabel: input.customLabel,
       pitchFromNadirRad: input.pitchFromNadirRad,
       cellSizeCm,
+      focalPx: f.focalPx,
     });
   }
 
@@ -288,6 +258,7 @@ export function measureYardFromFrames(input: MeasureYardFramesInput): YardScanRe
       id: f.id,
       widthPx: f.imageWidthPx,
       heightPx: f.imageHeightPx,
+      focalPx: f.focalPx,
       attitude: { pitchFromNadirRad: pitch },
       bedPolygonPx: f.bedCorners,
       reference,
@@ -310,11 +281,11 @@ export function measureYardFromFrames(input: MeasureYardFramesInput): YardScanRe
       ? "Stitched by aligning the same coin across photos (keep the coin in the overlap)."
       : "Stitched with pan-overlap hints — mark the coin in every frame for better accuracy.",
   ];
-  if (cellSizeCm !== 30) {
-    result.diagnostics.warnings.push(
-      `Grid cells are ${cellSizeCm} cm (plant footprints in the catalog are sized for 30 cm cells).`,
-    );
-  }
+  annotateWebScan(
+    result,
+    input.frames.every((f) => f.focalPx) ? input.frames[0]!.focalPx : undefined,
+    cellSizeCm,
+  );
   return result;
 }
 

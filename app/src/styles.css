@@ -491,6 +491,19 @@ button:disabled:not([class*="flex"]):not([class*="bg-"]) {
   white-space: nowrap;
   letter-spacing: 0.04em;
 }
+.stitch-howto {
+  margin: 8px 0 4px;
+  padding: 10px 12px;
+  border: 1px solid hsl(var(--border));
+  border-radius: 8px;
+  background: hsl(var(--muted) / 0.25);
+}
+.stitch-howto ol {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  display: grid;
+  gap: 5px;
+}
 .stitch-panel {
   margin: 8px 0 4px;
   padding: 8px 0;
@@ -531,6 +544,43 @@ button:disabled:not([class*="flex"]):not([class*="bg-"]) {
 }
 .photo-grid-overlay {
   margin: 8px 0 12px;
+}
+.grid-view-toggle {
+  margin-top: 10px;
+}
+.grid-divisions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.division-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.division-stepper button {
+  min-width: 28px;
+  padding: 2px 8px;
+}
+.division-count {
+  font-size: 13px;
+  min-width: 64px;
+  text-align: center;
+}
+.view-fade {
+  animation: viewIn 0.35s ease;
+}
+@keyframes viewIn {
+  from {
+    opacity: 0;
+    transform: scale(0.985) translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 .photo-grid-overlay .photo-stage {
   margin-top: 4px;

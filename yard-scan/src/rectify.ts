@@ -19,6 +19,10 @@ type H = { x: number; y: number; z: number };
  *
  * Works for any photo of a planar rectangle — not tuned to a specific image.
  * Bed taps must be 4 corners in boundary order.
+ *
+ * `knownFocalPx` (from EXIF, see exif.ts) beats the vanishing-point estimate,
+ * which is noise-sensitive and degenerates entirely when the bed sits square
+ * to the frame (both side pairs parallel → vanishing points at infinity).
  */
 export function measureRectBedWithReference(
   bedPolygonPx: Point2[],
@@ -27,23 +31,21 @@ export function measureRectBedWithReference(
   referenceDiameterCm: number,
   imageWidthPx: number,
   imageHeightPx: number,
+  knownFocalPx?: number,
 ): RectifiedMeasure | null {
   if (bedPolygonPx.length !== 4 || referenceDiameterCm <= 0) return null;
 
-  const [p0, p1, p2, p3] = bedPolygonPx as [Point2, Point2, Point2, Point2];
   const cx = imageWidthPx / 2;
   const cy = imageHeightPx / 2;
 
-  const vx = lineIntersect(line(p0, p1), line(p3, p2));
-  const vy = lineIntersect(line(p1, p2), line(p0, p3));
-  if (!vx || !vy) return null;
-
-  // When one pair of sides is nearly parallel, a vanishing point goes to
-  // infinity and f² is undefined — fall back to a typical phone HFOV.
-  const f2 = focalLengthSqFromOrthogonalVanishing(vx, vy, cx, cy);
-  const fFallback = imageWidthPx / 2 / Math.tan(((65 * Math.PI) / 180) / 2);
-  const f =
-    Number.isFinite(f2) && f2 > 100 && f2 < 1e10 ? Math.sqrt(f2) : fFallback;
+  const f = pickFocalPx(
+    bedPolygonPx,
+    imageWidthPx,
+    imageHeightPx,
+    cx,
+    cy,
+    knownFocalPx,
+  );
 
   const unitSq: Point2[] = [
     { x: 0, y: 0 },
@@ -100,6 +102,63 @@ export function measureRectBedWithReference(
   };
 }
 
+/**
+ * Homography mapping the unit square (0,0)-(1,1) onto a 4-corner quad in
+ * boundary order. Lets a UI warp grid lines onto the photo with true
+ * perspective (bilinear interpolation bunches cells incorrectly).
+ */
+export function homographyUnitSquareToQuad(quad: Point2[]): number[] | null {
+  if (quad.length !== 4) return null;
+  const unitSq: Point2[] = [
+    { x: 0, y: 0 },
+    { x: 1, y: 0 },
+    { x: 1, y: 1 },
+    { x: 0, y: 1 },
+  ];
+  return homographyDlt(unitSq, quad);
+}
+
+/** Apply a 3×3 homography (row-major, 9 numbers) to a point. */
+export function applyHomographyPoint(H: number[], p: Point2): Point2 | null {
+  return applyH(H, p);
+}
+
+/**
+ * Focal length in pixels, best source first:
+ *  1. `knownFocalPx` — from EXIF (exact for the shot)
+ *  2. Orthogonal-vanishing-point estimate — only when both vanishing points
+ *     are finite and the result lands in a plausible phone-lens range
+ *  3. Heuristic: a typical phone main camera is a 26 mm-equivalent lens,
+ *     i.e. f ≈ (26/36) × long image side ≈ 0.72 × long side
+ */
+function pickFocalPx(
+  bedPolygonPx: Point2[],
+  imageWidthPx: number,
+  imageHeightPx: number,
+  cx: number,
+  cy: number,
+  knownFocalPx?: number,
+): number {
+  const longSide = Math.max(imageWidthPx, imageHeightPx);
+  if (knownFocalPx && Number.isFinite(knownFocalPx) && knownFocalPx > 0) {
+    return knownFocalPx;
+  }
+
+  const fFallback = 0.72 * longSide;
+  const [p0, p1, p2, p3] = bedPolygonPx as [Point2, Point2, Point2, Point2];
+  const vx = lineIntersect(line(p0, p1), line(p3, p2));
+  const vy = lineIntersect(line(p1, p2), line(p0, p3));
+  if (!vx || !vy) return fFallback;
+
+  const f2 = focalLengthSqFromOrthogonalVanishing(vx, vy, cx, cy);
+  if (!Number.isFinite(f2) || f2 <= 0) return fFallback;
+  const f = Math.sqrt(f2);
+  // Plausible phone range ≈ 16–50 mm equivalent. Outside it, the vanishing
+  // points were too degenerate/noisy to trust.
+  if (f < 0.45 * longSide || f > 1.4 * longSide) return fFallback;
+  return f;
+}
+
 function line(a: Point2, b: Point2): H {
   return cross({ x: a.x, y: a.y, z: 1 }, { x: b.x, y: b.y, z: 1 });
 }
@@ -145,8 +204,67 @@ function applyKInv(h: H, f: number, cx: number, cy: number): H {
   };
 }
 
-/** DLT with h₈ = 1 → 8×8 linear solve. */
+/**
+ * DLT with h₈ = 1 → 8×8 linear solve.
+ * Points are Hartley-normalized (centroid 0, mean distance √2) first so the
+ * solve stays well-conditioned with pixel coordinates in the thousands.
+ */
 function homographyDlt(src: Point2[], dst: Point2[]): number[] | null {
+  const Ts = normalizeTransform(src);
+  const Td = normalizeTransform(dst);
+  const nSrc = src.map((p) => applySim(Ts, p));
+  const nDst = dst.map((p) => applySim(Td, p));
+  const Hn = homographyDltRaw(nSrc, nDst);
+  if (!Hn) return null;
+  // H = Td⁻¹ · H̃ · Ts
+  const TdInv = invertSim(Td);
+  return mul3(mul3(simToMat(TdInv), Hn), simToMat(Ts));
+}
+
+/** Similarity: p' = s·p + t */
+type Sim = { s: number; tx: number; ty: number };
+
+function normalizeTransform(pts: Point2[]): Sim {
+  let mx = 0;
+  let my = 0;
+  for (const p of pts) {
+    mx += p.x;
+    my += p.y;
+  }
+  mx /= pts.length;
+  my /= pts.length;
+  let dist = 0;
+  for (const p of pts) dist += Math.hypot(p.x - mx, p.y - my);
+  dist /= pts.length;
+  const s = dist > 1e-12 ? Math.SQRT2 / dist : 1;
+  return { s, tx: -s * mx, ty: -s * my };
+}
+
+function applySim(t: Sim, p: Point2): Point2 {
+  return { x: t.s * p.x + t.tx, y: t.s * p.y + t.ty };
+}
+
+function invertSim(t: Sim): Sim {
+  return { s: 1 / t.s, tx: -t.tx / t.s, ty: -t.ty / t.s };
+}
+
+function simToMat(t: Sim): number[] {
+  return [t.s, 0, t.tx, 0, t.s, t.ty, 0, 0, 1];
+}
+
+function mul3(a: number[], b: number[]): number[] {
+  const r = new Array<number>(9).fill(0);
+  for (let i = 0; i < 3; i++) {
+    for (let j = 0; j < 3; j++) {
+      let acc = 0;
+      for (let k = 0; k < 3; k++) acc += a[i * 3 + k]! * b[k * 3 + j]!;
+      r[i * 3 + j] = acc;
+    }
+  }
+  return r;
+}
+
+function homographyDltRaw(src: Point2[], dst: Point2[]): number[] | null {
   const A: number[][] = [];
   const b: number[] = [];
   for (let i = 0; i < 4; i++) {

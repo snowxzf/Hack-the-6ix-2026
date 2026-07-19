@@ -1,5 +1,10 @@
+import { useMemo } from "react";
 import type { GardenGrid } from "../../optimizer/src/index";
-import type { Point2 } from "../../yard-scan/src/index";
+import {
+  applyHomographyPoint,
+  homographyUnitSquareToQuad,
+  type Point2,
+} from "../../yard-scan/src/index";
 
 export interface ScanPhotoOverlay {
   photoUrl: string;
@@ -13,8 +18,21 @@ function lerp(a: Point2, b: Point2, t: number): Point2 {
   return { x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t };
 }
 
-/** Bilinear map from unit square (u,v) ∈ [0,1]² onto a 4-point bed quad. */
-function unitToImage(corners: Point2[], u: number, v: number): Point2 {
+/**
+ * Map unit square (u,v) ∈ [0,1]² onto the bed quad. Uses a true perspective
+ * homography when available (cells near the camera correctly render larger),
+ * falling back to bilinear interpolation for degenerate quads.
+ */
+function unitToImage(
+  corners: Point2[],
+  H: number[] | null,
+  u: number,
+  v: number,
+): Point2 {
+  if (H) {
+    const p = applyHomographyPoint(H, { x: u, y: v });
+    if (p) return p;
+  }
   const tl = corners[0]!;
   const tr = corners[1] ?? corners[0]!;
   const br = corners[2] ?? corners[1]!;
@@ -49,40 +67,52 @@ export function PhotoGridOverlay(props: {
 }) {
   const { overlay, garden } = props;
   const { photoUrl, imageWidthPx: w, imageHeightPx: h, bedCorners } = overlay;
-  if (bedCorners.length < 3 || garden.cols < 1 || garden.rows < 1) return null;
+  const corners = useMemo(
+    () =>
+      bedCorners.length >= 4
+        ? bedCorners.slice(0, 4)
+        : [
+            bedCorners[0]!,
+            bedCorners[1] ?? bedCorners[0]!,
+            bedCorners[2] ?? bedCorners[0]!,
+            bedCorners[bedCorners.length - 1]!,
+          ],
+    [bedCorners],
+  );
+  const H = useMemo(
+    () => (corners.length === 4 ? homographyUnitSquareToQuad(corners) : null),
+    [corners],
+  );
 
-  const corners =
-    bedCorners.length >= 4
-      ? bedCorners.slice(0, 4)
-      : [
-          bedCorners[0]!,
-          bedCorners[1] ?? bedCorners[0]!,
-          bedCorners[2] ?? bedCorners[0]!,
-          bedCorners[bedCorners.length - 1]!,
-        ];
+  if (bedCorners.length < 3 || garden.cols < 1 || garden.rows < 1) return null;
 
   const byKey = new Map(garden.cells.map((c) => [`${c.r},${c.c}`, c]));
   const stroke = Math.max(1.5, w / 500);
 
+  // The grid tiles the bed edge to edge (cells stretch to fit), so cell
+  // indices map straight onto even fractions of the quad.
+  const uAt = (c: number): number => c / garden.cols;
+  const vAt = (r: number): number => r / garden.rows;
+
   const quads: { key: string; points: string; fill: string }[] = [];
   for (let r = 0; r < garden.rows; r++) {
     for (let c = 0; c < garden.cols; c++) {
-      const cell = byKey.get(`${r},${c}`);
-      if (!cell) continue;
-      const u0 = c / garden.cols;
-      const u1 = (c + 1) / garden.cols;
-      const v0 = r / garden.rows;
-      const v1 = (r + 1) / garden.rows;
+      const cellAt = byKey.get(`${r},${c}`);
+      if (!cellAt) continue;
+      const u0 = uAt(c);
+      const u1 = uAt(c + 1);
+      const v0 = vAt(r);
+      const v1 = vAt(r + 1);
       const pts = [
-        unitToImage(corners, u0, v0),
-        unitToImage(corners, u1, v0),
-        unitToImage(corners, u1, v1),
-        unitToImage(corners, u0, v1),
+        unitToImage(corners, H, u0, v0),
+        unitToImage(corners, H, u1, v0),
+        unitToImage(corners, H, u1, v1),
+        unitToImage(corners, H, u0, v1),
       ];
       quads.push({
         key: `${r}-${c}`,
         points: pts.map((p) => `${p.x},${p.y}`).join(" "),
-        fill: cellFill(cell.state),
+        fill: cellFill(cellAt.state),
       });
     }
   }
