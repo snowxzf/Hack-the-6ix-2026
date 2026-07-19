@@ -38,6 +38,11 @@ export {
   type RectifiedMeasure,
 } from "./rectify";
 export {
+  detectBedQuad,
+  type DetectedQuad,
+  type RgbaImage,
+} from "./detect";
+export {
   lumaFromRgba,
   refineCoinTaps,
   refineReferenceTaps,

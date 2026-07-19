@@ -55,12 +55,14 @@ import {
   COIN_LABELS,
   SCAN_UX,
   coinGhostForNextFrame,
+  detectBedQuad,
   focalPxFromExif,
   lumaFromRgba,
   readExifCameraInfo,
   refineCoinTaps,
   type ExifCameraInfo,
   type LumaImage,
+  type RgbaImage,
 } from "../../yard-scan/src/index";
 import type {
   Point2,
@@ -1471,6 +1473,8 @@ function ScanScreen(props: {
   const exifByUrlRef = useRef(new Map<string, ExifCameraInfo>());
   /** Grayscale copy of the current photo for coin-tap edge snapping. */
   const photoLumaRef = useRef<{ img: LumaImage; scale: number } | null>(null);
+  /** Small RGB copy of the current photo for automatic bed-corner detection. */
+  const photoRgbaRef = useRef<{ img: RgbaImage; scale: number } | null>(null);
   /** Last picked File — retry as data-URL if blob: preview fails to decode. */
   const lastPickedFileRef = useRef<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -1791,6 +1795,39 @@ function ScanScreen(props: {
       { x: r.a.x / s, y: r.a.y / s },
       { x: r.b.x / s, y: r.b.y / s },
     ];
+  }
+
+  /**
+   * Auto-detect the bed/table outline: flood-fill similar-colored pixels from
+   * the middle of the current quad, fit the biggest quad, snap corners to it.
+   * The user can still drag corners afterwards to fine-tune.
+   */
+  function autoDetectCorners() {
+    const rgba = photoRgbaRef.current;
+    if (!rgba || !imgSize) return;
+    setError(null);
+    const corners = bedCornersRef.current;
+    const seedNat =
+      corners.length >= 3
+        ? {
+            x: corners.reduce((s, p) => s + p.x, 0) / corners.length,
+            y: corners.reduce((s, p) => s + p.y, 0) / corners.length,
+          }
+        : { x: imgSize.w / 2, y: imgSize.h / 2 };
+    const res = detectBedQuad(rgba.img, {
+      x: seedNat.x * rgba.scale,
+      y: seedNat.y * rgba.scale,
+    });
+    if (!res) {
+      setError(
+        "Couldn't auto-detect the bed here — drag a corner near the middle of the bed and try again, or place the corners by hand.",
+      );
+      return;
+    }
+    setBedCorners(
+      res.corners.map((p) => ({ x: p.x / rgba.scale, y: p.y / rgba.scale })),
+    );
+    setTapPhase("bed");
   }
 
   /** Insert a new bed corner at the midpoint of the longest edge. */
@@ -2401,6 +2438,15 @@ function ScanScreen(props: {
             <div className="row">
               <button
                 type="button"
+                className="small"
+                disabled={!imgSize || !photoRgbaRef.current}
+                onClick={autoDetectCorners}
+                title="Find the bed/table outline automatically from the photo"
+              >
+                ✨ Auto-detect corners
+              </button>
+              <button
+                type="button"
                 className="secondary small"
                 disabled={!imgSize}
                 onClick={addBedPoint}
@@ -2458,8 +2504,24 @@ function ScanScreen(props: {
                       scale: cw / size.w,
                     };
                   }
+                  // Small RGB copy for auto corner detection (flood fill speed)
+                  const dw = Math.max(1, Math.round(size.w * Math.min(1, 540 / Math.max(size.w, size.h))));
+                  const dh = Math.max(1, Math.round(size.h * (dw / size.w)));
+                  const dCanvas = document.createElement("canvas");
+                  dCanvas.width = dw;
+                  dCanvas.height = dh;
+                  const dCtx = dCanvas.getContext("2d", { willReadFrequently: true });
+                  if (dCtx) {
+                    dCtx.drawImage(img, 0, 0, dw, dh);
+                    const dData = dCtx.getImageData(0, 0, dw, dh);
+                    photoRgbaRef.current = {
+                      img: { widthPx: dw, heightPx: dh, data: dData.data },
+                      scale: dw / size.w,
+                    };
+                  }
                 } catch {
                   photoLumaRef.current = null; // e.g. cross-origin demo image
+                  photoRgbaRef.current = null;
                 }
                 // Only seed the default quad once — never wipe corners the user already dragged.
                 setBedCorners((prev) =>
@@ -2470,6 +2532,7 @@ function ScanScreen(props: {
               onError={() => {
                 setImgSize(null);
                 photoLumaRef.current = null;
+                photoRgbaRef.current = null;
                 const file = lastPickedFileRef.current;
                 // First failure: retry as a data URL (helps some Windows/phone exports).
                 if (file && props.photo?.startsWith("blob:")) {
@@ -2582,6 +2645,22 @@ function ScanScreen(props: {
       {error && <p className="tiny" style={{ color: "#f0b4b4" }}>{error}</p>}
 
       <div className="row">
+        <button
+          type="button"
+          className="secondary"
+          title="A standard 240 × 120 cm bed (8 × 4 cells) — no photo needed; adjust divisions on the next step"
+          onClick={() => {
+            setError(null);
+            try {
+              const result = gardenFromRectangleCm(240, 120, cellSizeCm);
+              props.onMeasured(result.garden, result.diagnostics, null, result.worldBed);
+            } catch (err) {
+              setError(err instanceof Error ? err.message : String(err));
+            }
+          }}
+        >
+          Start with default grid →
+        </button>
         <button type="button" className="secondary" onClick={props.onDemo}>
           Skip: use demo yard →
         </button>
