@@ -75,8 +75,10 @@ import {
   clearGuestStarted,
   loadGuestStarted,
   saveGuestStarted,
+  wipeLocalDemoState,
   WelcomeGate,
 } from "./components/WelcomeGate";
+import { AUTH0_CLIENT_ID, AUTH0_CONFIGURED, AUTH0_DOMAIN } from "./lib/auth0Config";
 import { SearchPanel } from "./components/SearchPanel";
 import { SpeciesSelectOptions } from "./components/SpeciesSelectOptions";
 import { WeatherBackground } from "./components/WeatherBackground";
@@ -835,20 +837,26 @@ export function App() {
     }
   }
 
-  /** Hard reset for testing: wipes persisted state and reloads, so the app
-   *  comes up exactly as it would for a brand-new user. Restarting the
-   *  garden itself is handled by "Edit my garden" in the Planner tab, which
-   *  walks back through scan/review/prefs/space while keeping existing data
-   *  to tweak: this is the dev-only full wipe instead. */
+  /** Hard reset for testing: wipes all PlotTwist + Auth0 local state (and logs
+   *  out of Auth0 when configured) so the next load is WelcomeGate → full flow. */
   function hardResetApp() {
-    try {
-      localStorage.removeItem(STORAGE_KEY);
-    } catch {
-      // best-effort: if storage is unavailable there's nothing to clear
-    }
+    wipeLocalDemoState();
     clearGuestStarted();
     resetDevClock();
     resetDevWeatherOverride();
+
+    if (AUTH0_CONFIGURED && AUTH0_DOMAIN && AUTH0_CLIENT_ID) {
+      const returnTo =
+        window.location.hostname === "127.0.0.1"
+          ? `${window.location.protocol}//localhost${window.location.port ? `:${window.location.port}` : ""}`
+          : window.location.origin;
+      const params = new URLSearchParams({
+        client_id: AUTH0_CLIENT_ID,
+        returnTo,
+      });
+      window.location.href = `https://${AUTH0_DOMAIN}/v2/logout?${params.toString()}`;
+      return;
+    }
     window.location.reload();
   }
 
@@ -1274,11 +1282,11 @@ function DevTools(props: { onRestart: () => void }) {
               look broken. */}
           {armed ? (
             <button className="small" onClick={props.onRestart}>
-              ! Click again to wipe everything
+              ! Confirm: wipe all + log out → Welcome
             </button>
           ) : (
             <button className="small secondary" onClick={() => setArmed(true)}>
-              Restart app (first-time use)
+              Full reset (login → end)
             </button>
           )}
         </div>

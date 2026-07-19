@@ -28,6 +28,35 @@ export function clearGuestStarted(): void {
   }
 }
 
+/** Wipe gardens, guest flag, profile, Auth0 SPA cache, etc. so WelcomeGate shows again. */
+export function wipeLocalDemoState(): void {
+  try {
+    const doomed: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key) continue;
+      if (
+        key.startsWith("plottwist:") ||
+        key.startsWith("plottwist.") ||
+        key.startsWith("@@auth0spajs@@") ||
+        key.startsWith("a0.spajs.") ||
+        key.toLowerCase().includes("auth0")
+      ) {
+        doomed.push(key);
+      }
+    }
+    for (const key of doomed) localStorage.removeItem(key);
+  } catch {
+    /* best-effort */
+  }
+  try {
+    sessionStorage.clear();
+  } catch {
+    /* best-effort */
+  }
+}
+
+
 /** First-open gate: log in (returning) or start local setup as a guest. */
 export function WelcomeGate(props: { onStart: () => void }) {
   if (!AUTH0_CONFIGURED) {
